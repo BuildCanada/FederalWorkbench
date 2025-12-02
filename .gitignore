@@ -55,6 +55,7 @@ data/parliament/openparliament.public.sql
 scripts/.embedding-progress.db
 scripts/.embedding-progress.db-wal
 scripts/.embedding-progress.db-shm
+scripts/.leg-embedding-progress.db
 
 # AI Coding
 .plans

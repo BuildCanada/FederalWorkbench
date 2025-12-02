@@ -59,7 +59,7 @@ type FormatRegulationOptions = {
  * Matches the HydratedSource type from parliament for UI compatibility
  */
 export type HydratedLegislationSource = {
-  sourceType: "act" | "regulation";
+  sourceType: "act" | "regulation" | "defined_term";
   markdown: string;
   languageUsed: Lang;
   id: string;
@@ -563,8 +563,87 @@ export async function getHydratedRegulationMarkdown(args: {
 }
 
 /**
+ * Format defined term as readable markdown
+ */
+function formatDefinedTermMarkdown(
+  result: LegislationSearchResult,
+  lang: Lang
+): string {
+  const meta = result.metadata;
+  const lines: string[] = [];
+
+  // Header
+  const termLabel = lang === "fr" ? "Terme défini" : "Defined Term";
+  lines.push(`# ${termLabel}: ${meta.term ?? "Unknown"}`);
+  lines.push("");
+
+  // Paired term if available
+  if (meta.termPaired) {
+    const pairedLabel =
+      lang === "fr" ? "Terme correspondant" : "Corresponding term";
+    lines.push(`**${pairedLabel}:** ${meta.termPaired}`);
+    lines.push("");
+  }
+
+  // Source document
+  const sourceLabel = lang === "fr" ? "Source" : "Source";
+  lines.push(`**${sourceLabel}:** ${meta.documentTitle ?? "Unknown"}`);
+
+  // Section reference if available
+  if (meta.sectionLabel) {
+    const sectionLabel = lang === "fr" ? "Article" : "Section";
+    lines.push(`**${sectionLabel}:** ${meta.sectionLabel}`);
+  }
+
+  // Scope if specified
+  if (meta.scopeType && meta.scopeType !== "act") {
+    const scopeLabel = lang === "fr" ? "Portée" : "Scope";
+    lines.push(`**${scopeLabel}:** ${meta.scopeType}`);
+  }
+
+  lines.push("");
+
+  // Definition content
+  const defLabel = lang === "fr" ? "Définition" : "Definition";
+  lines.push(`## ${defLabel}`);
+  lines.push("");
+  lines.push(result.content);
+
+  return lines.join("\n");
+}
+
+/**
+ * Hydrate a defined term search result into markdown
+ */
+function hydrateDefinedTerm(
+  result: LegislationSearchResult,
+  language: Lang
+): HydratedLegislationSource {
+  const meta = result.metadata;
+  const usedLang = meta.language === language ? language : meta.language;
+
+  return {
+    sourceType: "defined_term",
+    markdown: formatDefinedTermMarkdown(result, usedLang as Lang),
+    languageUsed: usedLang as Lang,
+    id: `term-${meta.termId ?? "unknown"}`,
+    note:
+      usedLang !== language
+        ? language === "fr"
+          ? "Définition non disponible en français."
+          : "Definition not available in English."
+        : undefined,
+  };
+}
+
+/**
  * Hydrate search result based on its source type.
- * Returns null if hydration fails.
+ * Returns null if hydration fails or source type is not supported.
+ *
+ * Supported types:
+ * - act, act_section: Full act content with sections
+ * - regulation, regulation_section: Full regulation content with sections
+ * - defined_term: Term definition with context
  */
 export async function hydrateSearchResult(
   result: LegislationSearchResult,
@@ -574,6 +653,7 @@ export async function hydrateSearchResult(
   const { sourceType } = meta;
 
   try {
+    // Acts and act sections - hydrate full document
     if (sourceType === "act" || sourceType === "act_section") {
       if (!meta.actId) {
         dbg("skipping hydration: no actId for source type %s", sourceType);
@@ -582,6 +662,7 @@ export async function hydrateSearchResult(
       return await getHydratedActMarkdown({ actId: meta.actId, language });
     }
 
+    // Regulations and regulation sections - hydrate full document
     if (sourceType === "regulation" || sourceType === "regulation_section") {
       if (!meta.regulationId) {
         dbg(
@@ -596,6 +677,15 @@ export async function hydrateSearchResult(
       });
     }
 
+    // Defined terms - use search result content directly
+    if (sourceType === "defined_term") {
+      return hydrateDefinedTerm(result, language);
+    }
+
+    // Other source types (preamble, treaty, cross_reference, table_of_provisions,
+    // signature_block) don't have full document hydration - return null
+    // The search result content is sufficient for these types
+    dbg("hydration not supported for source type %s", sourceType);
     return null;
   } catch (err) {
     dbg("hydration failed for %s: %O", meta.actId ?? meta.regulationId, err);
@@ -627,4 +717,79 @@ export async function hydrateTopAct(
 
   const hydrated = await hydrateSearchResult(actResult, language);
   return hydrated ? [hydrated] : [];
+}
+
+/**
+ * Hydrate top defined term from search results.
+ *
+ * Finds the first defined term result and formats it for display.
+ * Returns array with single hydrated source.
+ */
+export async function hydrateTopDefinedTerm(
+  results: LegislationSearchResult[],
+  language: Lang
+): Promise<HydratedLegislationSource[]> {
+  // Find first defined term result
+  const termResult = results.find(
+    (r) => r.metadata.sourceType === "defined_term"
+  );
+
+  if (!termResult) {
+    return [];
+  }
+
+  const hydrated = await hydrateSearchResult(termResult, language);
+  return hydrated ? [hydrated] : [];
+}
+
+/**
+ * Hydrate top source from search results based on source type priority.
+ *
+ * Priority order:
+ * 1. Defined terms (for definition queries)
+ * 2. Acts (most common)
+ * 3. Regulations
+ *
+ * Returns array with single hydrated source for the most relevant type.
+ */
+export async function hydrateTopSource(
+  results: LegislationSearchResult[],
+  language: Lang
+): Promise<HydratedLegislationSource[]> {
+  if (results.length === 0) {
+    return [];
+  }
+
+  // Check top result's source type to determine priority
+  const topResult = results[0];
+  const topType = topResult.metadata.sourceType;
+
+  // If top result is a defined term, prioritize terms
+  if (topType === "defined_term") {
+    const hydrated = await hydrateTopDefinedTerm(results, language);
+    if (hydrated.length > 0) {
+      return hydrated;
+    }
+  }
+
+  // Otherwise, try acts first, then regulations
+  const actHydrated = await hydrateTopAct(results, language);
+  if (actHydrated.length > 0) {
+    return actHydrated;
+  }
+
+  // Find first regulation result
+  const regResult = results.find(
+    (r) =>
+      (r.metadata.sourceType === "regulation" ||
+        r.metadata.sourceType === "regulation_section") &&
+      r.metadata.regulationId
+  );
+
+  if (regResult) {
+    const hydrated = await hydrateSearchResult(regResult, language);
+    return hydrated ? [hydrated] : [];
+  }
+
+  return [];
 }

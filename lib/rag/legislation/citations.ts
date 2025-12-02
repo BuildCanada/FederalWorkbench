@@ -180,6 +180,215 @@ export function buildRegulationSectionCitation(
 }
 
 /**
+ * Build URLs for parent document (act or regulation)
+ */
+function buildParentUrls(metadata: LegResourceMetadata): {
+  urlEn: string;
+  urlFr: string;
+} {
+  if (metadata.actId) {
+    return {
+      urlEn: buildActUrl(metadata.actId, "en"),
+      urlFr: buildActUrl(metadata.actId, "fr"),
+    };
+  }
+  if (metadata.regulationId) {
+    return {
+      urlEn: buildRegulationUrl(metadata.regulationId, "en"),
+      urlFr: buildRegulationUrl(metadata.regulationId, "fr"),
+    };
+  }
+  return { urlEn: JUSTICE_BASE_URL, urlFr: JUSTICE_BASE_URL };
+}
+
+/**
+ * Build a citation for a defined term
+ */
+export function buildDefinedTermCitation(
+  metadata: LegResourceMetadata,
+  citationId: number
+): LegislationCitation {
+  const term = metadata.term || "Term";
+  const title = metadata.documentTitle || "Legislation";
+  const sectionLabel = metadata.sectionLabel;
+  const { urlEn, urlFr } = buildParentUrls(metadata);
+
+  // Add section anchor if available
+  const finalUrlEn = sectionLabel
+    ? buildSectionUrl(urlEn, sectionLabel)
+    : urlEn;
+  const finalUrlFr = sectionLabel
+    ? buildSectionUrl(urlFr, sectionLabel)
+    : urlFr;
+
+  const sectionRefEn = sectionLabel ? `, s ${sectionLabel}` : "";
+  const sectionRefFr = sectionLabel ? `, art ${sectionLabel}` : "";
+
+  return {
+    id: citationId,
+    prefixedId: "", // Set by context-builder
+    textEn: `["${term}" - ${title}${sectionRefEn}]`,
+    textFr: `[« ${term} » - ${title}${sectionRefFr}]`,
+    urlEn: finalUrlEn,
+    urlFr: finalUrlFr,
+    titleEn: `"${term}" defined in ${title}`,
+    titleFr: `« ${term} » défini dans ${title}`,
+    sourceType: "defined_term",
+  };
+}
+
+/**
+ * Build a citation for a preamble
+ */
+export function buildPreambleCitation(
+  metadata: LegResourceMetadata,
+  citationId: number
+): LegislationCitation {
+  const title = metadata.documentTitle || "Legislation";
+  const { urlEn, urlFr } = buildParentUrls(metadata);
+
+  return {
+    id: citationId,
+    prefixedId: "", // Set by context-builder
+    textEn: `[${title}, Preamble]`,
+    textFr: `[${title}, Préambule]`,
+    urlEn,
+    urlFr,
+    titleEn: `Preamble of ${title}`,
+    titleFr: `Préambule de ${title}`,
+    sourceType: "preamble",
+  };
+}
+
+/**
+ * Build a citation for a treaty/convention
+ */
+export function buildTreatyCitation(
+  metadata: LegResourceMetadata,
+  citationId: number
+): LegislationCitation {
+  const treatyTitle = metadata.treatyTitle;
+  const docTitle = metadata.documentTitle || "Legislation";
+  const { urlEn, urlFr } = buildParentUrls(metadata);
+
+  // If treaty has its own title, use it; otherwise reference the parent document
+  const displayTitleEn = treatyTitle || `Treaty in ${docTitle}`;
+  const displayTitleFr = treatyTitle || `Traité dans ${docTitle}`;
+
+  return {
+    id: citationId,
+    prefixedId: "", // Set by context-builder
+    textEn: `[${displayTitleEn}]`,
+    textFr: `[${displayTitleFr}]`,
+    urlEn,
+    urlFr,
+    titleEn: displayTitleEn,
+    titleFr: displayTitleFr,
+    sourceType: "treaty",
+  };
+}
+
+/**
+ * Build a citation for a cross-reference
+ */
+export function buildCrossReferenceCitation(
+  metadata: LegResourceMetadata,
+  citationId: number
+): LegislationCitation {
+  const sourceTitle = metadata.documentTitle || "Legislation";
+  const targetRef = metadata.targetRef || "";
+  const targetType = metadata.targetType === "act" ? "Act" : "Regulation";
+  const targetTypeFr = metadata.targetType === "act" ? "Loi" : "Règlement";
+  const { urlEn, urlFr } = buildParentUrls(metadata);
+
+  // Build target URL if we have a target reference
+  let targetUrlEn = urlEn;
+  let targetUrlFr = urlFr;
+  if (targetRef) {
+    if (metadata.targetType === "act") {
+      targetUrlEn = buildActUrl(targetRef, "en");
+      targetUrlFr = buildActUrl(targetRef, "fr");
+    } else if (metadata.targetType === "regulation") {
+      targetUrlEn = buildRegulationUrl(targetRef, "en");
+      targetUrlFr = buildRegulationUrl(targetRef, "fr");
+    }
+  }
+
+  return {
+    id: citationId,
+    prefixedId: "", // Set by context-builder
+    textEn: `[${sourceTitle} → ${targetType} ${targetRef}]`,
+    textFr: `[${sourceTitle} → ${targetTypeFr} ${targetRef}]`,
+    urlEn: targetUrlEn,
+    urlFr: targetUrlFr,
+    titleEn: `Cross-reference from ${sourceTitle} to ${targetRef}`,
+    titleFr: `Renvoi de ${sourceTitle} à ${targetRef}`,
+    sourceType: "cross_reference",
+  };
+}
+
+/**
+ * Build a citation for a table of provisions entry
+ */
+export function buildTableOfProvisionsCitation(
+  metadata: LegResourceMetadata,
+  citationId: number
+): LegislationCitation {
+  const title = metadata.documentTitle || "Legislation";
+  const provisionLabel = metadata.provisionLabel || "";
+  const provisionTitle = metadata.provisionTitle || "";
+  const { urlEn, urlFr } = buildParentUrls(metadata);
+
+  const labelPart = provisionLabel ? ` - ${provisionLabel}` : "";
+  const titlePart = provisionTitle ? `: ${provisionTitle}` : "";
+
+  return {
+    id: citationId,
+    prefixedId: "", // Set by context-builder
+    textEn: `[${title}, Table of Provisions${labelPart}${titlePart}]`,
+    textFr: `[${title}, Table des dispositions${labelPart}${titlePart}]`,
+    urlEn,
+    urlFr,
+    titleEn: `Table of Provisions of ${title}`,
+    titleFr: `Table des dispositions de ${title}`,
+    sourceType: "table_of_provisions",
+  };
+}
+
+/**
+ * Build a citation for a signature block
+ */
+export function buildSignatureBlockCitation(
+  metadata: LegResourceMetadata,
+  citationId: number
+): LegislationCitation {
+  const title = metadata.documentTitle || "Legislation";
+  const signatoryName = metadata.signatureName;
+  const signatoryTitle = metadata.signatureTitle;
+  const { urlEn, urlFr } = buildParentUrls(metadata);
+
+  // Build signatory info if available
+  let signatoryPart = "";
+  if (signatoryName) {
+    signatoryPart = signatoryTitle
+      ? ` - ${signatoryName}, ${signatoryTitle}`
+      : ` - ${signatoryName}`;
+  }
+
+  return {
+    id: citationId,
+    prefixedId: "", // Set by context-builder
+    textEn: `[${title}, Signature${signatoryPart}]`,
+    textFr: `[${title}, Signature${signatoryPart}]`,
+    urlEn,
+    urlFr,
+    titleEn: `Signature block of ${title}`,
+    titleFr: `Bloc de signature de ${title}`,
+    sourceType: "signature_block",
+  };
+}
+
+/**
  * Build citation from metadata, dispatching to appropriate builder
  */
 export function buildCitation(
@@ -195,6 +404,18 @@ export function buildCitation(
       return buildRegulationCitation(metadata, citationId);
     case "regulation_section":
       return buildRegulationSectionCitation(metadata, citationId);
+    case "defined_term":
+      return buildDefinedTermCitation(metadata, citationId);
+    case "preamble":
+      return buildPreambleCitation(metadata, citationId);
+    case "treaty":
+      return buildTreatyCitation(metadata, citationId);
+    case "cross_reference":
+      return buildCrossReferenceCitation(metadata, citationId);
+    case "table_of_provisions":
+      return buildTableOfProvisionsCitation(metadata, citationId);
+    case "signature_block":
+      return buildSignatureBlockCitation(metadata, citationId);
     default:
       // Fallback for any unexpected type
       return {

@@ -4,8 +4,9 @@
  * Contains all RAG-related tables for parliament and legislation embeddings.
  */
 
-import type { InferSelectModel } from "drizzle-orm";
+import { type InferSelectModel, sql } from "drizzle-orm";
 import {
+  check,
   customType,
   index,
   integer,
@@ -13,10 +14,31 @@ import {
   pgSchema,
   text,
   timestamp,
+  unique,
   varchar,
   vector,
 } from "drizzle-orm/pg-core";
 import { nanoid } from "nanoid";
+
+/**
+ * Valid source types for legislation resources
+ * Used for CHECK constraint and TypeScript type alignment
+ */
+export const LEG_SOURCE_TYPES = [
+  "act",
+  "act_section",
+  "regulation",
+  "regulation_section",
+  "defined_term",
+  "preamble",
+  "treaty",
+  "cross_reference",
+  "table_of_provisions",
+  "signature_block",
+  "related_provisions",
+] as const;
+
+export type LegSourceType = (typeof LEG_SOURCE_TYPES)[number];
 
 export const ragSchema = pgSchema("rag");
 
@@ -182,8 +204,8 @@ export type ParlEmbedding = InferSelectModel<typeof parlEmbeddings>;
  * Fields needed for search filtering and citation building.
  */
 export type LegResourceMetadata = {
-  // Identity - source types for acts, regulations, and their sections
-  sourceType: "act" | "act_section" | "regulation" | "regulation_section";
+  // Identity - source types for all legislation content
+  sourceType: LegSourceType;
   language: "en" | "fr";
   chunkIndex?: number; // 0 for metadata chunk, 1+ for content chunks
 
@@ -196,6 +218,33 @@ export type LegResourceMetadata = {
   sectionId?: string; // FK to legislation.sections.id
   sectionLabel?: string; // e.g., "91", "Schedule I"
   marginalNote?: string; // Short description of section
+  sectionStatus?: string; // "in-force", "repealed", "not-in-force", etc.
+  sectionType?: string; // "section", "schedule", "preamble", "heading", etc.
+  hierarchyPath?: string[]; // e.g., ["Part I", "Division 1", "Subdivision A"]
+  contentFlags?: {
+    // Mirrors ContentFlags from legislation schema
+    hasTable?: boolean;
+    hasFormula?: boolean;
+    hasImage?: boolean;
+    imageSources?: string[];
+    hasRepealed?: boolean;
+  };
+  sectionInForceDate?: string; // ISO date when section came into force
+  historicalNotes?: {
+    // Mirrors HistoricalNoteItem from legislation schema
+    text: string;
+    type?: string;
+    enactedDate?: string;
+    inForceStartDate?: string;
+    enactId?: string;
+  }[];
+
+  // Defined term specific fields
+  termId?: string; // FK to legislation.defined_terms.id
+  term?: string; // The defined term itself (e.g., "barrier", "obstable")
+  termPaired?: string; // The paired term in other language
+  scopeType?: string; // "act", "regulation", "part", "section"
+  scopeSections?: string[]; // Section scope if applicable
 
   // Act metadata fields
   longTitle?: string;
@@ -211,6 +260,34 @@ export type LegResourceMetadata = {
   enablingActId?: string;
   enablingActTitle?: string;
   registrationDate?: string;
+
+  // Preamble-specific fields
+  preambleIndex?: number; // Position in preamble array
+
+  // Treaty-specific fields
+  treatyTitle?: string; // Title of the treaty/convention
+
+  // Cross-reference fields
+  crossRefId?: string; // FK to legislation.cross_references.id
+  targetType?: string; // "act" or "regulation"
+  targetRef?: string; // Reference to target document
+  targetSectionRef?: string; // Optional section reference
+  referenceText?: string; // Display text for the reference
+
+  // Table of provisions fields
+  provisionLabel?: string; // Label from table of provisions
+  provisionTitle?: string; // Title from table of provisions
+  provisionLevel?: number; // Hierarchy level
+
+  // Signature block fields
+  signatureName?: string; // Name of signatory
+  signatureTitle?: string; // Title of signatory
+  signatureDate?: string; // Date of signature
+
+  // Related provisions fields
+  relatedProvisionLabel?: string; // Label from related provision (e.g., "Transitional Provisions")
+  relatedProvisionSource?: string; // Source reference
+  relatedProvisionSections?: string[]; // Referenced section numbers
 };
 
 /**
@@ -224,16 +301,29 @@ export const legResources = ragSchema.table(
     id: varchar("id", { length: 191 })
       .primaryKey()
       .$defaultFn(() => nanoid()),
-    sectionId: varchar("section_id", { length: 191 }).notNull(),
+    // Unique resource key for deduplication: "{sourceType}:{sourceId}:{language}:{chunkIndex}"
+    resourceKey: varchar("resource_key", { length: 255 }).notNull(),
     content: text("content").notNull(),
     metadata: jsonb("metadata").$type<LegResourceMetadata>().notNull(),
+    // Denormalized columns for fast filtering (avoids JSONB extraction in queries)
+    language: varchar("language", { length: 2 }).notNull(),
+    sourceType: varchar("source_type", { length: 30 }).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (table) => [
-    index("leg_resources_section_id_idx").on(table.sectionId),
+    // Unique constraint to prevent duplicates on concurrent runs or restarts
+    unique("leg_resources_resource_key_unique").on(table.resourceKey),
+    index("leg_resources_resource_key_idx").on(table.resourceKey),
+    // Composite index for common filtering patterns (language + sourceType)
+    index("leg_resources_lang_source_idx").on(table.language, table.sourceType),
     // Single GIN index on metadata for flexible querying
     index("leg_resources_metadata_gin").using("gin", table.metadata),
+    // CHECK constraint for valid source types (data integrity)
+    check(
+      "leg_resources_source_type_check",
+      sql`${table.sourceType} IN (${sql.raw(LEG_SOURCE_TYPES.map((t) => `'${t}'`).join(", "))})`
+    ),
   ]
 );
 

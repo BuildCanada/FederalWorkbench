@@ -85,8 +85,8 @@ export async function getLegislationContext(
 
   dbg("search returned %d results", results.length);
 
-  // Build context with reranking
-  const context = buildLegislationContext(query, results, {
+  // Build context with reranking (now async with Cohere cross-encoder)
+  const context = await buildLegislationContext(query, results, {
     language: preferLang,
     topN: boundedLimit,
   });

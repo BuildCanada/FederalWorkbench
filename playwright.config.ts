@@ -14,8 +14,11 @@ config({
 const TEST_PORT = 3100;
 const baseURL = `http://localhost:${TEST_PORT}`;
 
-/* Check if running db-only tests (no webServer needed) */
-const isDbOnly = process.argv.includes("--project=db");
+/* Check if running tests that don't need webServer (db, embeddings, rag) */
+const isDbOnly =
+  process.argv.includes("--project=db") ||
+  process.argv.includes("--project=embeddings") ||
+  process.argv.includes("--project=rag");
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -55,6 +58,16 @@ export default defineConfig({
       testMatch: /db\/.*.test.ts/,
       // Database tests don't need a browser - they import lib code directly
       // Note: webserver still runs but db tests don't depend on it
+    },
+    {
+      name: "embeddings",
+      testMatch: /embeddings\/.*.test.ts/,
+      // Embeddings tests are pure function tests - no browser or webserver needed
+    },
+    {
+      name: "rag",
+      testMatch: /rag\/.*.test.ts/,
+      // RAG tests are pure function tests for search/retrieval - no browser or webserver needed
     },
     {
       name: "e2e",

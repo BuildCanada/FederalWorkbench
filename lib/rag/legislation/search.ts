@@ -130,15 +130,14 @@ export async function searchLegislation(
     )`
   );
 
-  // Optional filters
+  // Optional filters - use denormalized columns for language/sourceType (faster)
   if (language) {
-    conditions.push(sql`${legResources.metadata}->>'language' = ${language}`);
+    conditions.push(sql`${legResources.language} = ${language}`);
   }
   if (sourceType) {
-    conditions.push(
-      sql`${legResources.metadata}->>'sourceType' = ${sourceType}`
-    );
+    conditions.push(sql`${legResources.sourceType} = ${sourceType}`);
   }
+  // actId and regulationId still use JSONB (less frequently filtered)
   if (actId) {
     conditions.push(sql`${legResources.metadata}->>'actId' = ${actId}`);
   }
@@ -241,39 +240,162 @@ export async function searchLegislation(
 }
 
 /**
- * Search specifically for acts
+ * Act-related source types to search
+ * Includes all content types that can be associated with an act
+ */
+const ACT_SOURCE_TYPES: LegResourceMetadata["sourceType"][] = [
+  "act",
+  "act_section",
+  "defined_term",
+  "preamble",
+  "treaty",
+  "table_of_provisions",
+  "signature_block",
+];
+
+/**
+ * Regulation-related source types to search
+ * Includes all content types that can be associated with a regulation
+ */
+const REGULATION_SOURCE_TYPES: LegResourceMetadata["sourceType"][] = [
+  "regulation",
+  "regulation_section",
+  "defined_term",
+  "treaty",
+  "table_of_provisions",
+  "signature_block",
+];
+
+/**
+ * Search specifically for acts and all associated content
+ * Includes: act metadata, sections, defined terms, preambles, treaties,
+ * table of provisions, and signature blocks
  */
 export async function searchActs(
   query: string,
   options: Omit<LegislationSearchOptions, "sourceType" | "regulationId"> = {}
 ): Promise<LegislationSearchResult[]> {
-  // Search both act metadata and act sections
-  const [actResults, sectionResults] = await Promise.all([
-    searchLegislation(query, { ...options, sourceType: "act" }),
-    searchLegislation(query, { ...options, sourceType: "act_section" }),
-  ]);
+  // Search all act-related source types in parallel
+  const searchPromises = ACT_SOURCE_TYPES.map((sourceType) =>
+    searchLegislation(query, { ...options, sourceType })
+  );
 
-  // Merge and sort by similarity
-  return [...actResults, ...sectionResults]
+  const results = await Promise.all(searchPromises);
+
+  // Merge, deduplicate, sort by similarity, and limit
+  const allResults = results.flat();
+  const deduplicated = deduplicateByResourceKey(allResults);
+
+  return deduplicated
     .sort((a, b) => b.similarity - a.similarity)
     .slice(0, options.limit ?? SEARCH_LIMITS.DEFAULT_LIMIT);
 }
 
 /**
- * Search specifically for regulations
+ * Search specifically for regulations and all associated content
+ * Includes: regulation metadata, sections, defined terms, treaties,
+ * table of provisions, and signature blocks
  */
 export async function searchRegulations(
   query: string,
   options: Omit<LegislationSearchOptions, "sourceType" | "actId"> = {}
 ): Promise<LegislationSearchResult[]> {
-  // Search both regulation metadata and regulation sections
-  const [regResults, sectionResults] = await Promise.all([
-    searchLegislation(query, { ...options, sourceType: "regulation" }),
-    searchLegislation(query, { ...options, sourceType: "regulation_section" }),
-  ]);
+  // Search all regulation-related source types in parallel
+  const searchPromises = REGULATION_SOURCE_TYPES.map((sourceType) =>
+    searchLegislation(query, { ...options, sourceType })
+  );
 
-  // Merge and sort by similarity
-  return [...regResults, ...sectionResults]
+  const results = await Promise.all(searchPromises);
+
+  // Merge, deduplicate, sort by similarity, and limit
+  const allResults = results.flat();
+  const deduplicated = deduplicateByResourceKey(allResults);
+
+  return deduplicated
     .sort((a, b) => b.similarity - a.similarity)
     .slice(0, options.limit ?? SEARCH_LIMITS.DEFAULT_LIMIT);
+}
+
+/**
+ * Search specifically for defined terms
+ * Useful for "what does X mean" type queries
+ */
+export function searchDefinedTerms(
+  query: string,
+  options: Omit<LegislationSearchOptions, "sourceType"> = {}
+): Promise<LegislationSearchResult[]> {
+  return searchLegislation(query, { ...options, sourceType: "defined_term" });
+}
+
+/**
+ * Search that prioritizes defined terms for definition-type queries
+ *
+ * This is ideal for queries like "what does 'barrier' mean" or "define 'disability'".
+ * It searches defined terms first, then includes relevant act/regulation sections
+ * for additional context.
+ *
+ * Results are sorted with defined terms boosted to appear first, followed by
+ * contextual sections from the same documents.
+ */
+export async function searchWithDefinitions(
+  query: string,
+  options: Omit<LegislationSearchOptions, "sourceType"> = {}
+): Promise<LegislationSearchResult[]> {
+  const limit = options.limit ?? SEARCH_LIMITS.DEFAULT_LIMIT;
+
+  // Search defined terms and sections in parallel
+  const [termResults, sectionResults] = await Promise.all([
+    searchDefinedTerms(query, { ...options, limit }),
+    searchLegislation(query, { ...options, limit }),
+  ]);
+
+  // Boost defined term similarity scores to prioritize them
+  const TERM_BOOST = 0.15;
+  const boostedTerms = termResults.map((r) => ({
+    ...r,
+    similarity: Math.min(1, r.similarity + TERM_BOOST),
+  }));
+
+  // Merge results, with terms getting priority
+  const allResults = [...boostedTerms, ...sectionResults];
+
+  // Deduplicate - defined terms from boostedTerms will win due to higher similarity
+  const deduplicated = deduplicateByResourceKey(allResults);
+
+  // Sort by similarity and limit
+  return deduplicated
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, limit);
+}
+
+/**
+ * Deduplicate results by building a unique key from metadata
+ * Prefers higher similarity scores when duplicates are found
+ */
+function deduplicateByResourceKey(
+  results: LegislationSearchResult[]
+): LegislationSearchResult[] {
+  const seen = new Map<string, LegislationSearchResult>();
+
+  for (const r of results) {
+    const meta = r.metadata;
+    // Build unique key from source type and identifying fields
+    const key = [
+      meta.sourceType,
+      meta.actId ?? "",
+      meta.regulationId ?? "",
+      meta.sectionId ?? "",
+      meta.termId ?? "",
+      meta.crossRefId ?? "",
+      meta.preambleIndex ?? "",
+      meta.chunkIndex ?? 0,
+    ].join(":");
+
+    const existing = seen.get(key);
+    if (!existing || r.similarity > existing.similarity) {
+      seen.set(key, r);
+    }
+  }
+
+  return Array.from(seen.values());
 }

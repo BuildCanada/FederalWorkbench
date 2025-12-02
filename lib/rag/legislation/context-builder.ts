@@ -2,13 +2,21 @@
  * Legislation Context Builder
  *
  * Builds context prompts from search results for LLM consumption.
- * Includes deduplication and citation formatting.
+ * Includes deduplication, reranking, and citation formatting.
  */
 
 import { RERANKER_CONFIG } from "@/lib/rag/parliament/constants";
+import { ragDebug } from "@/lib/rag/parliament/debug";
 import type { LegislationCitation } from "./citations";
 import type { HydratedLegislationSource } from "./hydrate";
+import {
+  filterByRerankScore,
+  type RerankedLegislationResult,
+  rerankLegislationResults,
+} from "./reranker";
 import type { LegislationSearchResult } from "./search";
+
+const dbg = ragDebug("leg:context");
 
 /**
  * Citation ID prefix for legislation context.
@@ -27,14 +35,28 @@ export type LegislationContext = {
   hydratedSources: HydratedLegislationSource[];
 };
 
+/**
+ * Reranker function type for dependency injection
+ * Takes query, results, topN and returns reranked results
+ */
+export type RerankerFn = (
+  query: string,
+  results: LegislationSearchResult[],
+  topN: number
+) => Promise<RerankedLegislationResult[]>;
+
 type BuildContextOptions = {
   language: "en" | "fr" | "unknown";
   topN?: number;
+  /** Optional reranker function for testing. Defaults to Cohere cross-encoder. */
+  reranker?: RerankerFn;
 };
 
 /**
  * Deduplicate results by unique identifier
- * Prefers higher similarity scores when duplicates are found
+ * Prefers higher similarity scores when duplicates are found.
+ * Handles all source types: act, act_section, regulation, regulation_section,
+ * defined_term, preamble, treaty, cross_reference, table_of_provisions, signature_block
  */
 function deduplicateResults(
   results: LegislationSearchResult[]
@@ -42,11 +64,45 @@ function deduplicateResults(
   const seen = new Map<string, LegislationSearchResult>();
 
   for (const r of results) {
-    // Build unique key from metadata
-    const key =
-      r.metadata.sourceType === "act" || r.metadata.sourceType === "act_section"
-        ? `act:${r.metadata.actId}:${r.metadata.sectionId ?? "meta"}:${r.metadata.chunkIndex ?? 0}`
-        : `reg:${r.metadata.regulationId}:${r.metadata.sectionId ?? "meta"}:${r.metadata.chunkIndex ?? 0}`;
+    const meta = r.metadata;
+    let key: string;
+
+    // Build unique key based on source type and identifying fields
+    switch (meta.sourceType) {
+      case "act":
+        key = `act:${meta.actId}:meta:${meta.chunkIndex ?? 0}`;
+        break;
+      case "act_section":
+        key = `act_section:${meta.actId}:${meta.sectionId ?? ""}:${meta.chunkIndex ?? 0}`;
+        break;
+      case "regulation":
+        key = `reg:${meta.regulationId}:meta:${meta.chunkIndex ?? 0}`;
+        break;
+      case "regulation_section":
+        key = `reg_section:${meta.regulationId}:${meta.sectionId ?? ""}:${meta.chunkIndex ?? 0}`;
+        break;
+      case "defined_term":
+        key = `term:${meta.termId ?? ""}:${meta.actId ?? meta.regulationId ?? ""}`;
+        break;
+      case "preamble":
+        key = `preamble:${meta.actId ?? ""}:${meta.preambleIndex ?? 0}`;
+        break;
+      case "treaty":
+        key = `treaty:${meta.actId ?? meta.regulationId ?? ""}:${meta.treatyTitle ?? ""}`;
+        break;
+      case "cross_reference":
+        key = `xref:${meta.crossRefId ?? ""}`;
+        break;
+      case "table_of_provisions":
+        key = `toc:${meta.actId ?? meta.regulationId ?? ""}:${meta.provisionLabel ?? ""}`;
+        break;
+      case "signature_block":
+        key = `sig:${meta.actId ?? meta.regulationId ?? ""}:${meta.signatureName ?? ""}`;
+        break;
+      default:
+        // Fallback for any future types
+        key = `${meta.sourceType}:${meta.actId ?? meta.regulationId ?? "unknown"}:${meta.chunkIndex ?? 0}`;
+    }
 
     const existing = seen.get(key);
     if (!existing || r.similarity > existing.similarity) {
@@ -58,19 +114,31 @@ function deduplicateResults(
 }
 
 /**
- * Sort and limit results by similarity score
- * TODO: Add Cohere cross-encoder reranking for better accuracy
+ * Rerank and limit results using Cohere cross-encoder
+ *
+ * Uses cross-encoder reranking for more accurate relevance scoring,
+ * then filters by minimum rerank score and limits to topN.
  */
-function sortAndLimitResults(
+async function rerankAndLimitResults(
+  query: string,
   results: LegislationSearchResult[],
   topN: number
-): LegislationSearchResult[] {
+): Promise<RerankedLegislationResult[]> {
   if (results.length === 0) {
     return [];
   }
 
-  // Sort by similarity descending and take top N
-  return results.sort((a, b) => b.similarity - a.similarity).slice(0, topN);
+  dbg("reranking %d results for query: %s", results.length, query);
+
+  // Rerank using Cohere cross-encoder
+  const reranked = await rerankLegislationResults(query, results, topN);
+
+  // Filter by minimum rerank score
+  const filtered = filterByRerankScore(reranked);
+
+  dbg("after rerank: %d results (filtered from %d)", filtered.length, topN);
+
+  return filtered;
 }
 
 /**
@@ -78,15 +146,15 @@ function sortAndLimitResults(
  *
  * Steps:
  * 1. Deduplicate by section/chunk
- * 2. Rerank using cross-encoder
+ * 2. Rerank using Cohere cross-encoder for better accuracy
  * 3. Format for LLM with citations
  */
-export function buildLegislationContext(
-  _query: string,
+export async function buildLegislationContext(
+  query: string,
   results: LegislationSearchResult[],
   opts: BuildContextOptions
-): LegislationContext {
-  const { language, topN = RERANKER_CONFIG.DEFAULT_TOP_N } = opts;
+): Promise<LegislationContext> {
+  const { language, topN = RERANKER_CONFIG.DEFAULT_TOP_N, reranker } = opts;
 
   if (results.length === 0) {
     return {
@@ -100,9 +168,13 @@ export function buildLegislationContext(
     };
   }
 
-  // Deduplicate and sort by similarity
+  // Deduplicate first to reduce reranking cost
   const unique = deduplicateResults(results);
-  const sorted = sortAndLimitResults(unique, topN);
+
+  // Rerank using injected reranker or default Cohere cross-encoder
+  const sorted = reranker
+    ? await reranker(query, unique, topN)
+    : await rerankAndLimitResults(query, unique, topN);
 
   // Build context lines and citations
   const citations: LegislationCitation[] = [];
