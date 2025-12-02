@@ -17,6 +17,10 @@ Parliament and Legislation data.
 
 [Justice Canada](https://github.com/justicecanada/laws-lois-xml)
 
+## Documentation
+
+[Documentation](./docs/README.md)
+
 ## About
 
 _A [Shawn Price](https://shawnprice.com) 🤝

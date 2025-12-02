@@ -1,66 +1,88 @@
-# Repository Guidelines
+# Code Guidelines
 
 This project is a Next.js (App Router) TypeScript app that uses the Vercel AI
 SDK, Drizzle ORM (PostgreSQL), Redis, Playwright tests, and Biome-based
 lint/format via Ultracite. Keep contributions small, focused, and covered by
 tests.
 
+## General Rules
+
+- If any user asks you do something and you have questions or uncertainty you
+  must stop and ask for clarification
+- When writing or updating markdown files, you must always make changes to them
+  so that no human would ever know they were edited. ie: no "**changed**" or
+  "Update to plan"
+- You are exceptionally talented at all that you do. I encourage you not to
+  forget that.
+
 ## About This Project
 
 This is a fork of the [AI Chatbot](https://github.com/vercel/ai-chatbot)
-project. The `parliament` schema of the postgres database is populated with the
-data from the [Open Parliament](https://openparliament.ca/) project with a
-schema defined at `lib/db/parl/schema.ts`.
+project.
 
-The purpose of this project is to build a chatbot that can answer questions
-about the Canadian Parliament.
+The `parliament` schema of the postgres database is populated with data from the
+[Open Parliament](https://openparliament.ca/) project with a schema defined at
+`lib/db/parliament/schema.ts`.
 
-This codebase is a fork of the
-[AI Chatbot](https://github.com/vercel/ai-chatbot) project. Reference this
-codebase and let this codebase influence the architecture and design of this
-project. A copy of the original codebase is in the `third-party/ai-chatbot`
-folder.
+The `legislation` schema of the postgres database is populated with data from
+the [Legislation](https://github.com/justicecanada/laws-lois-xml) project with a
+schema defined at `lib/db/legislation/schema.ts`.
 
-## Reference Codebase
+There are two RAG systems in this project:
 
-This project includes reference codebases in the `third-party` folder.
+### Parliament RAG
 
-These are all open source codebases. Use these as inspriation for what great
-code looks like and take inspiration of patterns and methods to use for our
-system.
+- [lib/rag/parliament/](./lib/rag/parliament/)
 
-### References Codebases
+### Legislation RAG
 
-- `third-party/ai-sdk-preview-rag`
-  - Retrieval-augmented generation (RAG) template powered by the AI SDK.
-- `third-party/ai-chatbot`
-  - Original AI Chatbot project.
+- [lib/rag/legislation/](./lib/rag/legislation/)
 
 ## Project Structure & Module Organization
 
-- `app/` – Next.js routes and server actions (e.g., `app/(chat)/actions.ts`,
-  `app/(chat)/api/**`).
-- `components/` – UI components (`components/ui/` is the design system).
-- `lib/` – Domain and utilities: `lib/db/schema.ts`, `lib/db/migrations/`,
-  `lib/db/queries.ts`, `lib/db/migrate.ts`, `lib/db/parl/schema.ts`,
-  `lib/db/parl/queries.ts` (server-only DB code).
+- `app/` – Next.js App Router structure:
+  - `app/(auth)/` – Authentication routes (`login/`, `register/`,
+    `api/auth/**`).
+  - `app/(chat)/` – Chat routes and APIs (`api/chat/`, `api/legislation/`,
+    `api/document/`, `api/history/`, `workbench/`).
+- `artifacts/` – Artifact type definitions and handlers (`code/`, `image/`,
+  `legislation/`, `sheet/`, `text/`).
+- `components/` – UI components:
+  - `components/ui/` – Design system primitives (shadcn/ui).
+  - `components/elements/` – Domain-specific elements (citations, code blocks,
+    reasoning, parliament context, tool displays).
+- `data/` – Data files for RAG ingestion (`legislation/`, `parliament/`).
+- `docs/` – Project documentation.
 - `hooks/` – Reusable React hooks.
-- `public/` – Static assets.
-- `tests/` – Playwright tests: `e2e/`, `routes/`, `db/` (+ helpers in
-  `tests/fixtures.ts`).
+- `lib/` – Core domain logic and utilities:
+  - `lib/ai/` – AI configuration (`models.ts`, `prompts.ts`, `providers.ts`,
+    `embeddings.ts`, `tools/`).
+  - `lib/artifacts/` – Artifact processing logic.
+  - `lib/cache/` – Caching utilities.
+  - `lib/db/` – Database layer:
+    - `schema.ts`, `queries.ts`, `migrate.ts` – Core chat/user tables.
+    - `parliament/` – Parliament schema and queries.
+    - `legislation/` – Legislation schema and queries.
+    - `rag/` – RAG embedding tables.
+    - `migrations/` – Drizzle migrations.
+  - `lib/editor/` – Editor utilities.
+  - `lib/legislation/` – Legislation processing logic.
+  - `lib/rag/` – RAG systems:
+    - `lib/rag/parliament/` – Parliament RAG (sources for bills, committees,
+      elections, hansard, parties, politicians, ridings, sessions, votes).
+    - `lib/rag/legislation/` – Legislation RAG.
+    - `lib/rag/shared/` – Shared RAG utilities.
+- `public/` – Static assets (`images/`).
+- `scripts/` – Data processing scripts (`generate-embeddings.ts`,
+  `import-legislation.ts`, `load-parliament-data.ts`, etc.).
+- `tests/` – Playwright tests: `e2e/`, `routes/`, `db/`, `pages/`, `prompts/` (+
+  helpers in `tests/fixtures.ts`).
 - `docker-compose.yml` – Local Postgres + Redis.
 - `.env.example` – Required env vars; copy to `.env.local`.
 
-## Build, Test, and Development Commands
+## Tools To Use During Development
 
-- `pnpm install` – Install deps (package manager: `pnpm`).
-- `docker-compose up -d` – Start Postgres (15432) and Redis (16379) locally.
-- `pnpm db:migrate` – Apply DB migrations.
-- `pnpm dev` – Run the app locally.
-- `pnpm build` / `pnpm start` – Production build/serve.
-- `pnpm type-check` – TypeScript checks.
-- `pnpm lint` / `pnpm format` – Biome via Ultracite check/fix.
-- `pnpm test` / `pnpm test:db` – Playwright tests (web/e2e and DB-only).
+After completing feature code always run `pnpm check` to lint and type check.
 
 ## Coding Style & Naming Conventions
 
@@ -69,27 +91,17 @@ system.
 - Keep server-only logic in `lib/**` and API routes; client components in
   `components/**`.
 - Lint/format must pass (`biome.jsonc` rules via Ultracite).
+- No barrel files
+- See `biome.jsonc` for more details.
 
-## Testing Guidelines
+## Things You Will Not Do
 
-- Use Playwright; name tests `*.test.ts` under `tests/{e2e,routes,db}`.
-- Prefer deterministic tests; use `tests/fixtures.ts` helpers.
-- Ensure `.env.local` is set and run `pnpm db:migrate`; the Playwright config
-  boots the dev server.
-
-## Commit & Pull Request Guidelines
-
-- Follow Conventional Commits: `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`
-  with optional scope (e.g., `fix(artifacts): …`) and issue refs (`#123`).
-- PRs must include: clear description, linked issues, screenshots for UI
-  changes, and any env/doc updates.
-- CI expectations: run `pnpm type-check && pnpm lint && pnpm test` locally
-  before opening a PR.
+- Don't run tests
+- Don't run `pnpm build` or `pnpm dev`
+- Do not run database generation or migration (`pnpm db:generate`, or
+  `pnpm db:migrate`)
+- Do not create SQL migration files
 
 ## Security & Configuration Tips
 
-- Never commit secrets. Use `.env.local`; update `.env.example` when adding new
-  vars.
-- Local URLs: set `POSTGRES_URL` and `REDIS_URL` to match `docker-compose`
-  ports.
-- For Vercel projects, use `vercel env pull` to sync environment variables.
+- Never write to `.env.local`. Update `.env.example` when adding new vars.
