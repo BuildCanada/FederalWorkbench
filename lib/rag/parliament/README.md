@@ -222,31 +222,6 @@ CREATE INDEX parl_embeddings_tsv_idx ON rag.parl_embeddings
 
 Set `RAG_CACHE_DISABLE=true` to bypass Redis during development.
 
-## CLI Scripts
-
-### Generate Embeddings
-
-```bash
-# All sources
-npx tsx scripts/generate-embeddings.ts
-
-# Specific types and session
-npx tsx scripts/generate-embeddings.ts --types=bills,hansard --session 45-1
-
-# Skip existing (incremental)
-npx tsx scripts/generate-embeddings.ts --types=bills --skip-existing
-
-# Reset tables
-npx tsx scripts/generate-embeddings.ts --empty-tables
-```
-
-### Hydrate Source
-
-```bash
-# Hydrate a specific source type
-npx tsx scripts/hydrate-source.ts --type=bills
-```
-
 ## Integration Points
 
 ### Chat API (`app/(chat)/api/chat/route.ts`)

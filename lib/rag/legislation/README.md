@@ -177,19 +177,3 @@ export const retrieveLegislationContext = tool({
   execute: async ({ query, limit }) => getLegislationContext(query, limit),
 });
 ```
-
-## CLI Scripts
-
-Generate legislation embeddings:
-
-```bash
-# Acts and regulations (all)
-npx tsx scripts/generate-legislation-embeddings.ts
-
-# Only acts or regulations
-npx tsx scripts/generate-legislation-embeddings.ts --types=acts
-npx tsx scripts/generate-legislation-embeddings.ts --types=regulations
-
-# Skip existing embeddings
-npx tsx scripts/generate-legislation-embeddings.ts --skip-existing
-```
