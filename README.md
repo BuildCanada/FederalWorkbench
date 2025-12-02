@@ -21,6 +21,15 @@ Parliament and Legislation data.
 
 [Documentation](./docs/README.md)
 
+## Licences & Notices
+
+- [LICENSE](./LICENSE.md)
+- [NOTICES](./NOTICES.md)
+
+## Contributing
+
+- [CONTRIBUTING](./CONTRIBUTING.md)
+
 ## About
 
 _A [Shawn Price](https://shawnprice.com) 🤝
