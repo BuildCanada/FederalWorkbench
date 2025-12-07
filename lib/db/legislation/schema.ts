@@ -630,7 +630,7 @@ export const crossReferences = legislationSchema.table(
     sourceSectionLabel: varchar("source_section_label", { length: 50 }),
     // Target (what is being referenced) - raw from XML
     targetType: varchar("target_type", { length: 20 }).notNull(), // "act" or "regulation"
-    targetRef: varchar("target_ref", { length: 100 }).notNull(), // Raw link text (e.g., "A-2", "SOR-86-946")
+    targetRef: varchar("target_ref", { length: 100 }).notNull(), // Raw link (e.g., "C-46", "SOR-2000-1")
     targetSectionRef: varchar("target_section_ref", { length: 50 }),
     // Display text for the reference
     referenceText: text("reference_text"),
@@ -642,6 +642,7 @@ export const crossReferences = legislationSchema.table(
     index("cross_references_source_regulation_id_idx").on(
       table.sourceRegulationId
     ),
+    index("cross_references_target_type_idx").on(table.targetType),
     index("cross_references_target_ref_idx").on(table.targetRef),
   ]
 );

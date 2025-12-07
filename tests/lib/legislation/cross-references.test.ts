@@ -1,9 +1,8 @@
 /**
  * Tests for cross-reference extraction from legislation XML.
  *
- * These tests verify that the parser correctly extracts:
- * - XRefExternal elements with all reference types (act, regulation, agreement, etc.)
- * - XRefInternal elements for intra-document section references
+ * Cross-references link legislation documents to other acts and regulations.
+ * Only act and regulation reference types are captured.
  */
 
 import { expect, test } from "@playwright/test";
@@ -31,7 +30,7 @@ function createActXmlWithRefs(sectionContent: string): string {
 }
 
 test.describe("Cross-reference extraction", () => {
-  test.describe("XRefExternal - act references", () => {
+  test.describe("Act references", () => {
     test("extracts act references with link", () => {
       const xml = createActXmlWithRefs(
         'See the <XRefExternal reference-type="act" link="C-46">Criminal Code</XRefExternal>.'
@@ -61,7 +60,7 @@ test.describe("Cross-reference extraction", () => {
     });
   });
 
-  test.describe("XRefExternal - regulation references", () => {
+  test.describe("Regulation references", () => {
     test("extracts regulation references", () => {
       const xml = createActXmlWithRefs(
         'See <XRefExternal reference-type="regulation" link="SOR-2000-1">the Regulations</XRefExternal>.'
@@ -77,167 +76,49 @@ test.describe("Cross-reference extraction", () => {
     });
   });
 
-  test.describe("XRefExternal - other reference types", () => {
-    test("extracts agreement references", () => {
+  test.describe("Mixed act and regulation references", () => {
+    test("extracts both act and regulation references", () => {
       const xml = createActXmlWithRefs(
-        '<XRefExternal reference-type="agreement" link="NAFTA-2020">Trade Agreement</XRefExternal>'
+        '<XRefExternal reference-type="act" link="A-1">Act A</XRefExternal> and ' +
+          '<XRefExternal reference-type="regulation" link="SOR-1">Reg 1</XRefExternal>.'
       );
       const result = parseActXml(xml, "en");
 
-      expect(result.crossReferences).toHaveLength(1);
-      expect(result.crossReferences[0]).toMatchObject({
-        targetType: "agreement",
-        targetRef: "NAFTA-2020",
-        referenceText: "Trade Agreement",
+      expect(result.crossReferences).toHaveLength(2);
+
+      const actRef = result.crossReferences.find((r) => r.targetType === "act");
+      const regRef = result.crossReferences.find(
+        (r) => r.targetType === "regulation"
+      );
+
+      expect(actRef).toMatchObject({
+        targetType: "act",
+        targetRef: "A-1",
       });
-    });
-
-    test("extracts canada-gazette references", () => {
-      const xml = createActXmlWithRefs(
-        '<XRefExternal reference-type="canada-gazette" link="CG-2023-01">Canada Gazette</XRefExternal>'
-      );
-      const result = parseActXml(xml, "en");
-
-      expect(result.crossReferences).toHaveLength(1);
-      expect(result.crossReferences[0]).toMatchObject({
-        targetType: "canada-gazette",
-        targetRef: "CG-2023-01",
-      });
-    });
-
-    test("extracts citation references", () => {
-      const xml = createActXmlWithRefs(
-        '<XRefExternal reference-type="citation" link="2020 SCC 5">Court Citation</XRefExternal>'
-      );
-      const result = parseActXml(xml, "en");
-
-      expect(result.crossReferences).toHaveLength(1);
-      expect(result.crossReferences[0]).toMatchObject({
-        targetType: "citation",
-        targetRef: "2020 SCC 5",
-      });
-    });
-
-    test("extracts standard references", () => {
-      const xml = createActXmlWithRefs(
-        '<XRefExternal reference-type="standard" link="ISO-9001">ISO Standard</XRefExternal>'
-      );
-      const result = parseActXml(xml, "en");
-
-      expect(result.crossReferences).toHaveLength(1);
-      expect(result.crossReferences[0]).toMatchObject({
-        targetType: "standard",
-        targetRef: "ISO-9001",
-      });
-    });
-
-    test('extracts "other" reference type', () => {
-      const xml = createActXmlWithRefs(
-        '<XRefExternal reference-type="other" link="misc-ref">Other Reference</XRefExternal>'
-      );
-      const result = parseActXml(xml, "en");
-
-      expect(result.crossReferences).toHaveLength(1);
-      expect(result.crossReferences[0]).toMatchObject({
-        targetType: "other",
-        targetRef: "misc-ref",
+      expect(regRef).toMatchObject({
+        targetType: "regulation",
+        targetRef: "SOR-1",
       });
     });
   });
 
-  test.describe("XRefInternal - section references", () => {
-    test("extracts simple section reference", () => {
+  test.describe("Ignored reference types", () => {
+    test("ignores XRefInternal (internal section references)", () => {
       const xml = createActXmlWithRefs(
         "As defined in subsection <XRefInternal>3</XRefInternal>(1)."
       );
       const result = parseActXml(xml, "en");
 
-      expect(result.crossReferences).toHaveLength(1);
-      expect(result.crossReferences[0]).toMatchObject({
-        sourceActId: "T-1",
-        sourceSectionLabel: "1",
-        targetType: "section",
-        targetRef: "3",
-        referenceText: "3",
-      });
+      expect(result.crossReferences).toHaveLength(0);
     });
 
-    test("extracts multiple internal section references", () => {
+    test("ignores non-legislation reference types", () => {
       const xml = createActXmlWithRefs(
-        "See sections <XRefInternal>5</XRefInternal> and <XRefInternal>10</XRefInternal>."
+        '<XRefExternal reference-type="standard" link="ISO-9001">ISO Standard</XRefExternal> and ' +
+          '<XRefExternal reference-type="agreement" link="NAFTA">Trade Agreement</XRefExternal> and ' +
+          '<XRefExternal reference-type="canada-gazette" link="CG-1">Canada Gazette</XRefExternal> and ' +
+          '<XRefExternal reference-type="other" link="misc">Other</XRefExternal>'
       );
-      const result = parseActXml(xml, "en");
-
-      expect(result.crossReferences).toHaveLength(2);
-      expect(result.crossReferences[0].targetRef).toBe("5");
-      expect(result.crossReferences[0].targetType).toBe("section");
-      expect(result.crossReferences[1].targetRef).toBe("10");
-      expect(result.crossReferences[1].targetType).toBe("section");
-    });
-
-    test("extracts subsection reference format", () => {
-      const xml = createActXmlWithRefs(
-        "Pursuant to <XRefInternal>7(1)(a)</XRefInternal>."
-      );
-      const result = parseActXml(xml, "en");
-
-      expect(result.crossReferences).toHaveLength(1);
-      expect(result.crossReferences[0]).toMatchObject({
-        targetType: "section",
-        targetRef: "7(1)(a)",
-      });
-    });
-  });
-
-  test.describe("Mixed references", () => {
-    test("extracts both external and internal references", () => {
-      const xml = createActXmlWithRefs(
-        'See the <XRefExternal reference-type="act" link="C-46">Criminal Code</XRefExternal> ' +
-          "and section <XRefInternal>15</XRefInternal> of this Act."
-      );
-      const result = parseActXml(xml, "en");
-
-      expect(result.crossReferences).toHaveLength(2);
-
-      const externalRef = result.crossReferences.find(
-        (r) => r.targetType === "act"
-      );
-      const internalRef = result.crossReferences.find(
-        (r) => r.targetType === "section"
-      );
-
-      expect(externalRef).toMatchObject({
-        targetType: "act",
-        targetRef: "C-46",
-      });
-      expect(internalRef).toMatchObject({
-        targetType: "section",
-        targetRef: "15",
-      });
-    });
-
-    test("extracts all reference types in one section", () => {
-      const xml = createActXmlWithRefs(
-        '<XRefExternal reference-type="act" link="A-1">Act A</XRefExternal>, ' +
-          '<XRefExternal reference-type="regulation" link="SOR-1">Reg 1</XRefExternal>, ' +
-          '<XRefExternal reference-type="agreement" link="AGR-1">Agreement</XRefExternal>, ' +
-          "section <XRefInternal>5</XRefInternal>"
-      );
-      const result = parseActXml(xml, "en");
-
-      expect(result.crossReferences).toHaveLength(4);
-
-      const types = result.crossReferences.map((r) => r.targetType);
-      expect(types).toContain("act");
-      expect(types).toContain("regulation");
-      expect(types).toContain("agreement");
-      expect(types).toContain("section");
-    });
-  });
-
-  test.describe("Edge cases", () => {
-    test("handles empty content gracefully", () => {
-      const xml = createActXmlWithRefs("No references here.");
       const result = parseActXml(xml, "en");
 
       expect(result.crossReferences).toHaveLength(0);
@@ -260,16 +141,27 @@ test.describe("Cross-reference extraction", () => {
 
       expect(result.crossReferences).toHaveLength(0);
     });
+  });
 
-    test("handles XRefInternal with whitespace", () => {
+  test.describe("Edge cases", () => {
+    test("handles empty content gracefully", () => {
+      const xml = createActXmlWithRefs("No references here.");
+      const result = parseActXml(xml, "en");
+
+      expect(result.crossReferences).toHaveLength(0);
+    });
+
+    test("only captures act/regulation even when mixed with other types", () => {
       const xml = createActXmlWithRefs(
-        "See <XRefInternal> 42 </XRefInternal>."
+        '<XRefExternal reference-type="act" link="C-46">Criminal Code</XRefExternal> and ' +
+          '<XRefExternal reference-type="standard" link="ISO-9001">ISO</XRefExternal> and ' +
+          "section <XRefInternal>5</XRefInternal>"
       );
       const result = parseActXml(xml, "en");
 
       expect(result.crossReferences).toHaveLength(1);
-      // The parser should trim whitespace
-      expect(result.crossReferences[0].targetRef).toBe("42");
+      expect(result.crossReferences[0].targetType).toBe("act");
+      expect(result.crossReferences[0].targetRef).toBe("C-46");
     });
   });
 
@@ -286,22 +178,18 @@ test.describe("Cross-reference extraction", () => {
   <Body>
     <Section>
       <Label>1</Label>
-      <Text>Voir le <XRefExternal reference-type="act" link="C-46">Code criminel</XRefExternal> et l'article <XRefInternal>3</XRefInternal>.</Text>
+      <Text>Voir le <XRefExternal reference-type="act" link="C-46">Code criminel</XRefExternal>.</Text>
     </Section>
   </Body>
 </Statute>`;
 
       const result = parseActXml(xml, "fr");
 
-      expect(result.crossReferences).toHaveLength(2);
+      expect(result.crossReferences).toHaveLength(1);
       expect(result.crossReferences[0]).toMatchObject({
         targetType: "act",
         targetRef: "C-46",
         referenceText: "Code criminel",
-      });
-      expect(result.crossReferences[1]).toMatchObject({
-        targetType: "section",
-        targetRef: "3",
       });
     });
   });

@@ -10,7 +10,6 @@ import type {
   BillHistory,
   ChangeType,
   ContentFlags,
-  CrossReferenceTargetType,
   DefinitionScopeType,
   EnablingAuthorityInfo,
   FootnoteInfo,
@@ -1793,34 +1792,8 @@ function extractDefinedTermFromDefinition(
 }
 
 /**
- * Valid external reference types from XML
- */
-const VALID_EXTERNAL_REF_TYPES: CrossReferenceTargetType[] = [
-  "act",
-  "regulation",
-  "agreement",
-  "canada-gazette",
-  "citation",
-  "standard",
-  "other",
-];
-
-/**
- * Check if a string is a valid CrossReferenceTargetType
- */
-function isValidExternalRefType(
-  refType: unknown
-): refType is CrossReferenceTargetType {
-  return (
-    typeof refType === "string" &&
-    VALID_EXTERNAL_REF_TYPES.includes(refType as CrossReferenceTargetType)
-  );
-}
-
-/**
  * Extract cross references from an element
- * Handles both XRefExternal (external document references) and
- * XRefInternal (intra-document section references)
+ * Only captures references to other legislation (acts and regulations)
  */
 function extractCrossReferences(
   el: Record<string, unknown>,
@@ -1836,7 +1809,7 @@ function extractCrossReferences(
     }
     const o = obj as Record<string, unknown>;
 
-    // Check for XRefExternal (external references to other documents)
+    // Check for XRefExternal
     if (o.XRefExternal) {
       const xrefs = Array.isArray(o.XRefExternal)
         ? o.XRefExternal
@@ -1850,36 +1823,14 @@ function extractCrossReferences(
         const link = xrefObj["@_link"];
         const text = extractTextContent(xrefObj);
 
-        // Capture all valid reference types, not just act/regulation
-        if (link && isValidExternalRefType(refType)) {
+        if (link && (refType === "act" || refType === "regulation")) {
           refs.push({
             sourceActId,
             sourceRegulationId,
             sourceSectionLabel,
-            targetType: refType,
+            targetType: refType as "act" | "regulation",
             targetRef: String(link),
             referenceText: text || undefined,
-          });
-        }
-      }
-    }
-
-    // Check for XRefInternal (intra-document section references)
-    if (o.XRefInternal) {
-      const xrefs = Array.isArray(o.XRefInternal)
-        ? o.XRefInternal
-        : [o.XRefInternal];
-      for (const xref of xrefs) {
-        // XRefInternal can be a simple string or an object with text content
-        const text = typeof xref === "string" ? xref : extractTextContent(xref);
-        if (text) {
-          refs.push({
-            sourceActId,
-            sourceRegulationId,
-            sourceSectionLabel,
-            targetType: "section",
-            targetRef: text, // Section number like "3", "7(1)", etc.
-            referenceText: text,
           });
         }
       }
@@ -2932,7 +2883,8 @@ export function parseRegulationXml(
       : [regulation.Schedule]
     : [];
 
-  // Create a combined element that includes Body content and root-level Schedules
+  // Create a combined element that includes Body content, root-level Schedules,
+  // and Order elements (which contain regulatory authority text)
   const bodySchedules = body.Schedule
     ? Array.isArray(body.Schedule)
       ? body.Schedule
@@ -2943,6 +2895,7 @@ export function parseRegulationXml(
   const combinedBody = {
     ...body,
     ...(allSchedules.length > 0 ? { Schedule: allSchedules } : {}),
+    ...(regulation.Order ? { Order: regulation.Order } : {}),
   };
 
   const { sections, definedTerms, crossReferences } = parseSections({

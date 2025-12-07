@@ -414,30 +414,15 @@ export type ParsedDefinedTerm = {
 };
 
 /**
- * Cross reference target types
- * - act/regulation: external references to other legislation
- * - section: internal reference within the same document (XRefInternal)
- * - agreement/canada-gazette/citation/standard/other: other external references
- */
-export type CrossReferenceTargetType =
-  | "act"
-  | "regulation"
-  | "section"
-  | "agreement"
-  | "canada-gazette"
-  | "citation"
-  | "standard"
-  | "other";
-
-/**
  * Parsed Cross Reference
+ * Links between legislation documents (acts and regulations)
  */
 export type ParsedCrossReference = {
   sourceActId?: string;
   sourceRegulationId?: string;
   sourceSectionLabel?: string;
-  targetType: CrossReferenceTargetType;
-  targetRef: string; // raw link value or section number for internal refs
+  targetType: "act" | "regulation";
+  targetRef: string; // raw link value (e.g., "C-46", "SOR-2000-1")
   targetSectionRef?: string;
   referenceText?: string;
 };
