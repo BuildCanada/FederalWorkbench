@@ -15,6 +15,7 @@ import {
 } from "@/lib/db/legislation/schema";
 
 import {
+  buildPairedResourceKey,
   buildResourceKey,
   type ChunkData,
   DB_FETCH_BATCH_SIZE,
@@ -29,8 +30,62 @@ import {
 } from "./utilities";
 
 /**
+ * Format scope information for embedding content.
+ * Creates a prominent, searchable scope description based on scopeType and scopeSections.
+ */
+function formatScopeInfo(term: DefinedTerm, lang: "en" | "fr"): string | null {
+  // If scopeType is "act" or "regulation", definition applies to entire document - no need to specify
+  if (
+    !term.scopeType ||
+    term.scopeType === "act" ||
+    term.scopeType === "regulation"
+  ) {
+    return null;
+  }
+
+  const parts: string[] = [];
+
+  // Add scope type label
+  if (lang === "fr") {
+    const scopeLabels: Record<string, string> = {
+      part: "partie",
+      section: "article(s)",
+    };
+    parts.push(`Portée: ${scopeLabels[term.scopeType] ?? term.scopeType}`);
+  } else {
+    const scopeLabels: Record<string, string> = {
+      part: "part",
+      section: "section(s)",
+    };
+    parts.push(`Scope: ${scopeLabels[term.scopeType] ?? term.scopeType}`);
+  }
+
+  // Add specific sections if available
+  if (term.scopeSections && term.scopeSections.length > 0) {
+    const sectionList = term.scopeSections.join(", ");
+    if (lang === "fr") {
+      parts.push(`S'applique aux articles: ${sectionList}`);
+    } else {
+      parts.push(`Applicable to sections: ${sectionList}`);
+    }
+  }
+
+  // Add original scope declaration if available (most human-readable)
+  if (term.scopeRawText) {
+    if (lang === "fr") {
+      parts.push(`Déclaration de portée: ${term.scopeRawText}`);
+    } else {
+      parts.push(`Scope declaration: ${term.scopeRawText}`);
+    }
+  }
+
+  return parts.join("\n");
+}
+
+/**
  * Build searchable text content for a defined term.
- * Includes term, definition, and source context for better retrieval.
+ * Includes term, definition, scope context, and source context for better retrieval.
+ * Scope information is included prominently when the term has limited applicability.
  */
 export function buildTermContent(
   term: DefinedTerm,
@@ -48,9 +103,13 @@ export function buildTermContent(
     if (term.sectionLabel) {
       parts.push(`Article: ${term.sectionLabel}`);
     }
-    if (term.scopeType && term.scopeType !== "act") {
-      parts.push(`Portée: ${term.scopeType}`);
+
+    // Add prominent scope information
+    const scopeInfo = formatScopeInfo(term, "fr");
+    if (scopeInfo) {
+      parts.push(scopeInfo);
     }
+
     parts.push(`\nDéfinition:\n${term.definition}`);
   } else {
     parts.push(`Defined Term: ${term.term}`);
@@ -61,9 +120,13 @@ export function buildTermContent(
     if (term.sectionLabel) {
       parts.push(`Section: ${term.sectionLabel}`);
     }
-    if (term.scopeType && term.scopeType !== "act") {
-      parts.push(`Scope: ${term.scopeType}`);
+
+    // Add prominent scope information
+    const scopeInfo = formatScopeInfo(term, "en");
+    if (scopeInfo) {
+      parts.push(scopeInfo);
     }
+
     parts.push(`\nDefinition:\n${term.definition}`);
   }
 
@@ -83,6 +146,12 @@ function buildTermChunk(
   }
 
   const termKey = buildResourceKey("defined_term", term.id, lang, 0);
+  const termPairedKey = buildPairedResourceKey(
+    "defined_term",
+    term.id,
+    lang,
+    0
+  );
 
   return {
     content: buildTermContent(term, documentTitle),
@@ -101,7 +170,9 @@ function buildTermChunk(
       sectionLabel: term.sectionLabel ?? undefined,
       scopeType: term.scopeType ?? undefined,
       scopeSections: term.scopeSections ?? undefined,
+      scopeRawText: term.scopeRawText ?? undefined,
       chunkIndex: 0,
+      pairedResourceKey: termPairedKey,
     },
   };
 }

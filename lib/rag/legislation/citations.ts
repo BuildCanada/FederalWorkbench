@@ -328,25 +328,25 @@ export function buildCrossReferenceCitation(
 }
 
 /**
- * Build a citation for a table of provisions entry
+ * Build a citation for a table of provisions (batched per document)
  */
 export function buildTableOfProvisionsCitation(
   metadata: LegResourceMetadata,
   citationId: number
 ): LegislationCitation {
   const title = metadata.documentTitle || "Legislation";
-  const provisionLabel = metadata.provisionLabel || "";
-  const provisionTitle = metadata.provisionTitle || "";
   const { urlEn, urlFr } = buildParentUrls(metadata);
 
-  const labelPart = provisionLabel ? ` - ${provisionLabel}` : "";
-  const titlePart = provisionTitle ? `: ${provisionTitle}` : "";
+  // Batched ToP represents entire document structure, not individual entries
+  const countNote = metadata.provisionCount
+    ? ` (${metadata.provisionCount} entries)`
+    : "";
 
   return {
     id: citationId,
     prefixedId: "", // Set by context-builder
-    textEn: `[${title}, Table of Provisions${labelPart}${titlePart}]`,
-    textFr: `[${title}, Table des dispositions${labelPart}${titlePart}]`,
+    textEn: `[${title}, Table of Provisions${countNote}]`,
+    textFr: `[${title}, Table des dispositions${countNote}]`,
     urlEn,
     urlFr,
     titleEn: `Table of Provisions of ${title}`,
@@ -389,6 +389,182 @@ export function buildSignatureBlockCitation(
 }
 
 /**
+ * Build a citation for related provisions (transitional provisions, etc.)
+ */
+export function buildRelatedProvisionsCitation(
+  metadata: LegResourceMetadata,
+  citationId: number
+): LegislationCitation {
+  const title = metadata.documentTitle || "Legislation";
+  const label = metadata.relatedProvisionLabel;
+  const source = metadata.relatedProvisionSource;
+  const sections = metadata.relatedProvisionSections;
+  const { urlEn, urlFr } = buildParentUrls(metadata);
+
+  // Build descriptive text based on available info
+  let labelPart = "";
+  if (label) {
+    labelPart = `: ${label}`;
+  }
+
+  let sectionsPart = "";
+  if (sections?.length) {
+    sectionsPart =
+      sections.length === 1
+        ? ` (s ${sections[0]})`
+        : ` (ss ${sections.join(", ")})`;
+  }
+
+  return {
+    id: citationId,
+    prefixedId: "", // Set by context-builder
+    textEn: `[${title}, Related Provisions${labelPart}${sectionsPart}]`,
+    textFr: `[${title}, Dispositions connexes${labelPart}${sectionsPart}]`,
+    urlEn,
+    urlFr,
+    titleEn: source
+      ? `Related Provisions (${source}) in ${title}`
+      : `Related Provisions in ${title}`,
+    titleFr: source
+      ? `Dispositions connexes (${source}) dans ${title}`
+      : `Dispositions connexes dans ${title}`,
+    sourceType: "related_provisions",
+  };
+}
+
+/**
+ * Build a citation for a schedule (from an act or regulation)
+ * Schedules are special sections that contain lists, tables, or supplementary material
+ */
+export function buildScheduleCitation(
+  metadata: LegResourceMetadata,
+  citationId: number
+): LegislationCitation {
+  const title = metadata.documentTitle || "Legislation";
+  const sectionLabel = metadata.sectionLabel || "";
+  const { urlEn, urlFr } = buildParentUrls(metadata);
+
+  // Add section anchor if available
+  const finalUrlEn = sectionLabel
+    ? buildSectionUrl(urlEn, sectionLabel)
+    : urlEn;
+  const finalUrlFr = sectionLabel
+    ? buildSectionUrl(urlFr, sectionLabel)
+    : urlFr;
+
+  // Extract schedule identifier for display
+  // sectionLabel might be "Schedule I", "Schedule Item 5", or similar
+  const scheduleRef = sectionLabel || "Schedule";
+
+  return {
+    id: citationId,
+    prefixedId: "", // Set by context-builder
+    textEn: `[${title}, ${scheduleRef}]`,
+    textFr: `[${title}, ${scheduleRef}]`,
+    urlEn: finalUrlEn,
+    urlFr: finalUrlFr,
+    titleEn: `${scheduleRef} of ${title}`,
+    titleFr: `${scheduleRef} de ${title}`,
+    sourceType: "schedule",
+  };
+}
+
+/**
+ * Build a citation for a marginal note (section heading)
+ * Links to the specific section within the act or regulation
+ */
+export function buildMarginalNoteCitation(
+  metadata: LegResourceMetadata,
+  citationId: number
+): LegislationCitation {
+  const title = metadata.documentTitle || "Legislation";
+  const sectionLabel = metadata.sectionLabel;
+  const marginalNote = metadata.marginalNote;
+  const { urlEn, urlFr } = buildParentUrls(metadata);
+
+  // Add section anchor if available
+  const finalUrlEn = sectionLabel
+    ? buildSectionUrl(urlEn, sectionLabel)
+    : urlEn;
+  const finalUrlFr = sectionLabel
+    ? buildSectionUrl(urlFr, sectionLabel)
+    : urlFr;
+
+  // Build section reference text
+  const sectionRefEn = sectionLabel ? `, s ${sectionLabel}` : "";
+  const sectionRefFr = sectionLabel ? `, art ${sectionLabel}` : "";
+
+  // Use marginal note text if available, otherwise generic label
+  const noteTextEn = marginalNote || "Section heading";
+  const noteTextFr = marginalNote || "Note marginale";
+
+  return {
+    id: citationId,
+    prefixedId: "", // Set by context-builder
+    textEn: `[${title}${sectionRefEn} - ${noteTextEn}]`,
+    textFr: `[${title}${sectionRefFr} - ${noteTextFr}]`,
+    urlEn: finalUrlEn,
+    urlFr: finalUrlFr,
+    titleEn: sectionLabel
+      ? `Section ${sectionLabel} of ${title}: ${noteTextEn}`
+      : `${title}: ${noteTextEn}`,
+    titleFr: sectionLabel
+      ? `Article ${sectionLabel} de ${title}: ${noteTextFr}`
+      : `${title}: ${noteTextFr}`,
+    sourceType: "marginal_note",
+  };
+}
+
+/**
+ * Build a citation for a footnote within a section
+ */
+export function buildFootnoteCitation(
+  metadata: LegResourceMetadata,
+  citationId: number
+): LegislationCitation {
+  const title = metadata.documentTitle || "Legislation";
+  const sectionLabel = metadata.sectionLabel;
+  const footnoteLabel = metadata.footnoteLabel;
+  const footnoteStatus = metadata.footnoteStatus;
+  const { urlEn, urlFr } = buildParentUrls(metadata);
+
+  // Add section anchor if available
+  const finalUrlEn = sectionLabel
+    ? buildSectionUrl(urlEn, sectionLabel)
+    : urlEn;
+  const finalUrlFr = sectionLabel
+    ? buildSectionUrl(urlFr, sectionLabel)
+    : urlFr;
+
+  // Build footnote reference text
+  const sectionRefEn = sectionLabel ? `, s ${sectionLabel}` : "";
+  const sectionRefFr = sectionLabel ? `, art ${sectionLabel}` : "";
+  const footnoteMark = footnoteLabel ? ` [${footnoteLabel}]` : "";
+
+  // Add editorial/official indicator if known
+  const statusIndicatorEn =
+    footnoteStatus === "editorial" ? " (editorial)" : "";
+  const statusIndicatorFr =
+    footnoteStatus === "editorial" ? " (éditoriale)" : "";
+
+  return {
+    id: citationId,
+    prefixedId: "", // Set by context-builder
+    textEn: `[${title}${sectionRefEn}, Footnote${footnoteMark}${statusIndicatorEn}]`,
+    textFr: `[${title}${sectionRefFr}, Note${footnoteMark}${statusIndicatorFr}]`,
+    urlEn: finalUrlEn,
+    urlFr: finalUrlFr,
+    titleEn: sectionLabel
+      ? `Footnote in ${title}, section ${sectionLabel}`
+      : `Footnote in ${title}`,
+    titleFr: sectionLabel
+      ? `Note de bas de page dans ${title}, article ${sectionLabel}`
+      : `Note de bas de page dans ${title}`,
+    sourceType: "footnote",
+  };
+}
+
+/**
  * Build citation from metadata, dispatching to appropriate builder
  */
 export function buildCitation(
@@ -416,6 +592,14 @@ export function buildCitation(
       return buildTableOfProvisionsCitation(metadata, citationId);
     case "signature_block":
       return buildSignatureBlockCitation(metadata, citationId);
+    case "related_provisions":
+      return buildRelatedProvisionsCitation(metadata, citationId);
+    case "footnote":
+      return buildFootnoteCitation(metadata, citationId);
+    case "marginal_note":
+      return buildMarginalNoteCitation(metadata, citationId);
+    case "schedule":
+      return buildScheduleCitation(metadata, citationId);
     default:
       // Fallback for any unexpected type
       return {

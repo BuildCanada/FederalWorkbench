@@ -59,7 +59,19 @@ type FormatRegulationOptions = {
  * Matches the HydratedSource type from parliament for UI compatibility
  */
 export type HydratedLegislationSource = {
-  sourceType: "act" | "regulation" | "defined_term";
+  sourceType:
+    | "act"
+    | "regulation"
+    | "defined_term"
+    | "footnote"
+    | "related_provisions"
+    | "preamble"
+    | "treaty"
+    | "cross_reference"
+    | "table_of_provisions"
+    | "signature_block"
+    | "marginal_note"
+    | "schedule";
   markdown: string;
   languageUsed: Lang;
   id: string;
@@ -637,6 +649,579 @@ function hydrateDefinedTerm(
 }
 
 /**
+ * Format footnote as readable markdown
+ */
+function formatFootnoteMarkdown(
+  result: LegislationSearchResult,
+  lang: Lang
+): string {
+  const meta = result.metadata;
+  const lines: string[] = [];
+
+  // Header
+  const footnoteLabel = lang === "fr" ? "Note de bas de page" : "Footnote";
+  const labelPart = meta.footnoteLabel ? ` [${meta.footnoteLabel}]` : "";
+  lines.push(`# ${footnoteLabel}${labelPart}`);
+  lines.push("");
+
+  // Source document
+  const sourceLabel = lang === "fr" ? "Source" : "Source";
+  lines.push(`**${sourceLabel}:** ${meta.documentTitle ?? "Unknown"}`);
+
+  // Section reference
+  if (meta.sectionLabel) {
+    const sectionLabel = lang === "fr" ? "Article" : "Section";
+    lines.push(`**${sectionLabel}:** ${meta.sectionLabel}`);
+  }
+
+  // Footnote type/status
+  if (meta.footnoteStatus) {
+    const typeLabel = lang === "fr" ? "Type" : "Type";
+    const statusText =
+      lang === "fr"
+        ? meta.footnoteStatus === "editorial"
+          ? "Éditoriale"
+          : "Officielle"
+        : meta.footnoteStatus === "editorial"
+          ? "Editorial"
+          : "Official";
+    lines.push(`**${typeLabel}:** ${statusText}`);
+  }
+
+  lines.push("");
+
+  // Footnote content
+  const contentLabel = lang === "fr" ? "Contenu" : "Content";
+  lines.push(`## ${contentLabel}`);
+  lines.push("");
+  lines.push(result.content);
+
+  return lines.join("\n");
+}
+
+/**
+ * Hydrate a footnote search result into markdown
+ */
+function hydrateFootnote(
+  result: LegislationSearchResult,
+  language: Lang
+): HydratedLegislationSource {
+  const meta = result.metadata;
+  const usedLang = meta.language === language ? language : meta.language;
+
+  return {
+    sourceType: "footnote",
+    markdown: formatFootnoteMarkdown(result, usedLang as Lang),
+    languageUsed: usedLang as Lang,
+    id: `footnote-${meta.actId ?? meta.regulationId ?? "unknown"}-${meta.sectionLabel ?? ""}-${meta.footnoteId ?? "unknown"}`,
+    note:
+      usedLang !== language
+        ? language === "fr"
+          ? "Note non disponible en français."
+          : "Note not available in English."
+        : undefined,
+  };
+}
+
+/**
+ * Format related provisions as readable markdown
+ */
+function formatRelatedProvisionsMarkdown(
+  result: LegislationSearchResult,
+  lang: Lang
+): string {
+  const meta = result.metadata;
+  const lines: string[] = [];
+
+  // Header
+  const headerLabel =
+    lang === "fr" ? "Dispositions connexes" : "Related Provisions";
+  lines.push(`# ${headerLabel}`);
+  lines.push("");
+
+  // Provision label if available
+  if (meta.relatedProvisionLabel) {
+    const labelLabel = lang === "fr" ? "Étiquette" : "Label";
+    lines.push(`**${labelLabel}:** ${meta.relatedProvisionLabel}`);
+  }
+
+  // Source document
+  const sourceLabel = lang === "fr" ? "Document source" : "Source Document";
+  lines.push(`**${sourceLabel}:** ${meta.documentTitle ?? "Unknown"}`);
+
+  // Provision source reference
+  if (meta.relatedProvisionSource) {
+    const refLabel = lang === "fr" ? "Référence" : "Reference";
+    lines.push(`**${refLabel}:** ${meta.relatedProvisionSource}`);
+  }
+
+  // Referenced sections
+  if (meta.relatedProvisionSections?.length) {
+    const sectionsLabel =
+      lang === "fr" ? "Articles visés" : "Referenced Sections";
+    lines.push(
+      `**${sectionsLabel}:** ${meta.relatedProvisionSections.join(", ")}`
+    );
+  }
+
+  lines.push("");
+
+  // Provision content
+  const contentLabel = lang === "fr" ? "Contenu" : "Content";
+  lines.push(`## ${contentLabel}`);
+  lines.push("");
+  lines.push(result.content);
+
+  return lines.join("\n");
+}
+
+/**
+ * Hydrate a related provisions search result into markdown
+ */
+function hydrateRelatedProvisions(
+  result: LegislationSearchResult,
+  language: Lang
+): HydratedLegislationSource {
+  const meta = result.metadata;
+  const usedLang = meta.language === language ? language : meta.language;
+
+  return {
+    sourceType: "related_provisions",
+    markdown: formatRelatedProvisionsMarkdown(result, usedLang as Lang),
+    languageUsed: usedLang as Lang,
+    id: `relprov-${meta.actId ?? meta.regulationId ?? "unknown"}-${meta.relatedProvisionLabel ?? meta.relatedProvisionSource ?? "unknown"}`,
+    note:
+      usedLang !== language
+        ? language === "fr"
+          ? "Dispositions non disponibles en français."
+          : "Provisions not available in English."
+        : undefined,
+  };
+}
+
+/**
+ * Format preamble as readable markdown
+ */
+function formatPreambleMarkdown(
+  result: LegislationSearchResult,
+  lang: Lang
+): string {
+  const meta = result.metadata;
+  const lines: string[] = [];
+
+  // Header
+  const headerLabel = lang === "fr" ? "Préambule" : "Preamble";
+  lines.push(`# ${headerLabel}`);
+  lines.push("");
+
+  // Source document
+  const sourceLabel = lang === "fr" ? "Document source" : "Source Document";
+  lines.push(`**${sourceLabel}:** ${meta.documentTitle ?? "Unknown"}`);
+  lines.push("");
+
+  // Preamble content
+  lines.push(result.content);
+
+  return lines.join("\n");
+}
+
+/**
+ * Hydrate a preamble search result into markdown
+ */
+function hydratePreamble(
+  result: LegislationSearchResult,
+  language: Lang
+): HydratedLegislationSource {
+  const meta = result.metadata;
+  const usedLang = meta.language === language ? language : meta.language;
+
+  return {
+    sourceType: "preamble",
+    markdown: formatPreambleMarkdown(result, usedLang as Lang),
+    languageUsed: usedLang as Lang,
+    id: `preamble-${meta.actId ?? meta.regulationId ?? "unknown"}-${meta.preambleIndex ?? 0}`,
+    note:
+      usedLang !== language
+        ? language === "fr"
+          ? "Préambule non disponible en français."
+          : "Preamble not available in English."
+        : undefined,
+  };
+}
+
+/**
+ * Format treaty as readable markdown
+ */
+function formatTreatyMarkdown(
+  result: LegislationSearchResult,
+  lang: Lang
+): string {
+  const meta = result.metadata;
+  const lines: string[] = [];
+
+  // Header with treaty title if available
+  const headerLabel = lang === "fr" ? "Traité" : "Treaty";
+  const title =
+    meta.treatyTitle ?? (lang === "fr" ? "Convention" : "Convention");
+  lines.push(`# ${headerLabel}: ${title}`);
+  lines.push("");
+
+  // Source document
+  const sourceLabel = lang === "fr" ? "Document source" : "Source Document";
+  lines.push(`**${sourceLabel}:** ${meta.documentTitle ?? "Unknown"}`);
+  lines.push("");
+
+  // Treaty content
+  const contentLabel = lang === "fr" ? "Contenu" : "Content";
+  lines.push(`## ${contentLabel}`);
+  lines.push("");
+  lines.push(result.content);
+
+  return lines.join("\n");
+}
+
+/**
+ * Hydrate a treaty search result into markdown
+ */
+function hydrateTreaty(
+  result: LegislationSearchResult,
+  language: Lang
+): HydratedLegislationSource {
+  const meta = result.metadata;
+  const usedLang = meta.language === language ? language : meta.language;
+
+  return {
+    sourceType: "treaty",
+    markdown: formatTreatyMarkdown(result, usedLang as Lang),
+    languageUsed: usedLang as Lang,
+    id: `treaty-${meta.actId ?? meta.regulationId ?? "unknown"}-${meta.treatyTitle ?? "unknown"}`,
+    note:
+      usedLang !== language
+        ? language === "fr"
+          ? "Traité non disponible en français."
+          : "Treaty not available in English."
+        : undefined,
+  };
+}
+
+/**
+ * Format cross-reference as readable markdown
+ */
+function formatCrossReferenceMarkdown(
+  result: LegislationSearchResult,
+  lang: Lang
+): string {
+  const meta = result.metadata;
+  const lines: string[] = [];
+
+  // Header
+  const headerLabel = lang === "fr" ? "Renvoi" : "Cross-Reference";
+  lines.push(`# ${headerLabel}`);
+  lines.push("");
+
+  // Source document
+  const sourceLabel = lang === "fr" ? "Document source" : "Source Document";
+  lines.push(`**${sourceLabel}:** ${meta.documentTitle ?? "Unknown"}`);
+
+  // Target document
+  if (meta.targetDocumentTitle) {
+    const targetLabel = lang === "fr" ? "Document cible" : "Target Document";
+    lines.push(`**${targetLabel}:** ${meta.targetDocumentTitle}`);
+  }
+
+  // Target reference
+  if (meta.targetRef) {
+    const refLabel = lang === "fr" ? "Référence" : "Reference";
+    lines.push(`**${refLabel}:** ${meta.targetRef}`);
+  }
+
+  // Target section
+  if (meta.targetSectionRef) {
+    const sectionLabel = lang === "fr" ? "Article cible" : "Target Section";
+    lines.push(`**${sectionLabel}:** ${meta.targetSectionRef}`);
+  }
+
+  lines.push("");
+
+  // Cross-reference content
+  lines.push(result.content);
+
+  return lines.join("\n");
+}
+
+/**
+ * Hydrate a cross-reference search result into markdown
+ */
+function hydrateCrossReference(
+  result: LegislationSearchResult,
+  language: Lang
+): HydratedLegislationSource {
+  const meta = result.metadata;
+  const usedLang = meta.language === language ? language : meta.language;
+
+  return {
+    sourceType: "cross_reference",
+    markdown: formatCrossReferenceMarkdown(result, usedLang as Lang),
+    languageUsed: usedLang as Lang,
+    id: `xref-${meta.crossRefId ?? "unknown"}`,
+    note:
+      usedLang !== language
+        ? language === "fr"
+          ? "Renvoi non disponible en français."
+          : "Cross-reference not available in English."
+        : undefined,
+  };
+}
+
+/**
+ * Format table of provisions as readable markdown
+ */
+function formatTableOfProvisionsMarkdown(
+  result: LegislationSearchResult,
+  lang: Lang
+): string {
+  const meta = result.metadata;
+  const lines: string[] = [];
+
+  // Header
+  const headerLabel =
+    lang === "fr" ? "Table des dispositions" : "Table of Provisions";
+  lines.push(`# ${headerLabel}`);
+  lines.push("");
+
+  // Source document
+  const sourceLabel = lang === "fr" ? "Document" : "Document";
+  lines.push(`**${sourceLabel}:** ${meta.documentTitle ?? "Unknown"}`);
+
+  // Provision count if available
+  if (meta.provisionCount) {
+    const countLabel = lang === "fr" ? "Dispositions" : "Provisions";
+    lines.push(`**${countLabel}:** ${meta.provisionCount}`);
+  }
+
+  lines.push("");
+
+  // Table content
+  lines.push(result.content);
+
+  return lines.join("\n");
+}
+
+/**
+ * Hydrate a table of provisions search result into markdown
+ */
+function hydrateTableOfProvisions(
+  result: LegislationSearchResult,
+  language: Lang
+): HydratedLegislationSource {
+  const meta = result.metadata;
+  const usedLang = meta.language === language ? language : meta.language;
+
+  return {
+    sourceType: "table_of_provisions",
+    markdown: formatTableOfProvisionsMarkdown(result, usedLang as Lang),
+    languageUsed: usedLang as Lang,
+    id: `toc-${meta.actId ?? meta.regulationId ?? "unknown"}`,
+    note:
+      usedLang !== language
+        ? language === "fr"
+          ? "Table non disponible en français."
+          : "Table not available in English."
+        : undefined,
+  };
+}
+
+/**
+ * Format signature block as readable markdown
+ */
+function formatSignatureBlockMarkdown(
+  result: LegislationSearchResult,
+  lang: Lang
+): string {
+  const meta = result.metadata;
+  const lines: string[] = [];
+
+  // Header
+  const headerLabel = lang === "fr" ? "Bloc de signature" : "Signature Block";
+  lines.push(`# ${headerLabel}`);
+  lines.push("");
+
+  // Source document
+  const sourceLabel = lang === "fr" ? "Document" : "Document";
+  lines.push(`**${sourceLabel}:** ${meta.documentTitle ?? "Unknown"}`);
+
+  // Signatory name
+  if (meta.signatureName) {
+    const nameLabel = lang === "fr" ? "Signataire" : "Signatory";
+    lines.push(`**${nameLabel}:** ${meta.signatureName}`);
+  }
+
+  // Signatory title
+  if (meta.signatureTitle) {
+    const titleLabel = lang === "fr" ? "Titre" : "Title";
+    lines.push(`**${titleLabel}:** ${meta.signatureTitle}`);
+  }
+
+  // Signature date
+  if (meta.signatureDate) {
+    const dateLabel = lang === "fr" ? "Date" : "Date";
+    lines.push(`**${dateLabel}:** ${meta.signatureDate}`);
+  }
+
+  lines.push("");
+
+  // Signature content
+  lines.push(result.content);
+
+  return lines.join("\n");
+}
+
+/**
+ * Hydrate a signature block search result into markdown
+ */
+function hydrateSignatureBlock(
+  result: LegislationSearchResult,
+  language: Lang
+): HydratedLegislationSource {
+  const meta = result.metadata;
+  const usedLang = meta.language === language ? language : meta.language;
+
+  return {
+    sourceType: "signature_block",
+    markdown: formatSignatureBlockMarkdown(result, usedLang as Lang),
+    languageUsed: usedLang as Lang,
+    id: `sig-${meta.actId ?? meta.regulationId ?? "unknown"}-${meta.signatureName ?? "unknown"}`,
+    note:
+      usedLang !== language
+        ? language === "fr"
+          ? "Signature non disponible en français."
+          : "Signature not available in English."
+        : undefined,
+  };
+}
+
+/**
+ * Format marginal note as readable markdown
+ */
+function formatMarginalNoteMarkdown(
+  result: LegislationSearchResult,
+  lang: Lang
+): string {
+  const meta = result.metadata;
+  const lines: string[] = [];
+
+  // Header
+  const headerLabel = lang === "fr" ? "Note marginale" : "Marginal Note";
+  lines.push(`# ${headerLabel}`);
+  lines.push("");
+
+  // Source document
+  const sourceLabel = lang === "fr" ? "Document" : "Document";
+  lines.push(`**${sourceLabel}:** ${meta.documentTitle ?? "Unknown"}`);
+
+  // Section reference
+  if (meta.sectionLabel) {
+    const sectionLabel = lang === "fr" ? "Article" : "Section";
+    lines.push(`**${sectionLabel}:** ${meta.sectionLabel}`);
+  }
+
+  lines.push("");
+
+  // Marginal note content
+  lines.push(result.content);
+
+  return lines.join("\n");
+}
+
+/**
+ * Hydrate a marginal note search result into markdown
+ */
+function hydrateMarginalNote(
+  result: LegislationSearchResult,
+  language: Lang
+): HydratedLegislationSource {
+  const meta = result.metadata;
+  const usedLang = meta.language === language ? language : meta.language;
+
+  return {
+    sourceType: "marginal_note",
+    markdown: formatMarginalNoteMarkdown(result, usedLang as Lang),
+    languageUsed: usedLang as Lang,
+    id: `marginal-${meta.actId ?? meta.regulationId ?? "unknown"}-${meta.sectionId ?? meta.sectionLabel ?? "unknown"}`,
+    note:
+      usedLang !== language
+        ? language === "fr"
+          ? "Note non disponible en français."
+          : "Note not available in English."
+        : undefined,
+  };
+}
+
+/**
+ * Format schedule section as readable markdown
+ */
+function formatScheduleMarkdown(
+  result: LegislationSearchResult,
+  lang: Lang
+): string {
+  const meta = result.metadata;
+  const lines: string[] = [];
+
+  // Header with schedule info
+  const headerLabel = lang === "fr" ? "Annexe" : "Schedule";
+  const scheduleId = meta.scheduleId ?? "";
+  lines.push(`# ${headerLabel}${scheduleId ? ` ${scheduleId}` : ""}`);
+  lines.push("");
+
+  // Source document
+  const sourceLabel = lang === "fr" ? "Document" : "Document";
+  lines.push(`**${sourceLabel}:** ${meta.documentTitle ?? "Unknown"}`);
+
+  // Section reference
+  if (meta.sectionLabel) {
+    const sectionLabel = lang === "fr" ? "Article" : "Section";
+    lines.push(`**${sectionLabel}:** ${meta.sectionLabel}`);
+  }
+
+  // Marginal note
+  if (meta.marginalNote) {
+    const noteLabel = lang === "fr" ? "Note marginale" : "Marginal Note";
+    lines.push(`**${noteLabel}:** ${meta.marginalNote}`);
+  }
+
+  lines.push("");
+
+  // Schedule content
+  lines.push(result.content);
+
+  return lines.join("\n");
+}
+
+/**
+ * Hydrate a schedule search result into markdown
+ */
+function hydrateSchedule(
+  result: LegislationSearchResult,
+  language: Lang
+): HydratedLegislationSource {
+  const meta = result.metadata;
+  const usedLang = meta.language === language ? language : meta.language;
+
+  return {
+    sourceType: "schedule",
+    markdown: formatScheduleMarkdown(result, usedLang as Lang),
+    languageUsed: usedLang as Lang,
+    id: `schedule-${meta.actId ?? meta.regulationId ?? "unknown"}-${meta.sectionId ?? meta.scheduleId ?? "unknown"}`,
+    note:
+      usedLang !== language
+        ? language === "fr"
+          ? "Annexe non disponible en français."
+          : "Schedule not available in English."
+        : undefined,
+  };
+}
+
+/**
  * Hydrate search result based on its source type.
  * Returns null if hydration fails or source type is not supported.
  *
@@ -644,6 +1229,15 @@ function hydrateDefinedTerm(
  * - act, act_section: Full act content with sections
  * - regulation, regulation_section: Full regulation content with sections
  * - defined_term: Term definition with context
+ * - footnote: Footnote content with section context
+ * - related_provisions: Related provisions content with document context
+ * - preamble: Preamble content with document context
+ * - treaty: Treaty/convention content with document context
+ * - cross_reference: Cross-reference with target document context
+ * - table_of_provisions: Document table of contents
+ * - signature_block: Official signatures with signatory info
+ * - marginal_note: Section headings with document context
+ * - schedule: Schedule content with section context
  */
 export async function hydrateSearchResult(
   result: LegislationSearchResult,
@@ -682,9 +1276,52 @@ export async function hydrateSearchResult(
       return hydrateDefinedTerm(result, language);
     }
 
-    // Other source types (preamble, treaty, cross_reference, table_of_provisions,
-    // signature_block) don't have full document hydration - return null
-    // The search result content is sufficient for these types
+    // Footnotes - use search result content with section context
+    if (sourceType === "footnote") {
+      return hydrateFootnote(result, language);
+    }
+
+    // Related provisions - use search result content with document context
+    if (sourceType === "related_provisions") {
+      return hydrateRelatedProvisions(result, language);
+    }
+
+    // Preambles - use search result content with document context
+    if (sourceType === "preamble") {
+      return hydratePreamble(result, language);
+    }
+
+    // Treaties - use search result content with document context
+    if (sourceType === "treaty") {
+      return hydrateTreaty(result, language);
+    }
+
+    // Cross-references - use search result content with target info
+    if (sourceType === "cross_reference") {
+      return hydrateCrossReference(result, language);
+    }
+
+    // Table of provisions - use search result content with document context
+    if (sourceType === "table_of_provisions") {
+      return hydrateTableOfProvisions(result, language);
+    }
+
+    // Signature blocks - use search result content with signatory info
+    if (sourceType === "signature_block") {
+      return hydrateSignatureBlock(result, language);
+    }
+
+    // Marginal notes - use search result content with section context
+    if (sourceType === "marginal_note") {
+      return hydrateMarginalNote(result, language);
+    }
+
+    // Schedules - use search result content with schedule context
+    if (sourceType === "schedule") {
+      return hydrateSchedule(result, language);
+    }
+
+    // Unknown source type - log and return null
     dbg("hydration not supported for source type %s", sourceType);
     return null;
   } catch (err) {

@@ -9,6 +9,7 @@
  *   npx tsx scripts/embeddings/legislation/index.ts --sync-progress
  *   npx tsx scripts/embeddings/legislation/index.ts --clear-progress
  *   npx tsx scripts/embeddings/legislation/index.ts --additional-only
+ *   npx tsx scripts/embeddings/legislation/index.ts --link-terms
  *
  * Options:
  *   --limit=N          Process N items per type (applies to each type separately)
@@ -18,9 +19,11 @@
  *   --acts-only        Only process acts and act sections
  *   --regs-only        Only process regulations and regulation sections
  *   --terms-only       Only process defined terms
- *   --additional-only  Only process preambles, treaties, cross-refs, ToP, signatures, related provisions
+ *   --additional-only  Only process preambles, treaties, cross-refs, ToP, signatures, related provisions, footnotes
  *   --sync-progress    Rebuild SQLite progress cache from Postgres
  *   --clear-progress   Clear local progress tracking
+ *   --link-terms       Only link EN/FR defined term pairs (no embeddings)
+ *   --skip-link-terms  Skip automatic term linking after processing defined terms
  *
  * Content Types:
  *   - Acts: Metadata chunks + section content chunks
@@ -32,6 +35,8 @@
  *   - Table of Provisions: Navigation structure for documents
  *   - Signature Blocks: Treaty signatory information
  *   - Related Provisions: Cross-references to related/amending provisions
+ *   - Footnotes: Section footnotes as independent embeddings linked via sectionId
+ *   - Marginal Notes: Section headings as lightweight index for discoverability
  *
  * Memory Usage:
  *   This script loads data in batches to avoid memory issues. For the full
@@ -52,6 +57,8 @@ import postgres from "postgres";
 import { processActs } from "./acts";
 import {
   processCrossReferences,
+  processFootnotes,
+  processMarginalNotes,
   processPreambles,
   processRelatedProvisions,
   processSignatureBlocks,
@@ -59,6 +66,7 @@ import {
   processTreaties,
 } from "./additional-content";
 import { processDefinedTerms } from "./defined-terms";
+import { linkDefinedTermPairs } from "./link-defined-terms";
 import { processRegulations } from "./regulations";
 import {
   formatDuration,
@@ -85,6 +93,8 @@ const termsOnly = args.includes("--terms-only");
 const additionalOnly = args.includes("--additional-only");
 const syncProgress = args.includes("--sync-progress");
 const clearProgress = args.includes("--clear-progress");
+const linkTerms = args.includes("--link-terms");
+const skipLinkTerms = args.includes("--skip-link-terms");
 
 const limit = parsePositiveInteger(limitStr, "--limit");
 
@@ -176,6 +186,8 @@ async function main() {
   console.log(`Additional only: ${additionalOnly ? "yes" : "no"}`);
   console.log(`Sync progress: ${syncProgress ? "yes" : "no"}`);
   console.log(`Clear progress: ${clearProgress ? "yes" : "no"}`);
+  console.log(`Link terms only: ${linkTerms ? "yes" : "no"}`);
+  console.log(`Skip link terms: ${skipLinkTerms ? "yes" : "no"}`);
   console.log(
     `Progress cache: ${progressTracker.totalCount().toLocaleString()} items in ${PROGRESS_DB_PATH}\n`
   );
@@ -198,6 +210,22 @@ async function main() {
     console.log(
       `\n✅ Progress synced: ${progressTracker.totalCount().toLocaleString()} items now cached\n`
     );
+    await connection.end();
+    progressTracker.close();
+    return;
+  }
+
+  // Handle link-terms-only operation
+  if (linkTerms) {
+    console.log("\n🔗 Linking defined term pairs...\n");
+    const linkStats = await linkDefinedTermPairs(db, { dryRun, limit });
+    console.log("\n=== Link Terms Summary ===");
+    console.log(`Terms processed: ${linkStats.totalTerms}`);
+    console.log(`Pairs linked: ${linkStats.pairsLinked}`);
+    console.log(`No match found: ${linkStats.noMatchFound}`);
+    if (linkStats.errors > 0) {
+      console.log(`Errors: ${linkStats.errors}`);
+    }
     await connection.end();
     progressTracker.close();
     return;
@@ -238,6 +266,15 @@ async function main() {
     totalChunks += termsResult.chunksProcessed;
     totalSkipped += termsResult.chunksSkipped;
     allErrors.push(...termsResult.errors);
+
+    // Automatically link term pairs after processing (unless skipped)
+    if (!skipLinkTerms && !dryRun) {
+      console.log("\n🔗 Linking defined term pairs...");
+      const linkStats = await linkDefinedTermPairs(db, { dryRun: false });
+      console.log(
+        `   Linked ${linkStats.pairsLinked} pairs (${linkStats.noMatchFound} no match)`
+      );
+    }
   }
 
   // Process additional content types (preambles, treaties, cross-refs, etc.)
@@ -271,6 +308,16 @@ async function main() {
     totalChunks += relatedResult.chunksProcessed;
     totalSkipped += relatedResult.chunksSkipped;
     allErrors.push(...relatedResult.errors);
+
+    const footnoteResult = await processFootnotes(processOptions);
+    totalChunks += footnoteResult.chunksProcessed;
+    totalSkipped += footnoteResult.chunksSkipped;
+    allErrors.push(...footnoteResult.errors);
+
+    const marginalNoteResult = await processMarginalNotes(processOptions);
+    totalChunks += marginalNoteResult.chunksProcessed;
+    totalSkipped += marginalNoteResult.chunksSkipped;
+    allErrors.push(...marginalNoteResult.errors);
   }
 
   const elapsed = Date.now() - startTime;

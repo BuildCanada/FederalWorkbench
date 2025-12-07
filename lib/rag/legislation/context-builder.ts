@@ -56,7 +56,8 @@ type BuildContextOptions = {
  * Deduplicate results by unique identifier
  * Prefers higher similarity scores when duplicates are found.
  * Handles all source types: act, act_section, regulation, regulation_section,
- * defined_term, preamble, treaty, cross_reference, table_of_provisions, signature_block
+ * defined_term, preamble, treaty, cross_reference, table_of_provisions,
+ * signature_block, related_provisions, footnote, marginal_note
  */
 function deduplicateResults(
   results: LegislationSearchResult[]
@@ -91,13 +92,31 @@ function deduplicateResults(
         key = `treaty:${meta.actId ?? meta.regulationId ?? ""}:${meta.treatyTitle ?? ""}`;
         break;
       case "cross_reference":
-        key = `xref:${meta.crossRefId ?? ""}`;
+        // Include language to distinguish EN/FR versions
+        key = `xref:${meta.crossRefId ?? ""}:${meta.language ?? ""}`;
         break;
       case "table_of_provisions":
-        key = `toc:${meta.actId ?? meta.regulationId ?? ""}:${meta.provisionLabel ?? ""}`;
+        // Batched per document - one ToP embedding per document+language
+        key = `toc:${meta.actId ?? meta.regulationId ?? ""}:${meta.language ?? ""}`;
         break;
       case "signature_block":
         key = `sig:${meta.actId ?? meta.regulationId ?? ""}:${meta.signatureName ?? ""}`;
+        break;
+      case "related_provisions":
+        // Unique per document + provision label/source
+        key = `relprov:${meta.actId ?? meta.regulationId ?? ""}:${meta.relatedProvisionLabel ?? meta.relatedProvisionSource ?? ""}:${meta.language ?? ""}`;
+        break;
+      case "footnote":
+        // Unique per document + section + footnote ID
+        key = `footnote:${meta.actId ?? meta.regulationId ?? ""}:${meta.sectionId ?? meta.sectionLabel ?? ""}:${meta.footnoteId ?? ""}:${meta.language ?? ""}`;
+        break;
+      case "marginal_note":
+        // Unique per section + language
+        key = `marginal:${meta.actId ?? meta.regulationId ?? ""}:${meta.sectionId ?? ""}:${meta.language ?? ""}`;
+        break;
+      case "schedule":
+        // Unique per schedule section (uses sectionId like act_section/regulation_section)
+        key = `schedule:${meta.actId ?? meta.regulationId ?? ""}:${meta.sectionId ?? ""}:${meta.chunkIndex ?? 0}`;
         break;
       default:
         // Fallback for any future types

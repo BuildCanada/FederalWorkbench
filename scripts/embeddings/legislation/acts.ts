@@ -9,11 +9,13 @@ import { asc, count, inArray } from "drizzle-orm";
 
 import { type Act, acts, sections } from "@/lib/db/legislation/schema";
 import {
+  type ChunkSectionOptions,
   chunkSection,
   shouldSkipSection,
 } from "@/lib/rag/legislation/chunking";
 
 import {
+  buildPairedResourceKey,
   buildResourceKey,
   type ChunkData,
   DB_FETCH_BATCH_SIZE,
@@ -39,13 +41,19 @@ export function buildActMetadataText(act: Act): string {
     if (act.longTitle) {
       parts.push(`Titre complet: ${act.longTitle}`);
     }
+    if (act.runningHead) {
+      parts.push(`Titre abrégé: ${act.runningHead}`);
+    }
     parts.push(`Identifiant: ${act.actId}`);
     parts.push(`Statut: ${act.status}`);
     if (act.inForceDate) {
       parts.push(`En vigueur: ${act.inForceDate}`);
     }
     if (act.enactedDate) {
-      parts.push(`Adoptée: ${act.enactedDate}`);
+      parts.push(`Sanctionnée: ${act.enactedDate}`);
+    }
+    if (act.lastAmendedDate) {
+      parts.push(`Dernière modification: ${act.lastAmendedDate}`);
     }
     if (act.consolidationDate) {
       parts.push(`Consolidation: ${act.consolidationDate}`);
@@ -55,10 +63,52 @@ export function buildActMetadataText(act: Act): string {
         act.billOrigin === "commons" ? "Chambre des communes" : "Sénat";
       parts.push(`Origine: ${origin}`);
     }
+    if (act.billType) {
+      parts.push(`Type de projet de loi: ${act.billType}`);
+    }
+    if (act.consolidatedNumber) {
+      parts.push(`Numéro de consolidation: ${act.consolidatedNumber}`);
+    }
+    if (act.annualStatuteYear && act.annualStatuteChapter) {
+      parts.push(
+        `Lois annuelles: ${act.annualStatuteYear}, ch. ${act.annualStatuteChapter}`
+      );
+    }
+    if (act.billHistory) {
+      const bh = act.billHistory;
+      if (bh.billNumber) {
+        parts.push(`Numéro du projet de loi: ${bh.billNumber}`);
+      }
+      if (bh.parliament?.session && bh.parliament?.number) {
+        parts.push(
+          `Parlement: ${bh.parliament.number}e législature, ${bh.parliament.session}e session`
+        );
+      }
+      const assentStage = bh.stages?.find((s) => s.stage === "assented-to");
+      if (assentStage?.date) {
+        parts.push(`Sanction royale: ${assentStage.date}`);
+      }
+    }
+    if (act.hasPreviousVersion === "true") {
+      parts.push("Versions antérieures: Oui");
+    }
+    if (act.recentAmendments && act.recentAmendments.length > 0) {
+      parts.push("Modifications récentes:");
+      for (const amendment of act.recentAmendments) {
+        let amendText = `  - ${amendment.citation}`;
+        if (amendment.date) {
+          amendText += ` (${amendment.date})`;
+        }
+        parts.push(amendText);
+      }
+    }
   } else {
     parts.push(`Act: ${act.title}`);
     if (act.longTitle) {
       parts.push(`Long Title: ${act.longTitle}`);
+    }
+    if (act.runningHead) {
+      parts.push(`Short Title: ${act.runningHead}`);
     }
     parts.push(`ID: ${act.actId}`);
     parts.push(`Status: ${act.status}`);
@@ -68,6 +118,9 @@ export function buildActMetadataText(act: Act): string {
     if (act.enactedDate) {
       parts.push(`Enacted: ${act.enactedDate}`);
     }
+    if (act.lastAmendedDate) {
+      parts.push(`Last Amended: ${act.lastAmendedDate}`);
+    }
     if (act.consolidationDate) {
       parts.push(`Consolidation: ${act.consolidationDate}`);
     }
@@ -76,9 +129,57 @@ export function buildActMetadataText(act: Act): string {
         act.billOrigin === "commons" ? "House of Commons" : "Senate";
       parts.push(`Origin: ${origin}`);
     }
+    if (act.billType) {
+      parts.push(`Bill Type: ${act.billType}`);
+    }
+    if (act.consolidatedNumber) {
+      parts.push(`Consolidated Number: ${act.consolidatedNumber}`);
+    }
+    if (act.annualStatuteYear && act.annualStatuteChapter) {
+      parts.push(
+        `Annual Statutes: ${act.annualStatuteYear}, c. ${act.annualStatuteChapter}`
+      );
+    }
+    if (act.billHistory) {
+      const bh = act.billHistory;
+      if (bh.billNumber) {
+        parts.push(`Bill Number: ${bh.billNumber}`);
+      }
+      if (bh.parliament?.session && bh.parliament?.number) {
+        parts.push(
+          `Parliament: ${bh.parliament.number}${getOrdinalSuffix(Number(bh.parliament.number))} Parliament, ${bh.parliament.session}${getOrdinalSuffix(Number(bh.parliament.session))} Session`
+        );
+      }
+      const assentStage = bh.stages?.find((s) => s.stage === "assented-to");
+      if (assentStage?.date) {
+        parts.push(`Royal Assent: ${assentStage.date}`);
+      }
+    }
+    if (act.hasPreviousVersion === "true") {
+      parts.push("Previous Versions: Yes");
+    }
+    if (act.recentAmendments && act.recentAmendments.length > 0) {
+      parts.push("Recent Amendments:");
+      for (const amendment of act.recentAmendments) {
+        let amendText = `  - ${amendment.citation}`;
+        if (amendment.date) {
+          amendText += ` (${amendment.date})`;
+        }
+        parts.push(amendText);
+      }
+    }
   }
 
   return parts.join("\n");
+}
+
+/**
+ * Get ordinal suffix for a number (1st, 2nd, 3rd, etc.)
+ */
+function getOrdinalSuffix(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return s[(v - 20) % 10] || s[v] || s[0];
 }
 
 /**
@@ -95,6 +196,7 @@ function buildActChunks(
 
   const chunks: ChunkData[] = [];
   const actKey = buildResourceKey("act", act.actId, lang, 0);
+  const actPairedKey = buildPairedResourceKey("act", act.actId, lang, 0);
 
   // Add act metadata chunk (chunkIndex 0)
   chunks.push({
@@ -113,7 +215,17 @@ function buildActChunks(
       consolidationDate: act.consolidationDate ?? undefined,
       enactedDate: act.enactedDate ?? undefined,
       billOrigin: act.billOrigin ?? undefined,
+      runningHead: act.runningHead ?? undefined,
+      billType: act.billType ?? undefined,
+      lastAmendedDate: act.lastAmendedDate ?? undefined,
+      consolidatedNumber: act.consolidatedNumber ?? undefined,
+      annualStatuteYear: act.annualStatuteYear ?? undefined,
+      annualStatuteChapter: act.annualStatuteChapter ?? undefined,
+      billHistory: act.billHistory ?? undefined,
+      recentAmendments: act.recentAmendments ?? undefined,
+      hasPreviousVersion: act.hasPreviousVersion ?? undefined,
       chunkIndex: 0,
+      pairedResourceKey: actPairedKey,
     },
   });
 
@@ -123,11 +235,26 @@ function buildActChunks(
       continue;
     }
 
-    const sectionChunks = chunkSection(section, act.title);
+    // Include historical notes in chunk content for amendment searchability
+    const chunkOptions: ChunkSectionOptions = {
+      historicalNotes: section.historicalNotes,
+      language: lang,
+    };
+    const sectionChunks = chunkSection(section, act.title, chunkOptions);
+
+    // Use "schedule" source type for schedule sections, otherwise "act_section"
+    const sourceType =
+      section.sectionType === "schedule" ? "schedule" : "act_section";
 
     for (const chunk of sectionChunks) {
       const sectionKey = buildResourceKey(
-        "act_section",
+        sourceType,
+        section.id,
+        lang,
+        chunk.chunkIndex
+      );
+      const sectionPairedKey = buildPairedResourceKey(
+        sourceType,
         section.id,
         lang,
         chunk.chunkIndex
@@ -139,7 +266,7 @@ function buildActChunks(
         totalChunks: chunk.totalChunks,
         resourceKey: sectionKey,
         metadata: {
-          sourceType: "act_section",
+          sourceType,
           sectionId: section.id,
           language: lang,
           actId: act.actId,
@@ -151,8 +278,13 @@ function buildActChunks(
           hierarchyPath: section.hierarchyPath ?? undefined,
           contentFlags: section.contentFlags ?? undefined,
           sectionInForceDate: section.inForceStartDate ?? undefined,
+          sectionRole: section.xmlType ?? undefined, // xmlType -> sectionRole
           historicalNotes: section.historicalNotes ?? undefined,
+          scheduleId: section.scheduleId ?? undefined,
+          scheduleBilingual: section.scheduleBilingual ?? undefined,
+          scheduleSpanLanguages: section.scheduleSpanLanguages ?? undefined,
           chunkIndex: chunk.chunkIndex,
+          pairedResourceKey: sectionPairedKey,
         },
       });
     }
@@ -176,6 +308,7 @@ export async function processActs(
     await Promise.all([
       ensureProgressSynced(db, progressTracker, "act"),
       ensureProgressSynced(db, progressTracker, "act_section"),
+      ensureProgressSynced(db, progressTracker, "schedule"),
     ]);
   }
 

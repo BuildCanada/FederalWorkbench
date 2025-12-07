@@ -13,11 +13,13 @@ import {
   sections,
 } from "@/lib/db/legislation/schema";
 import {
+  type ChunkSectionOptions,
   chunkSection,
   shouldSkipSection,
 } from "@/lib/rag/legislation/chunking";
 
 import {
+  buildPairedResourceKey,
   buildResourceKey,
   type ChunkData,
   DB_FETCH_BATCH_SIZE,
@@ -33,6 +35,7 @@ import {
 
 /**
  * Build bilingual metadata text for a regulation.
+ * Includes ALL enabling authorities when multiple are present.
  */
 export function buildRegulationMetadataText(reg: Regulation): string {
   const parts: string[] = [];
@@ -54,11 +57,53 @@ export function buildRegulationMetadataText(reg: Regulation): string {
     if (reg.registrationDate) {
       parts.push(`Date d'enregistrement: ${reg.registrationDate}`);
     }
-    if (reg.enablingActTitle) {
+    // Include all enabling authorities (or fall back to legacy single field)
+    if (reg.enablingAuthorities && reg.enablingAuthorities.length > 0) {
+      if (reg.enablingAuthorities.length === 1) {
+        parts.push(`Loi habilitante: ${reg.enablingAuthorities[0].actTitle}`);
+      } else {
+        parts.push("Lois habilitantes:");
+        for (const auth of reg.enablingAuthorities) {
+          parts.push(`  - ${auth.actTitle} (${auth.actId})`);
+        }
+      }
+    } else if (reg.enablingActTitle) {
       parts.push(`Loi habilitante: ${reg.enablingActTitle}`);
     }
     if (reg.consolidationDate) {
       parts.push(`Consolidation: ${reg.consolidationDate}`);
+    }
+    if (reg.lastAmendedDate) {
+      parts.push(`Dernière modification: ${reg.lastAmendedDate}`);
+    }
+    if (reg.gazettePart) {
+      parts.push(`Partie de la Gazette: ${reg.gazettePart}`);
+    }
+    if (reg.regulationMakerOrder) {
+      const rmo = reg.regulationMakerOrder;
+      if (rmo.regulationMaker) {
+        let madeBy = `Pris par: ${rmo.regulationMaker}`;
+        if (rmo.orderNumber) {
+          madeBy += `, ${rmo.orderNumber}`;
+        }
+        if (rmo.orderDate) {
+          madeBy += ` (${rmo.orderDate})`;
+        }
+        parts.push(madeBy);
+      }
+    }
+    if (reg.hasPreviousVersion === "true") {
+      parts.push("Versions antérieures: Oui");
+    }
+    if (reg.recentAmendments && reg.recentAmendments.length > 0) {
+      parts.push("Modifications récentes:");
+      for (const amendment of reg.recentAmendments) {
+        let amendText = `  - ${amendment.citation}`;
+        if (amendment.date) {
+          amendText += ` (${amendment.date})`;
+        }
+        parts.push(amendText);
+      }
     }
   } else {
     parts.push(`Regulation: ${reg.title}`);
@@ -76,11 +121,53 @@ export function buildRegulationMetadataText(reg: Regulation): string {
     if (reg.registrationDate) {
       parts.push(`Registration Date: ${reg.registrationDate}`);
     }
-    if (reg.enablingActTitle) {
+    // Include all enabling authorities (or fall back to legacy single field)
+    if (reg.enablingAuthorities && reg.enablingAuthorities.length > 0) {
+      if (reg.enablingAuthorities.length === 1) {
+        parts.push(`Enabling Act: ${reg.enablingAuthorities[0].actTitle}`);
+      } else {
+        parts.push("Enabling Acts:");
+        for (const auth of reg.enablingAuthorities) {
+          parts.push(`  - ${auth.actTitle} (${auth.actId})`);
+        }
+      }
+    } else if (reg.enablingActTitle) {
       parts.push(`Enabling Act: ${reg.enablingActTitle}`);
     }
     if (reg.consolidationDate) {
       parts.push(`Consolidation: ${reg.consolidationDate}`);
+    }
+    if (reg.lastAmendedDate) {
+      parts.push(`Last Amended: ${reg.lastAmendedDate}`);
+    }
+    if (reg.gazettePart) {
+      parts.push(`Gazette Part: ${reg.gazettePart}`);
+    }
+    if (reg.regulationMakerOrder) {
+      const rmo = reg.regulationMakerOrder;
+      if (rmo.regulationMaker) {
+        let madeBy = `Made by: ${rmo.regulationMaker}`;
+        if (rmo.orderNumber) {
+          madeBy += `, ${rmo.orderNumber}`;
+        }
+        if (rmo.orderDate) {
+          madeBy += ` (${rmo.orderDate})`;
+        }
+        parts.push(madeBy);
+      }
+    }
+    if (reg.hasPreviousVersion === "true") {
+      parts.push("Previous Versions: Yes");
+    }
+    if (reg.recentAmendments && reg.recentAmendments.length > 0) {
+      parts.push("Recent Amendments:");
+      for (const amendment of reg.recentAmendments) {
+        let amendText = `  - ${amendment.citation}`;
+        if (amendment.date) {
+          amendText += ` (${amendment.date})`;
+        }
+        parts.push(amendText);
+      }
     }
   }
 
@@ -101,6 +188,12 @@ function buildRegulationChunks(
 
   const chunks: ChunkData[] = [];
   const regKey = buildResourceKey("regulation", reg.regulationId, lang, 0);
+  const regPairedKey = buildPairedResourceKey(
+    "regulation",
+    reg.regulationId,
+    lang,
+    0
+  );
 
   // Add regulation metadata chunk (chunkIndex 0)
   chunks.push({
@@ -117,11 +210,20 @@ function buildRegulationChunks(
       status: reg.status,
       instrumentNumber: reg.instrumentNumber ?? undefined,
       regulationType: reg.regulationType ?? undefined,
+      // Include all enabling authorities when available
+      enablingAuthorities: reg.enablingAuthorities ?? undefined,
+      // Legacy: First enabling act for backwards compatibility
       enablingActId: reg.enablingActId ?? undefined,
       enablingActTitle: reg.enablingActTitle ?? undefined,
       registrationDate: reg.registrationDate ?? undefined,
       consolidationDate: reg.consolidationDate ?? undefined,
+      lastAmendedDate: reg.lastAmendedDate ?? undefined,
+      gazettePart: reg.gazettePart ?? undefined,
+      regulationMakerOrder: reg.regulationMakerOrder ?? undefined,
+      recentAmendments: reg.recentAmendments ?? undefined,
+      hasPreviousVersion: reg.hasPreviousVersion ?? undefined,
       chunkIndex: 0,
+      pairedResourceKey: regPairedKey,
     },
   });
 
@@ -131,11 +233,26 @@ function buildRegulationChunks(
       continue;
     }
 
-    const sectionChunks = chunkSection(section, reg.title);
+    // Include historical notes in chunk content for amendment searchability
+    const chunkOptions: ChunkSectionOptions = {
+      historicalNotes: section.historicalNotes,
+      language: lang,
+    };
+    const sectionChunks = chunkSection(section, reg.title, chunkOptions);
+
+    // Use "schedule" source type for schedule sections, otherwise "regulation_section"
+    const sourceType =
+      section.sectionType === "schedule" ? "schedule" : "regulation_section";
 
     for (const chunk of sectionChunks) {
       const sectionKey = buildResourceKey(
-        "regulation_section",
+        sourceType,
+        section.id,
+        lang,
+        chunk.chunkIndex
+      );
+      const sectionPairedKey = buildPairedResourceKey(
+        sourceType,
         section.id,
         lang,
         chunk.chunkIndex
@@ -147,7 +264,7 @@ function buildRegulationChunks(
         totalChunks: chunk.totalChunks,
         resourceKey: sectionKey,
         metadata: {
-          sourceType: "regulation_section",
+          sourceType,
           sectionId: section.id,
           language: lang,
           regulationId: reg.regulationId,
@@ -159,8 +276,13 @@ function buildRegulationChunks(
           hierarchyPath: section.hierarchyPath ?? undefined,
           contentFlags: section.contentFlags ?? undefined,
           sectionInForceDate: section.inForceStartDate ?? undefined,
+          sectionRole: section.xmlType ?? undefined, // xmlType -> sectionRole
           historicalNotes: section.historicalNotes ?? undefined,
+          scheduleId: section.scheduleId ?? undefined,
+          scheduleBilingual: section.scheduleBilingual ?? undefined,
+          scheduleSpanLanguages: section.scheduleSpanLanguages ?? undefined,
           chunkIndex: chunk.chunkIndex,
+          pairedResourceKey: sectionPairedKey,
         },
       });
     }
@@ -184,6 +306,7 @@ export async function processRegulations(
     await Promise.all([
       ensureProgressSynced(db, progressTracker, "regulation"),
       ensureProgressSynced(db, progressTracker, "regulation_section"),
+      ensureProgressSynced(db, progressTracker, "schedule"),
     ]);
   }
 

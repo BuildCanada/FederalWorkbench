@@ -20,6 +20,13 @@ import {
 } from "drizzle-orm/pg-core";
 import { nanoid } from "nanoid";
 
+import type {
+  AmendmentInfo,
+  BillHistory,
+  ContentFlags,
+  RegulationMakerInfo,
+} from "@/lib/db/legislation/schema";
+
 /**
  * Valid source types for legislation resources
  * Used for CHECK constraint and TypeScript type alignment
@@ -36,6 +43,9 @@ export const LEG_SOURCE_TYPES = [
   "table_of_provisions",
   "signature_block",
   "related_provisions",
+  "footnote",
+  "schedule",
+  "marginal_note",
 ] as const;
 
 export type LegSourceType = (typeof LEG_SOURCE_TYPES)[number];
@@ -221,15 +231,9 @@ export type LegResourceMetadata = {
   sectionStatus?: string; // "in-force", "repealed", "not-in-force", etc.
   sectionType?: string; // "section", "schedule", "preamble", "heading", etc.
   hierarchyPath?: string[]; // e.g., ["Part I", "Division 1", "Subdivision A"]
-  contentFlags?: {
-    // Mirrors ContentFlags from legislation schema
-    hasTable?: boolean;
-    hasFormula?: boolean;
-    hasImage?: boolean;
-    imageSources?: string[];
-    hasRepealed?: boolean;
-  };
+  contentFlags?: ContentFlags;
   sectionInForceDate?: string; // ISO date when section came into force
+  sectionRole?: string; // Legislative function: "amending", "transitional", "CIF", "CIFnobold", "repeal", "normal" (mapped from sections.xmlType)
   historicalNotes?: {
     // Mirrors HistoricalNoteItem from legislation schema
     text: string;
@@ -239,12 +243,18 @@ export type LegResourceMetadata = {
     enactId?: string;
   }[];
 
+  // Schedule-specific (for sections inside schedules)
+  scheduleId?: string; // Schedule ID from XML @id attribute
+  scheduleBilingual?: string; // "yes" or "no" - if schedule has bilingual content
+  scheduleSpanLanguages?: string; // "yes" or "no" - if schedule spans languages
+
   // Defined term specific fields
   termId?: string; // FK to legislation.defined_terms.id
   term?: string; // The defined term itself (e.g., "barrier", "obstable")
   termPaired?: string; // The paired term in other language
   scopeType?: string; // "act", "regulation", "part", "section"
   scopeSections?: string[]; // Section scope if applicable
+  scopeRawText?: string; // Original scope declaration text (e.g., "The following definitions apply in sections 17 to 19")
 
   // Act metadata fields
   longTitle?: string;
@@ -253,13 +263,32 @@ export type LegResourceMetadata = {
   consolidationDate?: string;
   enactedDate?: string;
   billOrigin?: string; // "commons" or "senate"
+  runningHead?: string; // Short title used in headers
+  billType?: string; // "govt-public", "private", etc.
+  lastAmendedDate?: string; // ISO date of last amendment
+  consolidatedNumber?: string; // e.g., "A-1", "2019, c. 10"
+  annualStatuteYear?: string; // Year from annual statute citation
+  annualStatuteChapter?: string; // Chapter from annual statute citation
+  billHistory?: BillHistory; // Parliament, stages, assent dates
+  // Recent amendments (for searching "acts amended by Bill C-XX")
+  recentAmendments?: AmendmentInfo[];
+  // Version tracking - indicates if point-in-time historical versions exist
+  hasPreviousVersion?: string; // "true" if historical versions available
 
   // Regulation metadata fields
   instrumentNumber?: string; // e.g., "SOR/86-946"
   regulationType?: string; // "SOR", "SI", "CRC"
+  // Multiple enabling authorities (regulations can be made under multiple acts)
+  enablingAuthorities?: {
+    actId: string;
+    actTitle: string;
+  }[];
+  // Legacy: First enabling act (for backwards compatibility and quick access)
   enablingActId?: string;
   enablingActTitle?: string;
   registrationDate?: string;
+  gazettePart?: string; // "I" or "II" (Canada Gazette part)
+  regulationMakerOrder?: RegulationMakerInfo; // Who made the regulation and order details
 
   // Preamble-specific fields
   preambleIndex?: number; // Position in preamble array
@@ -273,11 +302,15 @@ export type LegResourceMetadata = {
   targetRef?: string; // Reference to target document
   targetSectionRef?: string; // Optional section reference
   referenceText?: string; // Display text for the reference
+  // Enhanced cross-reference fields (Task 2.1)
+  targetActId?: string; // Resolved act ID from targetRef
+  targetRegulationId?: string; // Resolved regulation ID from targetRef
+  targetSectionId?: string; // Resolved section ID from targetSectionRef
+  targetDocumentTitle?: string; // Title of the target document
+  targetSnippet?: string; // Snippet of target section content for search
 
-  // Table of provisions fields
-  provisionLabel?: string; // Label from table of provisions
-  provisionTitle?: string; // Title from table of provisions
-  provisionLevel?: number; // Hierarchy level
+  // Table of provisions fields (batched per document)
+  provisionCount?: number; // Number of ToP entries batched in this embedding
 
   // Signature block fields
   signatureName?: string; // Name of signatory
@@ -288,6 +321,21 @@ export type LegResourceMetadata = {
   relatedProvisionLabel?: string; // Label from related provision (e.g., "Transitional Provisions")
   relatedProvisionSource?: string; // Source reference
   relatedProvisionSections?: string[]; // Referenced section numbers
+
+  // Footnote fields
+  footnoteId?: string; // ID within section (e.g., "fn1", "fn2")
+  footnoteLabel?: string; // Display label (e.g., "*", "†", "1")
+  footnotePlacement?: string; // "section" or "page"
+  footnoteStatus?: string; // "editorial" or "official"
+
+  // Bilingual pairing (Task 2.3)
+  // Links EN/FR versions of the same content for cross-lingual search
+  // Format: "{sourceType}:{sourceId}:{pairedLanguage}:{chunkIndex}"
+  pairedResourceKey?: string;
+
+  // Embedding model tracking (Task 3.3)
+  // Stored in metadata for easy querying without joining embedding table
+  embeddingModelVersion?: string;
 };
 
 /**
@@ -308,6 +356,9 @@ export const legResources = ragSchema.table(
     // Denormalized columns for fast filtering (avoids JSONB extraction in queries)
     language: varchar("language", { length: 2 }).notNull(),
     sourceType: varchar("source_type", { length: 30 }).notNull(),
+    // Paired resource key linking EN/FR versions (Task 2.3)
+    // Format: "{sourceType}:{sourceId}:{pairedLanguage}:{chunkIndex}"
+    pairedResourceKey: varchar("paired_resource_key", { length: 255 }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -317,8 +368,48 @@ export const legResources = ragSchema.table(
     index("leg_resources_resource_key_idx").on(table.resourceKey),
     // Composite index for common filtering patterns (language + sourceType)
     index("leg_resources_lang_source_idx").on(table.language, table.sourceType),
+    // Index for bilingual pairing lookups (Task 2.3)
+    index("leg_resources_paired_key_idx").on(table.pairedResourceKey),
     // Single GIN index on metadata for flexible querying
     index("leg_resources_metadata_gin").using("gin", table.metadata),
+
+    // --- Functional indexes for metadata-only searches (Task 3.1) ---
+    // Date-based queries: "acts amended in 2023", "legislation enacted before 2020"
+    index("leg_resources_last_amended_date_idx").on(
+      sql`((${table.metadata}->>'lastAmendedDate'))`
+    ),
+    index("leg_resources_enacted_date_idx").on(
+      sql`((${table.metadata}->>'enactedDate'))`
+    ),
+    index("leg_resources_in_force_date_idx").on(
+      sql`((${table.metadata}->>'inForceDate'))`
+    ),
+    index("leg_resources_consolidation_date_idx").on(
+      sql`((${table.metadata}->>'consolidationDate'))`
+    ),
+    index("leg_resources_registration_date_idx").on(
+      sql`((${table.metadata}->>'registrationDate'))`
+    ),
+    // Status-based queries: "all in-force acts", "repealed sections"
+    index("leg_resources_status_idx").on(sql`((${table.metadata}->>'status'))`),
+    index("leg_resources_section_status_idx").on(
+      sql`((${table.metadata}->>'sectionStatus'))`
+    ),
+    // Document-based queries: filter by specific act/regulation
+    index("leg_resources_act_id_idx").on(sql`((${table.metadata}->>'actId'))`),
+    index("leg_resources_regulation_id_idx").on(
+      sql`((${table.metadata}->>'regulationId'))`
+    ),
+    // Section-based queries: find specific sections
+    index("leg_resources_section_label_idx").on(
+      sql`((${table.metadata}->>'sectionLabel'))`
+    ),
+    // Composite index for common hybrid query: status + date (e.g., "in-force acts amended in 2023")
+    index("leg_resources_status_amended_idx").on(
+      sql`((${table.metadata}->>'status'))`,
+      sql`((${table.metadata}->>'lastAmendedDate'))`
+    ),
+
     // CHECK constraint for valid source types (data integrity)
     check(
       "leg_resources_source_type_check",
@@ -328,6 +419,12 @@ export const legResources = ragSchema.table(
 );
 
 export type LegResource = InferSelectModel<typeof legResources>;
+
+/**
+ * Default embedding model identifier
+ * Used for tracking which model generated each embedding (Task 3.3)
+ */
+export const DEFAULT_EMBEDDING_MODEL = "cohere-embed-multilingual-v3.0";
 
 /**
  * Legislation Embeddings Table
@@ -349,6 +446,11 @@ export const legEmbeddings = ragSchema.table(
     tsv: tsvector("tsv"),
     chunkIndex: integer("chunk_index").notNull().default(0),
     totalChunks: integer("total_chunks").notNull().default(1),
+    // Embedding model version tracking (Task 3.3)
+    // Enables model upgrades by filtering records by model version
+    embeddingModel: varchar("embedding_model", { length: 100 })
+      .notNull()
+      .default(DEFAULT_EMBEDDING_MODEL),
   },
   (table) => [
     index("leg_embeddings_resource_id_idx").on(table.resourceId),
@@ -358,6 +460,9 @@ export const legEmbeddings = ragSchema.table(
     ),
     // GIN index for hybrid keyword search
     index("leg_embeddings_tsv_idx").using("gin", table.tsv),
+    // Index for model version queries (Task 3.3)
+    // Enables efficient filtering when re-embedding with newer models
+    index("leg_embeddings_model_idx").on(table.embeddingModel),
   ]
 );
 

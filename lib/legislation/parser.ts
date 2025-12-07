@@ -10,6 +10,7 @@ import type {
   BillHistory,
   ChangeType,
   ContentFlags,
+  CrossReferenceTargetType,
   DefinitionScopeType,
   EnablingAuthorityInfo,
   FootnoteInfo,
@@ -1488,6 +1489,18 @@ type DefinitionScope = {
 };
 
 /**
+ * Context when processing elements inside a Schedule
+ * Tracks schedule metadata to pass to child sections
+ */
+type ScheduleContext = {
+  scheduleId?: string;
+  scheduleBilingual?: string;
+  scheduleSpanLanguages?: string;
+  scheduleLabel?: string;
+  scheduleTitle?: string;
+};
+
+/**
  * Parse section ranges from scope text like "sections 17 to 19 and 21 to 28"
  * Also handles concatenated XML text like "sectionsto.73 80" (from XRefInternal elements)
  * Handles both integer sections (17, 18, 19) and decimal sections (90.02, 90.03, etc.)
@@ -1780,7 +1793,34 @@ function extractDefinedTermFromDefinition(
 }
 
 /**
+ * Valid external reference types from XML
+ */
+const VALID_EXTERNAL_REF_TYPES: CrossReferenceTargetType[] = [
+  "act",
+  "regulation",
+  "agreement",
+  "canada-gazette",
+  "citation",
+  "standard",
+  "other",
+];
+
+/**
+ * Check if a string is a valid CrossReferenceTargetType
+ */
+function isValidExternalRefType(
+  refType: unknown
+): refType is CrossReferenceTargetType {
+  return (
+    typeof refType === "string" &&
+    VALID_EXTERNAL_REF_TYPES.includes(refType as CrossReferenceTargetType)
+  );
+}
+
+/**
  * Extract cross references from an element
+ * Handles both XRefExternal (external document references) and
+ * XRefInternal (intra-document section references)
  */
 function extractCrossReferences(
   el: Record<string, unknown>,
@@ -1796,7 +1836,7 @@ function extractCrossReferences(
     }
     const o = obj as Record<string, unknown>;
 
-    // Check for XRefExternal
+    // Check for XRefExternal (external references to other documents)
     if (o.XRefExternal) {
       const xrefs = Array.isArray(o.XRefExternal)
         ? o.XRefExternal
@@ -1810,14 +1850,36 @@ function extractCrossReferences(
         const link = xrefObj["@_link"];
         const text = extractTextContent(xrefObj);
 
-        if (link && (refType === "act" || refType === "regulation")) {
+        // Capture all valid reference types, not just act/regulation
+        if (link && isValidExternalRefType(refType)) {
           refs.push({
             sourceActId,
             sourceRegulationId,
             sourceSectionLabel,
-            targetType: refType as "act" | "regulation",
+            targetType: refType,
             targetRef: String(link),
             referenceText: text || undefined,
+          });
+        }
+      }
+    }
+
+    // Check for XRefInternal (intra-document section references)
+    if (o.XRefInternal) {
+      const xrefs = Array.isArray(o.XRefInternal)
+        ? o.XRefInternal
+        : [o.XRefInternal];
+      for (const xref of xrefs) {
+        // XRefInternal can be a simple string or an object with text content
+        const text = typeof xref === "string" ? xref : extractTextContent(xref);
+        if (text) {
+          refs.push({
+            sourceActId,
+            sourceRegulationId,
+            sourceSectionLabel,
+            targetType: "section",
+            targetRef: text, // Section number like "3", "7(1)", etc.
+            referenceText: text,
           });
         }
       }
@@ -1843,18 +1905,318 @@ function extractCrossReferences(
 }
 
 /**
+ * Extract schedule metadata from a Schedule element
+ */
+function extractScheduleContext(
+  scheduleEl: Record<string, unknown>
+): ScheduleContext {
+  const context: ScheduleContext = {};
+
+  // Extract schedule attributes
+  context.scheduleId = scheduleEl["@_id"] as string | undefined;
+  context.scheduleBilingual = scheduleEl["@_bilingual"] as string | undefined;
+  context.scheduleSpanLanguages = scheduleEl["@_spanlanguages"] as
+    | string
+    | undefined;
+
+  // Extract label and title from ScheduleFormHeading
+  if (scheduleEl.ScheduleFormHeading) {
+    const heading = scheduleEl.ScheduleFormHeading as Record<string, unknown>;
+    if (heading.Label) {
+      context.scheduleLabel = extractTextContent(heading.Label);
+    }
+    if (heading.TitleText) {
+      context.scheduleTitle = extractTextContent(heading.TitleText);
+    }
+  }
+
+  return context;
+}
+
+/**
+ * Options for extracting schedule list content
+ */
+type ExtractScheduleListOptions = {
+  scheduleEl: Record<string, unknown>;
+  scheduleContext: ScheduleContext;
+  language: Language;
+  actId?: string;
+  regulationId?: string;
+  startingOrder?: number;
+};
+
+/**
+ * Extract content from List/Item elements in a Schedule as pseudo-sections
+ * This captures schedule content that doesn't use Section wrappers
+ */
+function extractScheduleListContent(options: ExtractScheduleListOptions): {
+  sections: ParsedSection[];
+  definedTerms: ParsedDefinedTerm[];
+  crossReferences: ParsedCrossReference[];
+  nextOrder: number;
+} {
+  const {
+    scheduleEl,
+    scheduleContext,
+    language,
+    actId,
+    regulationId,
+    startingOrder,
+  } = options;
+  const sections: ParsedSection[] = [];
+  const definedTerms: ParsedDefinedTerm[] = [];
+  const crossReferences: ParsedCrossReference[] = [];
+  let sectionOrder = startingOrder || 0;
+
+  const idBase = actId || regulationId || "unknown";
+  const scheduleLabel = scheduleContext.scheduleLabel || "Schedule";
+
+  // Helper to process List elements recursively
+  const processListContent = (
+    listEl: Record<string, unknown>,
+    hierarchyPath: string[]
+  ) => {
+    if (!listEl.Item) {
+      return;
+    }
+
+    const items = Array.isArray(listEl.Item) ? listEl.Item : [listEl.Item];
+
+    for (const item of items) {
+      if (!item || typeof item !== "object") {
+        continue;
+      }
+      const itemObj = item as Record<string, unknown>;
+
+      // Get item label if present
+      const itemLabel = itemObj.Label
+        ? extractTextContent(itemObj.Label)
+        : undefined;
+      const itemText = extractTextContent(itemObj);
+
+      // Only create a section if there's meaningful content
+      if (itemText && itemText.trim().length > 0) {
+        sectionOrder++;
+
+        // Create a section label that includes schedule and item info
+        const sectionLabel = itemLabel
+          ? `${scheduleLabel} Item ${itemLabel}`
+          : `${scheduleLabel} Item ${sectionOrder}`;
+
+        const canonicalSectionId = `${idBase}/${language}/sch-${scheduleLabel.replace(/\s+/g, "-").toLowerCase()}${itemLabel ? `-${itemLabel}` : `-item-${sectionOrder}`}`;
+
+        // Extract metadata
+        const inForceStartDate = parseDate(
+          itemObj["@_lims:inforce-start-date"] as string | undefined
+        );
+        const lastAmendedDate = parseDate(
+          itemObj["@_lims:lastAmendedDate"] as string | undefined
+        );
+        const limsMetadata = extractLimsMetadata(itemObj);
+        const contentHtml = extractHtmlContent(itemObj);
+        const contentFlags = extractContentFlags(itemObj);
+        const historicalNotes = extractHistoricalNotes(itemObj);
+        const footnotes = extractFootnotes(itemObj);
+
+        // Determine status
+        let status: "in-force" | "repealed" | "not-in-force" = "in-force";
+        if (itemObj.Repealed) {
+          status = "repealed";
+        } else if (itemObj["@_in-force"] === "no") {
+          status = "not-in-force";
+        }
+
+        sections.push({
+          canonicalSectionId,
+          sectionLabel,
+          sectionOrder,
+          language,
+          sectionType: "schedule",
+          hierarchyPath: [...hierarchyPath],
+          marginalNote: undefined,
+          content: itemText,
+          contentHtml: contentHtml || undefined,
+          status,
+          inForceStartDate,
+          lastAmendedDate,
+          limsMetadata,
+          historicalNotes:
+            historicalNotes.length > 0 ? historicalNotes : undefined,
+          footnotes: footnotes.length > 0 ? footnotes : undefined,
+          contentFlags,
+          scheduleId: scheduleContext.scheduleId,
+          scheduleBilingual: scheduleContext.scheduleBilingual,
+          scheduleSpanLanguages: scheduleContext.scheduleSpanLanguages,
+          actId,
+          regulationId,
+        });
+
+        // Extract cross references from this item
+        const refs = extractCrossReferences(
+          itemObj,
+          actId,
+          regulationId,
+          sectionLabel
+        );
+        crossReferences.push(...refs);
+      }
+
+      // Process nested lists
+      if (itemObj.List) {
+        const nestedLists = Array.isArray(itemObj.List)
+          ? itemObj.List
+          : [itemObj.List];
+        for (const nestedList of nestedLists) {
+          if (nestedList && typeof nestedList === "object") {
+            processListContent(nestedList as Record<string, unknown>, [
+              ...hierarchyPath,
+              itemLabel || `Item ${sectionOrder}`,
+            ]);
+          }
+        }
+      }
+    }
+  };
+
+  // Process top-level List elements in the schedule
+  if (scheduleEl.List) {
+    const lists = Array.isArray(scheduleEl.List)
+      ? scheduleEl.List
+      : [scheduleEl.List];
+    for (const list of lists) {
+      if (list && typeof list === "object") {
+        processListContent(list as Record<string, unknown>, [scheduleLabel]);
+      }
+    }
+  }
+
+  // Also process FormGroup elements which may contain schedule content
+  if (scheduleEl.FormGroup) {
+    const formGroups = Array.isArray(scheduleEl.FormGroup)
+      ? scheduleEl.FormGroup
+      : [scheduleEl.FormGroup];
+    for (const formGroup of formGroups) {
+      if (formGroup && typeof formGroup === "object") {
+        const fgObj = formGroup as Record<string, unknown>;
+        const fgContent = extractTextContent(fgObj);
+        if (fgContent && fgContent.trim().length > 0) {
+          sectionOrder++;
+          const canonicalSectionId = `${idBase}/${language}/sch-${scheduleLabel.replace(/\s+/g, "-").toLowerCase()}-fg-${sectionOrder}`;
+
+          sections.push({
+            canonicalSectionId,
+            sectionLabel: `${scheduleLabel} Form`,
+            sectionOrder,
+            language,
+            sectionType: "schedule",
+            hierarchyPath: [scheduleLabel],
+            content: fgContent,
+            contentHtml: extractHtmlContent(fgObj) || undefined,
+            status: "in-force",
+            contentFlags: extractContentFlags(fgObj),
+            scheduleId: scheduleContext.scheduleId,
+            scheduleBilingual: scheduleContext.scheduleBilingual,
+            scheduleSpanLanguages: scheduleContext.scheduleSpanLanguages,
+            actId,
+            regulationId,
+          });
+        }
+      }
+    }
+  }
+
+  // Process TableGroup elements which contain tabular schedule content
+  // (e.g., designation tables, lists of government institutions, tariff schedules)
+  if (scheduleEl.TableGroup) {
+    const tableGroups = Array.isArray(scheduleEl.TableGroup)
+      ? scheduleEl.TableGroup
+      : [scheduleEl.TableGroup];
+    for (const tableGroup of tableGroups) {
+      if (tableGroup && typeof tableGroup === "object") {
+        const tgObj = tableGroup as Record<string, unknown>;
+        const tgContent = extractTextContent(tgObj);
+        if (tgContent && tgContent.trim().length > 0) {
+          sectionOrder++;
+          const canonicalSectionId = `${idBase}/${language}/sch-${scheduleLabel.replace(/\s+/g, "-").toLowerCase()}-tbl-${sectionOrder}`;
+
+          // Extract table metadata for enhanced search/display
+          const tableAttrs = extractTableAttributes(tgObj);
+          const headerInfo = extractTableHeaderInfo(tgObj);
+          const contentFlags = extractContentFlags(tgObj) || {};
+          contentFlags.hasTable = true;
+          if (tableAttrs) {
+            contentFlags.tableAttributes = tableAttrs;
+          }
+          if (headerInfo) {
+            contentFlags.tableHeaderInfo = headerInfo;
+          }
+
+          // Extract metadata from TableGroup attributes
+          const inForceStartDate = parseDate(
+            tgObj["@_lims:inforce-start-date"] as string | undefined
+          );
+          const lastAmendedDate = parseDate(
+            tgObj["@_lims:lastAmendedDate"] as string | undefined
+          );
+          const limsMetadata = extractLimsMetadata(tgObj);
+
+          sections.push({
+            canonicalSectionId,
+            sectionLabel: `${scheduleLabel} Table`,
+            sectionOrder,
+            language,
+            sectionType: "schedule",
+            hierarchyPath: [scheduleLabel],
+            content: tgContent,
+            contentHtml: extractHtmlContent(tgObj) || undefined,
+            status: "in-force",
+            inForceStartDate,
+            lastAmendedDate,
+            limsMetadata,
+            contentFlags,
+            scheduleId: scheduleContext.scheduleId,
+            scheduleBilingual: scheduleContext.scheduleBilingual,
+            scheduleSpanLanguages: scheduleContext.scheduleSpanLanguages,
+            actId,
+            regulationId,
+          });
+
+          // Extract cross references from table content
+          const refs = extractCrossReferences(
+            tgObj,
+            actId,
+            regulationId,
+            `${scheduleLabel} Table`
+          );
+          crossReferences.push(...refs);
+        }
+      }
+    }
+  }
+
+  return { sections, definedTerms, crossReferences, nextOrder: sectionOrder };
+}
+
+/**
+ * Options for parsing sections from Body element
+ */
+type ParseSectionsOptions = {
+  bodyEl: Record<string, unknown>;
+  language: Language;
+  actId?: string;
+  regulationId?: string;
+  scheduleContext?: ScheduleContext;
+};
+
+/**
  * Parse sections from Body element
  */
-function parseSections(
-  bodyEl: Record<string, unknown>,
-  language: Language,
-  actId?: string,
-  regulationId?: string
-): {
+function parseSections(options: ParseSectionsOptions): {
   sections: ParsedSection[];
   definedTerms: ParsedDefinedTerm[];
   crossReferences: ParsedCrossReference[];
 } {
+  const { bodyEl, language, actId, regulationId, scheduleContext } = options;
   const sections: ParsedSection[] = [];
   const definedTerms: ParsedDefinedTerm[] = [];
   const crossReferences: ParsedCrossReference[] = [];
@@ -1866,7 +2228,8 @@ function parseSections(
 
   const processSection = (
     sectionEl: Record<string, unknown>,
-    parentLabel?: string
+    parentLabel?: string,
+    currentScheduleContext?: ScheduleContext
   ) => {
     const label = sectionEl.Label
       ? extractTextContent(sectionEl.Label)
@@ -1902,16 +2265,26 @@ function parseSections(
       sectionEl["@_lims:lastAmendedDate"] as string | undefined
     );
 
-    const canonicalSectionId = `${idBase}/${language}/s${label}`;
+    // Use schedule context for canonicalSectionId if inside a schedule
+    const effectiveScheduleContext = currentScheduleContext || scheduleContext;
+    const canonicalSectionId = effectiveScheduleContext?.scheduleLabel
+      ? `${idBase}/${language}/sch-${effectiveScheduleContext.scheduleLabel.replace(/\s+/g, "-").toLowerCase()}/s${label}`
+      : `${idBase}/${language}/s${label}`;
 
-    // Determine section type
+    // Determine section type - schedule context takes priority
     let sectionType: SectionType = "section";
-    const xmlType = sectionEl["@_type"] as string | undefined;
-    if (xmlType === "amending" || xmlType === "CIF") {
-      sectionType = "amending";
+    if (effectiveScheduleContext) {
+      // If we're inside a schedule, this is a schedule section
+      sectionType = "schedule";
+    } else {
+      const xmlType = sectionEl["@_type"] as string | undefined;
+      if (xmlType === "amending" || xmlType === "CIF") {
+        sectionType = "amending";
+      }
     }
 
     // Extract additional metadata
+    const xmlType = sectionEl["@_type"] as string | undefined;
     const xmlTarget = sectionEl["@_target"] as string | undefined;
     const changeType = extractChangeType(sectionEl);
     const enactedDate = parseDate(
@@ -1947,6 +2320,10 @@ function parseSections(
       footnotes: footnotes.length > 0 ? footnotes : undefined,
       contentFlags,
       formattingAttributes,
+      // Schedule metadata from context
+      scheduleId: effectiveScheduleContext?.scheduleId,
+      scheduleBilingual: effectiveScheduleContext?.scheduleBilingual,
+      scheduleSpanLanguages: effectiveScheduleContext?.scheduleSpanLanguages,
       actId,
       regulationId,
     });
@@ -2040,7 +2417,10 @@ function parseSections(
     crossReferences.push(...refs);
   };
 
-  const processElement = (el: unknown) => {
+  const processElement = (
+    el: unknown,
+    currentScheduleContext?: ScheduleContext
+  ) => {
     if (!el || typeof el !== "object") {
       return;
     }
@@ -2072,24 +2452,218 @@ function parseSections(
       }
     }
 
-    // Handle Section elements
+    // Handle Section elements - pass schedule context if we're inside a Schedule
     if (obj.Section) {
       const sectionArray = Array.isArray(obj.Section)
         ? obj.Section
         : [obj.Section];
       for (const section of sectionArray) {
         if (section && typeof section === "object") {
-          processSection(section as Record<string, unknown>);
+          processSection(
+            section as Record<string, unknown>,
+            undefined,
+            currentScheduleContext || scheduleContext
+          );
         }
       }
     }
 
-    // Recurse into other structural elements
-    for (const key of ["Body", "Schedule", "Order"]) {
+    // Handle Provision elements (from Order blocks in regulations)
+    // These contain regulatory authority text without section labels
+    if (obj.Provision) {
+      const provisions = Array.isArray(obj.Provision)
+        ? obj.Provision
+        : [obj.Provision];
+      let provisionIndex = 0;
+      for (const provision of provisions) {
+        if (provision && typeof provision === "object") {
+          provisionIndex++;
+          const provObj = provision as Record<string, unknown>;
+
+          // Generate a label for the provision (they don't have native labels)
+          const label =
+            provisionIndex === 1
+              ? "order"
+              : `order-provision-${provisionIndex}`;
+
+          sectionOrder++;
+
+          // Extract content
+          const content = extractTextContent(provObj);
+
+          // Extract marginal note if present
+          let marginalNote: string | undefined;
+          if (provObj.MarginalNote) {
+            marginalNote = extractTextContent(provObj.MarginalNote);
+          }
+
+          // Determine status
+          let status: Status = "in-force";
+          if (provObj["@_in-force"] === "no") {
+            status = "not-in-force";
+          }
+
+          // Extract dates and metadata
+          const inForceStartDate = parseDate(
+            provObj["@_lims:inforce-start-date"] as string | undefined
+          );
+          const lastAmendedDate = parseDate(
+            provObj["@_lims:lastAmendedDate"] as string | undefined
+          );
+          const enactedDate = parseDate(
+            provObj["@_lims:enacted-date"] as string | undefined
+          );
+          const limsMetadata = extractLimsMetadata(provObj);
+          const footnotes = extractFootnotes(provObj);
+          const contentHtml = extractHtmlContent(provObj);
+          const contentFlags = extractContentFlags(provObj);
+          const formattingAttributes = extractFormattingAttributes(provObj);
+
+          const canonicalSectionId = `${idBase}/${language}/${label}`;
+
+          sections.push({
+            canonicalSectionId,
+            sectionLabel: label,
+            sectionOrder,
+            language,
+            sectionType: "provision",
+            hierarchyPath: [...currentHierarchy],
+            marginalNote,
+            content,
+            contentHtml: contentHtml || undefined,
+            status,
+            inForceStartDate,
+            lastAmendedDate,
+            enactedDate,
+            limsMetadata,
+            footnotes,
+            contentFlags,
+            formattingAttributes,
+            actId,
+            regulationId,
+          });
+
+          // Extract defined terms from provisions (rare but possible)
+          const definitions = provObj.Definition
+            ? Array.isArray(provObj.Definition)
+              ? provObj.Definition
+              : [provObj.Definition]
+            : [];
+          for (const def of definitions) {
+            const term = extractDefinedTermFromDefinition({
+              defEl: def as Record<string, unknown>,
+              language,
+              actId,
+              regulationId,
+              sectionLabel: label,
+              scope: {
+                scopeType: docType,
+                scopeSections: undefined,
+                scopeRawText: undefined,
+              },
+            });
+            if (term) {
+              definedTerms.push(term);
+            }
+          }
+
+          // Extract cross references from provisions
+          const refs = extractCrossReferences(
+            provObj,
+            actId,
+            regulationId,
+            label
+          );
+          crossReferences.push(...refs);
+        }
+      }
+    }
+
+    // Handle Schedule elements specially
+    if (obj.Schedule) {
+      const schedules = Array.isArray(obj.Schedule)
+        ? obj.Schedule
+        : [obj.Schedule];
+      for (const schedule of schedules) {
+        if (schedule && typeof schedule === "object") {
+          const scheduleObj = schedule as Record<string, unknown>;
+
+          // Extract schedule context from this Schedule element
+          const newScheduleContext = extractScheduleContext(scheduleObj);
+
+          // Add schedule label to hierarchy if present
+          if (newScheduleContext.scheduleLabel) {
+            currentHierarchy.push(newScheduleContext.scheduleLabel);
+          }
+
+          // First, extract List/Item content that doesn't use Section wrappers
+          // This captures schedule content like CDSA drug lists
+          const listResult = extractScheduleListContent({
+            scheduleEl: scheduleObj,
+            scheduleContext: newScheduleContext,
+            language,
+            actId,
+            regulationId,
+            startingOrder: sectionOrder,
+          });
+          sections.push(...listResult.sections);
+          definedTerms.push(...listResult.definedTerms);
+          crossReferences.push(...listResult.crossReferences);
+          sectionOrder = listResult.nextOrder;
+
+          // Then recurse into the Schedule to process any Section elements
+          // Pass the schedule context so sections know they're inside a schedule
+          processElement(scheduleObj, newScheduleContext);
+
+          // Pop schedule from hierarchy
+          if (newScheduleContext.scheduleLabel) {
+            currentHierarchy.pop();
+          }
+        }
+      }
+    }
+
+    // Recurse into other structural elements (but NOT Schedule - handled above)
+    // BillPiece and RelatedOrNotInForce contain Section elements for NOT IN FORCE
+    // and RELATED PROVISIONS content in root-level schedules
+    for (const key of ["Body", "Order", "BilingualGroup"]) {
       if (obj[key]) {
         const children = Array.isArray(obj[key]) ? obj[key] : [obj[key]];
         for (const child of children) {
-          processElement(child);
+          processElement(child, currentScheduleContext);
+        }
+      }
+    }
+
+    // Handle BillPiece and RelatedOrNotInForce specially - they may contain
+    // List/FormGroup/TableGroup content directly (not wrapped in Section)
+    // When inside a schedule context, also extract any non-Section content
+    for (const key of ["BillPiece", "RelatedOrNotInForce"]) {
+      if (obj[key]) {
+        const children = Array.isArray(obj[key]) ? obj[key] : [obj[key]];
+        for (const child of children) {
+          if (child && typeof child === "object") {
+            const childObj = child as Record<string, unknown>;
+
+            // If we're inside a schedule, extract List/FormGroup/TableGroup content
+            if (currentScheduleContext) {
+              const listResult = extractScheduleListContent({
+                scheduleEl: childObj,
+                scheduleContext: currentScheduleContext,
+                language,
+                actId,
+                regulationId,
+                startingOrder: sectionOrder,
+              });
+              sections.push(...listResult.sections);
+              definedTerms.push(...listResult.definedTerms);
+              crossReferences.push(...listResult.crossReferences);
+              sectionOrder = listResult.nextOrder;
+            }
+
+            // Then recurse to find Section elements
+            processElement(childObj, currentScheduleContext);
+          }
         }
       }
     }
@@ -2211,14 +2785,36 @@ export function parseActXml(
     tableOfProvisions,
   };
 
-  // Parse sections from Body
+  // Parse sections from Body and root-level Schedule elements
+  // Root-level Schedule elements (e.g., NOT IN FORCE/RELATED PROVISIONS, designation tables)
+  // are direct children of Statute, not inside Body, so we need to process them separately
   const body = statute.Body || {};
-  const { sections, definedTerms, crossReferences } = parseSections(
-    body,
+  const rootSchedules = statute.Schedule
+    ? Array.isArray(statute.Schedule)
+      ? statute.Schedule
+      : [statute.Schedule]
+    : [];
+
+  // Create a combined element that includes Body content and root-level Schedules
+  // This allows parseSections to process all content uniformly
+  const bodySchedules = body.Schedule
+    ? Array.isArray(body.Schedule)
+      ? body.Schedule
+      : [body.Schedule]
+    : [];
+  const allSchedules = [...bodySchedules, ...rootSchedules];
+
+  const combinedBody = {
+    ...body,
+    // Add all schedules (from Body and root-level) if any exist
+    ...(allSchedules.length > 0 ? { Schedule: allSchedules } : {}),
+  };
+
+  const { sections, definedTerms, crossReferences } = parseSections({
+    bodyEl: combinedBody,
     language,
     actId,
-    undefined
-  );
+  });
 
   return {
     type: "act",
@@ -2327,14 +2923,33 @@ export function parseRegulationXml(
     tableOfProvisions,
   };
 
-  // Parse sections from Body
+  // Parse sections from Body and root-level Schedule elements
+  // Root-level Schedule elements are direct children of Regulation, not inside Body
   const body = regulation.Body || {};
-  const { sections, definedTerms, crossReferences } = parseSections(
-    body,
+  const rootSchedules = regulation.Schedule
+    ? Array.isArray(regulation.Schedule)
+      ? regulation.Schedule
+      : [regulation.Schedule]
+    : [];
+
+  // Create a combined element that includes Body content and root-level Schedules
+  const bodySchedules = body.Schedule
+    ? Array.isArray(body.Schedule)
+      ? body.Schedule
+      : [body.Schedule]
+    : [];
+  const allSchedules = [...bodySchedules, ...rootSchedules];
+
+  const combinedBody = {
+    ...body,
+    ...(allSchedules.length > 0 ? { Schedule: allSchedules } : {}),
+  };
+
+  const { sections, definedTerms, crossReferences } = parseSections({
+    bodyEl: combinedBody,
     language,
-    undefined,
-    regulationId
-  );
+    regulationId,
+  });
 
   return {
     type: "regulation",

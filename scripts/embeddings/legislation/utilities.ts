@@ -8,14 +8,18 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { createInterface } from "node:readline";
 import Database from "better-sqlite3";
-import { inArray, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { nanoid } from "nanoid";
 
 import { generateEmbeddings } from "@/lib/ai/embeddings";
 import type { Section } from "@/lib/db/legislation/schema";
 import type { LegResourceMetadata, LegSourceType } from "@/lib/db/rag/schema";
-import { legEmbeddings, legResources } from "@/lib/db/rag/schema";
+import {
+  DEFAULT_EMBEDDING_MODEL,
+  legEmbeddings,
+  legResources,
+} from "@/lib/db/rag/schema";
 
 // Re-export LegSourceType for use by other modules in this directory
 export type { LegSourceType } from "@/lib/db/rag/schema";
@@ -32,6 +36,23 @@ export const PROGRESS_SYNC_BATCH_SIZE = 10_000;
 export const EMBEDDING_DIMENSIONS = 1024; // Cohere embed-multilingual-v3.0
 
 const POSTGRES_URL_REGEX = /^postgres(ql)?:\/\/.+/;
+
+// ---------- Term Normalization ----------
+/**
+ * Normalize a term for matching, using the same logic as the parser.
+ * This matches: term.toLowerCase().replace(/[^\w\s]/g, "")
+ *
+ * Note: JavaScript's \w only matches ASCII word characters [a-zA-Z0-9_],
+ * so accented characters like é, à, ç are stripped entirely.
+ * This is intentional for cross-lingual matching (EN "barrier" matches FR "barrière").
+ *
+ * Used for:
+ * - Creating term_normalized in the parser
+ * - Matching pairedTerm text to find paired term IDs
+ */
+export function normalizeTermForMatching(term: string): string {
+  return term.toLowerCase().replace(/[^\w\s]/g, "");
+}
 
 // ---------- Section Grouping ----------
 /**
@@ -110,7 +131,9 @@ export type ProcessError = {
     | "cross_reference"
     | "table_of_provisions"
     | "signature_block"
-    | "related_provisions";
+    | "related_provisions"
+    | "footnote"
+    | "marginal_note";
   itemId: string;
   message: string;
   retryable: boolean;
@@ -427,6 +450,21 @@ export function buildResourceKey(
   return `${sourceType}:${sourceId}:${language}:${chunkIndex}`;
 }
 
+/**
+ * Build paired resource key for bilingual linking (Task 2.3).
+ * Returns the resource key for the same content in the opposite language.
+ * Enables cross-lingual search - users searching in EN can discover FR matches.
+ */
+export function buildPairedResourceKey(
+  sourceType: string,
+  sourceId: string,
+  language: "en" | "fr",
+  chunkIndex: number
+): string {
+  const pairedLanguage = language === "en" ? "fr" : "en";
+  return `${sourceType}:${sourceId}:${pairedLanguage}:${chunkIndex}`;
+}
+
 // ---------- Embedding Generation ----------
 export async function generateEmbeddingsWithRetry(
   contents: string[],
@@ -552,10 +590,16 @@ export async function insertChunksBatched(
           id: resourceIds[j],
           resourceKey: chunk.resourceKey,
           content: normalizedContents[idx],
-          metadata: chunk.metadata,
+          metadata: {
+            ...chunk.metadata,
+            // Add embedding model version to metadata (Task 3.3)
+            embeddingModelVersion: DEFAULT_EMBEDDING_MODEL,
+          },
           // Denormalized columns for fast filtering
           language: chunk.metadata.language,
           sourceType: chunk.metadata.sourceType,
+          // Bilingual pairing (Task 2.3)
+          pairedResourceKey: chunk.metadata.pairedResourceKey ?? null,
         }))
       );
 
@@ -570,6 +614,8 @@ export async function insertChunksBatched(
           tsv: sql`to_tsvector('simple', ${normalizedContents[idx]})`,
           chunkIndex: chunk.chunkIndex,
           totalChunks: chunk.totalChunks,
+          // Embedding model tracking (Task 3.3)
+          embeddingModel: DEFAULT_EMBEDDING_MODEL,
         }))
       );
     });
@@ -630,8 +676,9 @@ export async function syncProgressFromPostgres(
   progressTracker: ProgressTracker,
   sourceType?: LegSourceType
 ): Promise<void> {
+  // Use denormalized sourceType column for fast filtering (avoids JSONB extraction)
   const whereClause = sourceType
-    ? sql`WHERE ${legResources.metadata}->>'sourceType' = ${sourceType}`
+    ? sql`WHERE ${legResources.sourceType} = ${sourceType}`
     : sql``;
 
   const countResult = await db.execute<{ count: string }>(
@@ -657,11 +704,7 @@ export async function syncProgressFromPostgres(
     const rows = await db
       .select({ resourceKey: legResources.resourceKey })
       .from(legResources)
-      .where(
-        sourceType
-          ? sql`${legResources.metadata}->>'sourceType' = ${sourceType}`
-          : sql`1=1`
-      )
+      .where(sourceType ? eq(legResources.sourceType, sourceType) : sql`1=1`)
       .orderBy(legResources.id)
       .limit(PROGRESS_SYNC_BATCH_SIZE)
       .offset(offset);
@@ -690,8 +733,9 @@ export async function ensureProgressSynced(
 ): Promise<void> {
   const localCount = progressTracker.countByPrefix(`${sourceType}:`);
 
+  // Use denormalized sourceType column for fast filtering (avoids JSONB extraction)
   const pgCountResult = await db.execute<{ count: string }>(
-    sql`SELECT COUNT(*) as count FROM ${legResources} WHERE ${legResources.metadata}->>'sourceType' = ${sourceType}`
+    sql`SELECT COUNT(*) as count FROM ${legResources} WHERE ${legResources.sourceType} = ${sourceType}`
   );
   const pgCount = Number.parseInt(pgCountResult[0]?.count ?? "0", 10);
 
