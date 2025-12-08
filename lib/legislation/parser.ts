@@ -36,6 +36,9 @@ export function normalizeRegulationId(instrumentNumber: string): string {
 }
 
 // Configure XML parser
+// Using stopNodes to preserve raw XML for DefinedTermEn/Fr elements.
+// This allows us to re-parse them with preserveOrder=true to get correct
+// document order for mixed content (e.g., "embryon <Language>in vitro</Language>")
 const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
@@ -44,6 +47,7 @@ const parser = new XMLParser({
   trimValues: true,
   parseAttributeValue: false,
   parseTagValue: false,
+  stopNodes: ["*.DefinedTermEn", "*.DefinedTermFr"],
 });
 
 /**

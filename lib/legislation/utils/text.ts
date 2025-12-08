@@ -3,10 +3,23 @@
  */
 
 /**
- * Extract text content from a complex XML element
+ * Extract text content from a complex XML element.
+ * Collects all text parts and joins them with spaces, then normalizes whitespace.
+ *
+ * For elements parsed with stopNodes (like DefinedTermEn/Fr), the value will be
+ * a raw XML string which is handled by stripping tags.
  */
 export function extractTextContent(el: unknown): string {
   if (typeof el === "string") {
+    // Check if this is raw XML from stopNodes (contains < and >)
+    // This happens for DefinedTermEn/Fr which are parsed with stopNodes
+    if (el.includes("<") && el.includes(">")) {
+      // Strip XML tags and normalize whitespace - preserves document order!
+      return el
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
     return el.trim();
   }
   if (typeof el === "number") {
@@ -17,28 +30,41 @@ export function extractTextContent(el: unknown): string {
   }
 
   const obj = el as Record<string, unknown>;
-  let text = "";
+  const parts: string[] = [];
 
-  // Extract direct text content
-  if (typeof obj["#text"] === "string") {
-    text += obj["#text"];
-  }
-
-  // Process child elements
+  // Process all entries in their natural order
   for (const [key, value] of Object.entries(obj)) {
-    // Skip attributes and direct text
-    if (key.startsWith("@_") || key === "#text") {
+    // Skip attributes
+    if (key.startsWith("@_")) {
       continue;
     }
 
+    // Handle direct text content
+    if (key === "#text") {
+      if (typeof value === "string" && value.trim()) {
+        parts.push(value);
+      }
+      continue;
+    }
+
+    // Handle child elements
     if (Array.isArray(value)) {
-      text += value.map((v) => extractTextContent(v)).join(" ");
+      for (const v of value) {
+        const childText = extractTextContent(v);
+        if (childText) {
+          parts.push(childText);
+        }
+      }
     } else {
-      text += extractTextContent(value);
+      const childText = extractTextContent(value);
+      if (childText) {
+        parts.push(childText);
+      }
     }
   }
 
-  return text.trim();
+  // Join with spaces and normalize whitespace (collapse multiple spaces)
+  return parts.join(" ").replace(/\s+/g, " ").trim();
 }
 
 function escapeHtml(text: string): string {

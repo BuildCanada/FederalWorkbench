@@ -218,7 +218,7 @@ export function parseSections(options: ParseSectionsOptions): {
         : [];
 
       for (const def of subsecDefs) {
-        const term = extractDefinedTermFromDefinition({
+        const terms = extractDefinedTermFromDefinition({
           defEl: def as Record<string, unknown>,
           language,
           actId,
@@ -226,9 +226,7 @@ export function parseSections(options: ParseSectionsOptions): {
           sectionLabel: label,
           scope,
         });
-        if (term) {
-          definedTerms.push(term);
-        }
+        definedTerms.push(...terms);
       }
     }
 
@@ -240,7 +238,7 @@ export function parseSections(options: ParseSectionsOptions): {
       : [];
 
     for (const def of definitions) {
-      const term = extractDefinedTermFromDefinition({
+      const terms = extractDefinedTermFromDefinition({
         defEl: def as Record<string, unknown>,
         language,
         actId,
@@ -248,9 +246,7 @@ export function parseSections(options: ParseSectionsOptions): {
         sectionLabel: label,
         scope,
       });
-      if (term) {
-        definedTerms.push(term);
-      }
+      definedTerms.push(...terms);
     }
 
     // Extract cross references
@@ -396,7 +392,7 @@ export function parseSections(options: ParseSectionsOptions): {
               : [provObj.Definition]
             : [];
           for (const def of definitions) {
-            const term = extractDefinedTermFromDefinition({
+            const terms = extractDefinedTermFromDefinition({
               defEl: def as Record<string, unknown>,
               language,
               actId,
@@ -408,9 +404,7 @@ export function parseSections(options: ParseSectionsOptions): {
                 scopeRawText: undefined,
               },
             });
-            if (term) {
-              definedTerms.push(term);
-            }
+            definedTerms.push(...terms);
           }
 
           // Extract cross references from provisions

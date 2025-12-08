@@ -528,7 +528,7 @@ export const sections = legislationSchema.table(
       length: 200,
     }).notNull(),
     // Section label (e.g., "2", "3.1", "Schedule I", or full title for stub acts)
-    sectionLabel: varchar("section_label", { length: 255 }).notNull(),
+    sectionLabel: text("section_label").notNull(),
     // Order for sorting sections
     sectionOrder: integer("section_order").notNull(),
     // Language: "en" or "fr"
@@ -570,9 +570,7 @@ export const sections = legislationSchema.table(
     scheduleId: varchar("schedule_id", { length: 50 }), // e.g., "RelatedProvs", "NifProvs"
     scheduleBilingual: varchar("schedule_bilingual", { length: 10 }), // "yes" or "no"
     scheduleSpanLanguages: varchar("schedule_span_languages", { length: 10 }),
-    scheduleOriginatingRef: varchar("schedule_originating_ref", {
-      length: 255,
-    }), // e.g., "(Section 2)"
+    scheduleOriginatingRef: text("schedule_originating_ref"), // e.g., "(Section 2)" or long references like "(Paragraphs 56(1)(a) and (c), section 68...)"
     // Content flags for special content types (tables, formulas, images, partial repeals)
     contentFlags: jsonb("content_flags").$type<ContentFlags>(),
     // Formatting attributes for provisions/lists
@@ -726,7 +724,7 @@ export const crossReferences = legislationSchema.table(
     // Source (where the reference appears)
     sourceActId: varchar("source_act_id", { length: 50 }),
     sourceRegulationId: varchar("source_regulation_id", { length: 100 }),
-    sourceSectionLabel: varchar("source_section_label", { length: 50 }),
+    sourceSectionLabel: text("source_section_label"),
     // Target (what is being referenced) - raw from XML
     targetType: varchar("target_type", { length: 20 }).notNull(), // "act" or "regulation"
     targetRef: varchar("target_ref", { length: 100 }).notNull(), // Raw link (e.g., "C-46", "SOR-2000-1")

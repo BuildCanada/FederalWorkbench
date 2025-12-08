@@ -25,6 +25,10 @@ import {
   type LegResourceMetadata,
 } from "@/lib/db/rag/schema";
 import {
+  normalizeTermForMatching,
+  translateRegulationId,
+} from "@/lib/legislation/utils/normalization";
+import {
   chunkLegalText,
   chunkSection,
   formatHistoricalNotes,
@@ -56,7 +60,6 @@ import {
   filterNewChunks,
   formatDuration,
   groupSectionsBy,
-  normalizeTermForMatching,
   ProgressTracker,
   parsePositiveInteger,
   readOptValue,
@@ -211,43 +214,189 @@ test.describe("normalizeTermForMatching", () => {
     expect(normalizeTermForMatching("barrière")).toBe("barrire");
     expect(normalizeTermForMatching("définition")).toBe("dfinition");
     expect(normalizeTermForMatching("réglement")).toBe("rglement");
+    // Note: collapsed whitespace from removed apostrophe
     expect(normalizeTermForMatching("commissaire à l'accessibilité")).toBe(
-      "commissaire  laccessibilit"
+      "commissaire laccessibilit"
     );
   });
 
-  test("removes special characters", () => {
-    expect(normalizeTermForMatching("tax-exempt")).toBe("taxexempt");
+  test("converts dashes to spaces for cross-lingual matching", () => {
+    // En-dash (U+2013) and em-dash (U+2014) become spaces
+    expect(normalizeTermForMatching("Canada–Colombia")).toBe("canada colombia");
+    expect(normalizeTermForMatching("Canada—Colombia")).toBe("canada colombia");
+    // Regular hyphen also becomes space
+    expect(normalizeTermForMatching("tax-exempt")).toBe("tax exempt");
+    // This ensures "Canada–Colombia" matches "Canada Colombia"
+    expect(normalizeTermForMatching("Canada–Colombia")).toBe(
+      normalizeTermForMatching("Canada Colombia")
+    );
+  });
+
+  test("removes special characters except spaces", () => {
     expect(normalizeTermForMatching("(a) definition")).toBe("a definition");
     expect(normalizeTermForMatching("item's")).toBe("items");
   });
 
-  test("preserves spaces", () => {
+  test("collapses multiple spaces and trims", () => {
     expect(normalizeTermForMatching("defined term")).toBe("defined term");
     expect(normalizeTermForMatching("  multiple   spaces  ")).toBe(
-      "  multiple   spaces  "
+      "multiple spaces"
     );
+    expect(normalizeTermForMatching("  leading")).toBe("leading");
+    expect(normalizeTermForMatching("trailing  ")).toBe("trailing");
   });
 
   test("handles empty string", () => {
     expect(normalizeTermForMatching("")).toBe("");
   });
 
-  test("matches parser behavior exactly", () => {
-    // These should match the term_normalized values in the database
-    // which are created using: term.toLowerCase().replace(/[^\w\s]/g, "")
+  test("handles real-world bilingual term pairs", () => {
+    // These are actual cases from the legislation database
     const testCases = [
-      { input: "Déline Agreement", expected: "dline agreement" },
-      { input: "Gaspé Peninsula", expected: "gasp peninsula" },
-      { input: "abri fiscal", expected: "abri fiscal" },
+      // EN and FR versions should normalize to the same value
       {
-        input: "commissaire à l'accessibilité",
-        expected: "commissaire  laccessibilit",
+        en: "Canada–Colombia Free Trade Agreement",
+        fr: "Canada Colombia Free Trade Agreement",
+        expected: "canada colombia free trade agreement",
+      },
+      {
+        en: "in vitro embryo",
+        fr: "in vitro embryo",
+        expected: "in vitro embryo",
+      },
+      // French accents are stripped for cross-lingual matching
+      {
+        en: "barrier",
+        fr: "barrière",
+        enExpected: "barrier",
+        frExpected: "barrire",
       },
     ];
 
-    for (const { input, expected } of testCases) {
-      expect(normalizeTermForMatching(input)).toBe(expected);
+    for (const tc of testCases) {
+      if ("expected" in tc) {
+        expect(normalizeTermForMatching(tc.en)).toBe(tc.expected);
+        expect(normalizeTermForMatching(tc.fr)).toBe(tc.expected);
+      } else {
+        expect(normalizeTermForMatching(tc.en)).toBe(tc.enExpected);
+        expect(normalizeTermForMatching(tc.fr)).toBe(tc.frExpected);
+      }
+    }
+  });
+});
+
+test.describe("translateRegulationId", () => {
+  test("returns same ID when languages match", () => {
+    expect(translateRegulationId("SOR-2000-1", "en", "en")).toBe("SOR-2000-1");
+    expect(translateRegulationId("DORS-2000-1", "fr", "fr")).toBe(
+      "DORS-2000-1"
+    );
+  });
+
+  test("translates C.R.C. regulations between EN and FR", () => {
+    // EN → FR: "c." becomes "ch."
+    expect(translateRegulationId("C.R.C._c. 10", "en", "fr")).toBe(
+      "C.R.C._ch. 10"
+    );
+    expect(translateRegulationId("C.R.C._c. 1035", "en", "fr")).toBe(
+      "C.R.C._ch. 1035"
+    );
+
+    // FR → EN: "ch." becomes "c."
+    expect(translateRegulationId("C.R.C._ch. 10", "fr", "en")).toBe(
+      "C.R.C._c. 10"
+    );
+    expect(translateRegulationId("C.R.C._ch. 1035", "fr", "en")).toBe(
+      "C.R.C._c. 1035"
+    );
+  });
+
+  test("translates SOR/DORS regulations between EN and FR", () => {
+    // EN → FR: "SOR-" becomes "DORS-"
+    expect(translateRegulationId("SOR-2000-1", "en", "fr")).toBe("DORS-2000-1");
+    expect(translateRegulationId("SOR-86-946", "en", "fr")).toBe("DORS-86-946");
+
+    // FR → EN: "DORS-" becomes "SOR-"
+    expect(translateRegulationId("DORS-2000-1", "fr", "en")).toBe("SOR-2000-1");
+    expect(translateRegulationId("DORS-86-946", "fr", "en")).toBe("SOR-86-946");
+  });
+
+  test("translates SI/TR statutory instruments between EN and FR", () => {
+    // EN → FR: "SI-" becomes "TR-"
+    expect(translateRegulationId("SI-2000-100", "en", "fr")).toBe(
+      "TR-2000-100"
+    );
+    expect(translateRegulationId("SI-2000-16", "en", "fr")).toBe("TR-2000-16");
+
+    // FR → EN: "TR-" becomes "SI-"
+    expect(translateRegulationId("TR-2000-100", "fr", "en")).toBe(
+      "SI-2000-100"
+    );
+    expect(translateRegulationId("TR-2000-16", "fr", "en")).toBe("SI-2000-16");
+  });
+
+  test("translates annual statute IDs between EN and FR", () => {
+    // EN → FR: "_c. " becomes "_ch. " and "_s. " becomes "_art. "
+    expect(translateRegulationId("2018_c. 12_s. 187", "en", "fr")).toBe(
+      "2018_ch. 12_art. 187"
+    );
+    expect(translateRegulationId("2010_c. 12_s. 91", "en", "fr")).toBe(
+      "2010_ch. 12_art. 91"
+    );
+    expect(translateRegulationId("2024_c. 15_s. 97", "en", "fr")).toBe(
+      "2024_ch. 15_art. 97"
+    );
+
+    // FR → EN: "_ch. " becomes "_c. " and "_art. " becomes "_s. "
+    expect(translateRegulationId("2018_ch. 12_art. 187", "fr", "en")).toBe(
+      "2018_c. 12_s. 187"
+    );
+    expect(translateRegulationId("2010_ch. 12_art. 91", "fr", "en")).toBe(
+      "2010_c. 12_s. 91"
+    );
+    expect(translateRegulationId("2024_ch. 15_art. 97", "fr", "en")).toBe(
+      "2024_c. 15_s. 97"
+    );
+  });
+
+  test("returns original ID for unknown formats", () => {
+    // Unknown formats should pass through unchanged
+    expect(translateRegulationId("UNKNOWN-123", "en", "fr")).toBe(
+      "UNKNOWN-123"
+    );
+    expect(translateRegulationId("UNKNOWN-123", "fr", "en")).toBe(
+      "UNKNOWN-123"
+    );
+    expect(translateRegulationId("some-random-id", "en", "fr")).toBe(
+      "some-random-id"
+    );
+  });
+
+  test("bidirectional translation is consistent", () => {
+    // EN → FR → EN should return original
+    const enIds = [
+      "C.R.C._c. 10",
+      "SOR-2000-1",
+      "SI-2000-100",
+      "2018_c. 12_s. 187",
+    ];
+    for (const enId of enIds) {
+      const frId = translateRegulationId(enId, "en", "fr");
+      const backToEn = translateRegulationId(frId, "fr", "en");
+      expect(backToEn).toBe(enId);
+    }
+
+    // FR → EN → FR should return original
+    const frIds = [
+      "C.R.C._ch. 10",
+      "DORS-2000-1",
+      "TR-2000-100",
+      "2018_ch. 12_art. 187",
+    ];
+    for (const frId of frIds) {
+      const enId = translateRegulationId(frId, "fr", "en");
+      const backToFr = translateRegulationId(enId, "en", "fr");
+      expect(backToFr).toBe(frId);
     }
   });
 });

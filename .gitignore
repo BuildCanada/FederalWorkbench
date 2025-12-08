@@ -58,6 +58,9 @@ scripts/.embedding-progress.db-shm
 scripts/.leg-embedding-progress.db
 scripts/.leg-embedding-progress.db-wal
 scripts/.leg-embedding-progress.db-shm
+scripts/.leg-import-progress.db
+scripts/.leg-import-progress.db-shm
+scripts/.leg-import-progress.db-wal
 
 # AI Coding
 .plans

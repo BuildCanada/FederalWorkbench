@@ -22,7 +22,8 @@ import { config } from "dotenv";
 
 config({ path: ".env.local" });
 
-import { and, eq } from "drizzle-orm";
+import { existsSync, mkdirSync } from "node:fs";
+import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import {
@@ -57,7 +58,7 @@ if (!connectionString) {
   throw new Error("POSTGRES_URL environment variable is required");
 }
 
-const client = postgres(connectionString, { max: 10 });
+const client = postgres(connectionString, { max: 10, debug: false });
 const db = drizzle(client);
 
 // Parse command line arguments
@@ -168,6 +169,103 @@ const specificIds = idsArg ? idsArg.split(",").map((id) => id.trim()) : null;
 
 const BASE_PATH = "./data/legislation";
 
+// PostgreSQL has a limit of 65535 parameters per query
+// With ~30 columns per section, batch size of 2000 keeps us under the limit (2000 * 30 = 60000)
+const INSERT_BATCH_SIZE = 2000;
+
+// SQLite progress tracker for fast existence checks
+const PROGRESS_DB_PATH = "scripts/.leg-import-progress.db";
+
+/**
+ * SQLite-based progress tracker for fast existence checks.
+ * Avoids slow Postgres queries when checking if files have been imported.
+ */
+class ImportProgressTracker {
+  private readonly sqlite: Database.Database;
+  private readonly checkStmt: Database.Statement;
+  private readonly insertStmt: Database.Statement;
+  private readonly insertManyStmt: Database.Transaction<
+    (keys: string[]) => void
+  >;
+  private readonly clearAllStmt: Database.Statement;
+
+  constructor(dbPath: string = PROGRESS_DB_PATH) {
+    if (dbPath !== ":memory:") {
+      const dir = dbPath.split("/").slice(0, -1).join("/");
+      if (dir && !existsSync(dir)) {
+        mkdirSync(dir, { recursive: true });
+      }
+    }
+
+    this.sqlite = new Database(dbPath);
+    this.sqlite.pragma("journal_mode = WAL");
+    this.sqlite.pragma("synchronous = NORMAL");
+
+    this.sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS imported (
+        key TEXT PRIMARY KEY,
+        created_at INTEGER DEFAULT (unixepoch())
+      ) WITHOUT ROWID;
+    `);
+
+    this.checkStmt = this.sqlite.prepare(
+      "SELECT 1 FROM imported WHERE key = ?"
+    );
+    this.insertStmt = this.sqlite.prepare(
+      "INSERT OR IGNORE INTO imported (key) VALUES (?)"
+    );
+    this.clearAllStmt = this.sqlite.prepare("DELETE FROM imported");
+    this.insertManyStmt = this.sqlite.transaction((keys: string[]) => {
+      for (const key of keys) {
+        this.insertStmt.run(key);
+      }
+    });
+  }
+
+  has(key: string): boolean {
+    return this.checkStmt.get(key) !== undefined;
+  }
+
+  mark(key: string): void {
+    this.insertStmt.run(key);
+  }
+
+  markMany(keys: string[]): void {
+    if (keys.length > 0) {
+      this.insertManyStmt(keys);
+    }
+  }
+
+  clearAll(): void {
+    this.clearAllStmt.run();
+  }
+
+  close(): void {
+    this.sqlite.close();
+  }
+}
+
+// Global progress tracker instance
+let progressTracker: ImportProgressTracker | null = null;
+
+function getProgressTracker(): ImportProgressTracker {
+  if (!progressTracker) {
+    progressTracker = new ImportProgressTracker();
+  }
+  return progressTracker;
+}
+
+/**
+ * Build a unique key for a file (type:id:language)
+ */
+function buildFileKey(
+  type: LegislationType,
+  id: string,
+  language: Language
+): string {
+  return `${type}:${id}:${language}`;
+}
+
 type ImportStats = {
   filesProcessed: number;
   filesSkipped: number;
@@ -268,35 +366,30 @@ function enrichDocumentWithLookup(doc: ParsedDocument): void {
 }
 
 /**
- * Check if an act already exists in the database for a specific language
+ * Check if a file has already been imported using SQLite progress tracker.
+ * Much faster than querying Postgres for each file.
  */
-async function actExists(actId: string, language: Language): Promise<boolean> {
-  const rows = await db
-    .select({ id: acts.id })
-    .from(acts)
-    .where(and(eq(acts.actId, actId), eq(acts.language, language)))
-    .limit(1);
-  return rows.length > 0;
+function fileAlreadyImported(
+  type: LegislationType,
+  id: string,
+  language: Language
+): boolean {
+  const tracker = getProgressTracker();
+  const key = buildFileKey(type, id, language);
+  return tracker.has(key);
 }
 
 /**
- * Check if a regulation already exists in the database for a specific language
+ * Mark a file as imported in SQLite progress tracker.
  */
-async function regulationExists(
-  regulationId: string,
+function markFileImported(
+  type: LegislationType,
+  id: string,
   language: Language
-): Promise<boolean> {
-  const rows = await db
-    .select({ id: regulations.id })
-    .from(regulations)
-    .where(
-      and(
-        eq(regulations.regulationId, regulationId),
-        eq(regulations.language, language)
-      )
-    )
-    .limit(1);
-  return rows.length > 0;
+): void {
+  const tracker = getProgressTracker();
+  const key = buildFileKey(type, id, language);
+  tracker.mark(key);
 }
 
 function log(message: string) {
@@ -425,11 +518,16 @@ async function insertDocument(doc: ParsedDocument): Promise<void> {
         provisionHeading: section.provisionHeading,
         internalReferences: section.internalReferences ?? null,
       }));
-      await tx.insert(sections).values(sectionValues);
+
+      // Insert sections in batches to avoid PostgreSQL parameter limit
+      for (let i = 0; i < sectionValues.length; i += INSERT_BATCH_SIZE) {
+        const batch = sectionValues.slice(i, i + INSERT_BATCH_SIZE);
+        await tx.insert(sections).values(batch);
+      }
       stats.sectionsInserted += doc.sections.length;
     }
 
-    // Batch insert defined terms
+    // Batch insert defined terms (usually small, but batch anyway for consistency)
     if (doc.definedTerms.length > 0) {
       const termValues = doc.definedTerms.map((term) => ({
         language: term.language,
@@ -445,7 +543,11 @@ async function insertDocument(doc: ParsedDocument): Promise<void> {
         scopeRawText: term.scopeRawText,
         limsMetadata: term.limsMetadata,
       }));
-      await tx.insert(definedTerms).values(termValues);
+
+      for (let i = 0; i < termValues.length; i += INSERT_BATCH_SIZE) {
+        const batch = termValues.slice(i, i + INSERT_BATCH_SIZE);
+        await tx.insert(definedTerms).values(batch);
+      }
       stats.definedTermsInserted += doc.definedTerms.length;
     }
 
@@ -460,30 +562,33 @@ async function insertDocument(doc: ParsedDocument): Promise<void> {
         targetSectionRef: ref.targetSectionRef,
         referenceText: ref.referenceText,
       }));
-      await tx.insert(crossReferences).values(refValues);
+
+      for (let i = 0; i < refValues.length; i += INSERT_BATCH_SIZE) {
+        const batch = refValues.slice(i, i + INSERT_BATCH_SIZE);
+        await tx.insert(crossReferences).values(batch);
+      }
       stats.crossReferencesInserted += doc.crossReferences.length;
     }
   });
 }
 
 /**
- * Check if a file should be skipped based on existing data
+ * Check if a file should be skipped based on SQLite progress tracker.
+ * Much faster than querying Postgres for each file.
  */
-async function shouldSkipFile(file: {
+function shouldSkipFile(file: {
   type: LegislationType;
   id: string;
   language: Language;
-}): Promise<boolean> {
+}): boolean {
   if (!skipExisting) {
     return false;
   }
 
-  if (file.type === "act") {
-    return await actExists(file.id, file.language);
-  }
-  // For regulations, we need to normalize the ID from the filename
-  const normalizedId = normalizeRegulationId(file.id);
-  return await regulationExists(normalizedId, file.language);
+  // For regulations, normalize the ID from the filename
+  const id =
+    file.type === "regulation" ? normalizeRegulationId(file.id) : file.id;
+  return fileAlreadyImported(file.type, id, file.language);
 }
 
 /**
@@ -588,9 +693,9 @@ function filterByIds(
 async function truncateLegislationTables() {
   log("Truncating all legislation tables...");
   // Use raw SQL for TRUNCATE CASCADE since Drizzle doesn't support it directly
-  await client`TRUNCATE TABLE legislation.cross_references CASCADE`;
-  await client`TRUNCATE TABLE legislation.defined_terms CASCADE`;
   await client`TRUNCATE TABLE legislation.sections CASCADE`;
+  await client`TRUNCATE TABLE legislation.defined_terms CASCADE`;
+  await client`TRUNCATE TABLE legislation.cross_references CASCADE`;
   await client`TRUNCATE TABLE legislation.regulations CASCADE`;
   await client`TRUNCATE TABLE legislation.acts CASCADE`;
   log("All legislation tables truncated");
@@ -608,6 +713,9 @@ async function main() {
   // Truncate tables if requested
   if (truncateMode && !dryRun) {
     await truncateLegislationTables();
+    // Also clear SQLite progress tracker to stay in sync
+    getProgressTracker().clearAll();
+    log("SQLite progress cache cleared");
   }
 
   // Load lookup.xml metadata for enrichment
@@ -649,8 +757,8 @@ async function main() {
 
   for (const file of files) {
     try {
-      // Check if we should skip this file
-      if (await shouldSkipFile(file)) {
+      // Check if we should skip this file (uses SQLite, no await needed)
+      if (shouldSkipFile(file)) {
         stats.filesSkipped++;
         logVerbose(`Skipping (already exists): ${file.path}`);
         continue;
@@ -662,6 +770,11 @@ async function main() {
       enrichDocumentWithLookup(doc);
       await insertDocument(doc);
 
+      // Mark as imported in SQLite progress tracker
+      const id =
+        file.type === "regulation" ? normalizeRegulationId(file.id) : file.id;
+      markFileImported(file.type, id, file.language);
+
       stats.filesProcessed++;
 
       if (stats.filesProcessed % 10 === 0) {
@@ -671,11 +784,32 @@ async function main() {
       }
     } catch (error) {
       stats.filesFailed++;
-      log(
-        `ERROR processing ${file.path}: ${error instanceof Error ? error.message : String(error)}`
-      );
-      if (verbose && error instanceof Error) {
-        console.error(error.stack);
+      const err = error as Error & { cause?: Error };
+      const cause = err.cause as Record<string, unknown> | undefined;
+      if (cause) {
+        // Log the PostgreSQL error details
+        log(`ERROR processing ${file.path}:`);
+        log(`  Cause keys: ${Object.keys(cause).join(", ")}`);
+        if (cause.code) {
+          log(`  Code: ${cause.code}`);
+        }
+        if (cause.severity) {
+          log(`  Severity: ${cause.severity}`);
+        }
+        if (cause.detail) {
+          log(`  Detail: ${String(cause.detail).slice(0, 300)}`);
+        }
+        if (cause.column) {
+          log(`  Column: ${cause.column}`);
+        }
+        if (cause.constraint) {
+          log(`  Constraint: ${cause.constraint}`);
+        }
+        if (cause.hint) {
+          log(`  Hint: ${cause.hint}`);
+        }
+      } else {
+        log(`ERROR processing ${file.path}: (no cause)`);
       }
     }
   }
@@ -717,10 +851,19 @@ async function main() {
     log(`Term pairs linked: ${stats.termPairsLinked}`);
   }
 
+  // Clean up SQLite connection
+  if (progressTracker) {
+    progressTracker.close();
+  }
+
   process.exit(stats.filesFailed > 0 ? 1 : 0);
 }
 
 main().catch((error) => {
   console.error("Fatal error:", error);
+  // Clean up SQLite connection on error
+  if (progressTracker) {
+    progressTracker.close();
+  }
   process.exit(1);
 });

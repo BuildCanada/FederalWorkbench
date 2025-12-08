@@ -37,23 +37,6 @@ export const EMBEDDING_DIMENSIONS = 1024; // Cohere embed-multilingual-v3.0
 
 const POSTGRES_URL_REGEX = /^postgres(ql)?:\/\/.+/;
 
-// ---------- Term Normalization ----------
-/**
- * Normalize a term for matching, using the same logic as the parser.
- * This matches: term.toLowerCase().replace(/[^\w\s]/g, "")
- *
- * Note: JavaScript's \w only matches ASCII word characters [a-zA-Z0-9_],
- * so accented characters like é, à, ç are stripped entirely.
- * This is intentional for cross-lingual matching (EN "barrier" matches FR "barrière").
- *
- * Used for:
- * - Creating term_normalized in the parser
- * - Matching pairedTerm text to find paired term IDs
- */
-export function normalizeTermForMatching(term: string): string {
-  return term.toLowerCase().replace(/[^\w\s]/g, "");
-}
-
 // ---------- Section Grouping ----------
 /**
  * Group sections by a parent ID field (actId or regulationId) and language for O(1) lookup.

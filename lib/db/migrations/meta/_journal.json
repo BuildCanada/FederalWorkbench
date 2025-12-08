@@ -148,6 +148,41 @@
       "when": 1765152673903,
       "tag": "0020_mixed_mesmero",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1765167590112,
+      "tag": "0021_famous_exiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1765167843773,
+      "tag": "0022_mature_thunderbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1765169064362,
+      "tag": "0023_classy_hairball",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1765169247591,
+      "tag": "0024_moaning_jackal",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1765169565613,
+      "tag": "0025_normal_wallow",
+      "breakpoints": true
     }
   ]
 }

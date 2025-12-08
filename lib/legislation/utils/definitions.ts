@@ -5,6 +5,7 @@ import type {
   ParsedDefinedTerm,
 } from "../types";
 import { extractLimsMetadata } from "./metadata";
+import { normalizeTermForMatching } from "./normalization";
 import { extractTextContent } from "./text";
 
 const AND_SECTIONS_REGEX =
@@ -248,75 +249,95 @@ type ExtractDefinedTermOptions = {
 };
 
 /**
+ * Helper to extract individual term strings from a DefinedTermEn/Fr element or array
+ */
+function extractTermStrings(termEl: unknown): string[] {
+  if (!termEl) {
+    return [];
+  }
+
+  // If it's an array of term elements, extract each one separately
+  if (Array.isArray(termEl)) {
+    return termEl.map((t) => extractTextContent(t)).filter((t) => t.length > 0);
+  }
+
+  // Single term element
+  const text = extractTextContent(termEl);
+  return text ? [text] : [];
+}
+
+/**
  * Extract defined terms from a Definition element
  *
- * Creates ONE ParsedDefinedTerm per call, representing THIS language version.
- * The term in the current language becomes `term`, and the term in the other
- * language (if present) becomes `pairedTerm` for linking.
+ * A single Definition element may contain multiple DefinedTermEn/Fr elements,
+ * e.g., `<DefinedTermEn>every one</DefinedTermEn>, <DefinedTermEn>person</DefinedTermEn>`
+ *
+ * This function returns an ARRAY of ParsedDefinedTerm, one for each term defined.
+ * Terms are paired positionally with their counterparts in the other language.
  */
 export function extractDefinedTermFromDefinition(
   options: ExtractDefinedTermOptions
-): ParsedDefinedTerm | null {
+): ParsedDefinedTerm[] {
   const { defEl, language, actId, regulationId, sectionLabel, scope } = options;
   const textEl = defEl.Text;
   if (!textEl) {
-    return null;
+    return [];
   }
 
   const textObj =
     typeof textEl === "object" ? (textEl as Record<string, unknown>) : {};
 
-  // Extract both language terms from XML
-  // The XML may contain DefinedTermEn and/or DefinedTermFr elements
-  let termEn: string | undefined;
-  if (textObj.DefinedTermEn) {
-    termEn = extractTextContent(textObj.DefinedTermEn);
+  // Extract all terms from both languages (may be multiple per Definition)
+  const termsEn = extractTermStrings(textObj.DefinedTermEn);
+  const termsFr = extractTermStrings(textObj.DefinedTermFr);
+
+  // Determine which terms to use based on document language
+  // The document's language determines the primary terms; the other language provides paired terms
+  const primaryTerms = language === "en" ? termsEn : termsFr;
+  const pairedTerms = language === "en" ? termsFr : termsEn;
+
+  // If no terms in the primary language, fall back to other language
+  const termsToUse = primaryTerms.length > 0 ? primaryTerms : pairedTerms;
+  const pairsToUse = primaryTerms.length > 0 ? pairedTerms : [];
+
+  if (termsToUse.length === 0) {
+    return [];
   }
 
-  let termFr: string | undefined;
-  if (textObj.DefinedTermFr) {
-    termFr = extractTextContent(textObj.DefinedTermFr);
-  }
-
-  // Determine the term for THIS language and the paired term for OTHER language
-  // If the document is English, use DefinedTermEn as term and DefinedTermFr as pairedTerm
-  // If the document is French, use DefinedTermFr as term and DefinedTermEn as pairedTerm
-  let term: string | undefined;
-  let pairedTerm: string | undefined;
-
-  if (language === "en") {
-    term = termEn || termFr; // Fall back to French if English not present
-    pairedTerm = termFr;
-  } else {
-    term = termFr || termEn; // Fall back to English if French not present
-    pairedTerm = termEn;
-  }
-
-  if (!term) {
-    return null;
-  }
-
-  // Full definition text (this is the definition in the current document's language)
+  // Full definition text (shared by all terms in this Definition)
   const definition = extractTextContent(textEl);
 
   // Default scope if not provided
   const defaultScopeType: DefinitionScopeType = actId ? "act" : "regulation";
 
-  // Extract LIMS metadata from the Definition element
+  // Extract LIMS metadata from the Definition element (shared by all terms)
   const limsMetadata = extractLimsMetadata(defEl);
 
-  return {
-    language,
-    term,
-    termNormalized: term.toLowerCase().replace(/[^\w\s]/g, ""),
-    pairedTerm,
-    definition,
-    actId,
-    regulationId,
-    sectionLabel,
-    scopeType: scope?.scopeType || defaultScopeType,
-    scopeSections: scope?.scopeSections,
-    scopeRawText: scope?.scopeRawText,
-    limsMetadata,
-  };
+  // Create a ParsedDefinedTerm for each term
+  // Pair terms positionally (term[0] pairs with pairedTerm[0], etc.)
+  const results: ParsedDefinedTerm[] = [];
+
+  for (let i = 0; i < termsToUse.length; i++) {
+    const term = termsToUse[i];
+    // Pair positionally if available, otherwise use first paired term as fallback
+    const pairedTerm =
+      pairsToUse[i] || (pairsToUse.length === 1 ? pairsToUse[0] : undefined);
+
+    results.push({
+      language,
+      term,
+      termNormalized: normalizeTermForMatching(term),
+      pairedTerm,
+      definition,
+      actId,
+      regulationId,
+      sectionLabel,
+      scopeType: scope?.scopeType || defaultScopeType,
+      scopeSections: scope?.scopeSections,
+      scopeRawText: scope?.scopeRawText,
+      limsMetadata,
+    });
+  }
+
+  return results;
 }

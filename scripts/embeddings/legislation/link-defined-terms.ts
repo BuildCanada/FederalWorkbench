@@ -26,7 +26,52 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
 import { definedTerms } from "@/lib/db/legislation/schema";
-import { normalizeTermForMatching } from "./utilities";
+import {
+  normalizeTermForMatching,
+  translateRegulationId,
+} from "@/lib/legislation/utils/normalization";
+
+/**
+ * Regex to detect if a term contains alternatives (" or " or " ou ")
+ * Placed at module level for performance.
+ */
+const HAS_ALTERNATIVES_REGEX = / (?:or|ou) /i;
+
+/**
+ * Regex to split alternatives: " or ", " ou ", and commas
+ * Only used as fallback when exact match fails.
+ * Placed at module level for performance.
+ */
+const ALTERNATIVES_SPLIT_REGEX = /\s+(?:or|ou)\s+|,\s*/i;
+
+/**
+ * Get alternative terms to try matching.
+ * Returns the full term first, then split alternatives as fallback.
+ *
+ * This handles cases like:
+ * - "voie X or voie Y" → try "voie X or voie Y", then "voie X", then "voie Y"
+ * - "dirigeant ou employé" → try "dirigeant ou employé" first (matches as single term)
+ */
+function getMatchCandidates(pairedTerm: string): string[] {
+  // Skip splitting for "language only" markers
+  if (pairedTerm.includes("Version") || pairedTerm.includes("version only")) {
+    return [pairedTerm];
+  }
+
+  const candidates = [pairedTerm]; // Always try full term first
+
+  // Only try splitting if the term contains " or " or " ou " (not "and")
+  // "and" typically means both parts together, not alternatives
+  if (HAS_ALTERNATIVES_REGEX.test(pairedTerm)) {
+    const parts = pairedTerm
+      .split(ALTERNATIVES_SPLIT_REGEX)
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0 && p !== pairedTerm);
+    candidates.push(...parts);
+  }
+
+  return candidates;
+}
 
 // ---------- CLI args ----------
 const args = process.argv.slice(2);
@@ -127,14 +172,31 @@ export async function linkDefinedTermPairs(
 
     // Determine the target language
     const targetLang = term.language === "en" ? "fr" : "en";
-    const docId = term.actId || term.regulationId || "";
+    const fromLang = term.language as "en" | "fr";
 
-    // Normalize the pairedTerm text using the same logic as term_normalized
-    const normalizedPairedTerm = normalizeTermForMatching(term.pairedTerm);
+    // For acts, the actId is the same across languages
+    // For regulations, we need to translate the regulationId to the target language
+    let docId: string;
+    if (term.actId) {
+      docId = term.actId;
+    } else if (term.regulationId) {
+      docId = translateRegulationId(term.regulationId, fromLang, targetLang);
+    } else {
+      docId = "";
+    }
 
-    // Look up the matching term
-    const lookupKey = `${targetLang}:${docId}:${normalizedPairedTerm}`;
-    const matchedId = termLookup.get(lookupKey);
+    // Try to match the paired term - try exact match first, then alternatives
+    const candidates = getMatchCandidates(term.pairedTerm);
+    let matchedId: string | undefined;
+
+    for (const candidate of candidates) {
+      const normalizedCandidate = normalizeTermForMatching(candidate);
+      const lookupKey = `${targetLang}:${docId}:${normalizedCandidate}`;
+      matchedId = termLookup.get(lookupKey);
+      if (matchedId) {
+        break; // Found a match, stop searching
+      }
+    }
 
     if (matchedId) {
       updates.push({ id: term.id, pairedTermId: matchedId });
@@ -236,9 +298,16 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error("Fatal error:", error);
-  process.exit(1);
-});
+// Only run main() when executed directly, not when imported as a module
+const isDirectExecution =
+  import.meta.url === `file://${process.argv[1]}` ||
+  process.argv[1]?.endsWith("link-defined-terms.ts");
+
+if (isDirectExecution) {
+  main().catch((error) => {
+    console.error("Fatal error:", error);
+    process.exit(1);
+  });
+}
 
 export type { LinkStats };
