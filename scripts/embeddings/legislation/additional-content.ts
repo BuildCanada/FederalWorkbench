@@ -13,6 +13,7 @@ import {
   crossReferences,
   type FootnoteInfo,
   type PreambleProvision,
+  type RegulationPublicationItem,
   type RelatedProvisionInfo,
   regulations,
   type SignatureBlock,
@@ -41,7 +42,7 @@ import {
 /**
  * Build searchable content for a preamble provision.
  */
-function buildPreambleContent(
+export function buildPreambleContent(
   preamble: PreambleProvision,
   _index: number,
   documentTitle: string,
@@ -2106,6 +2107,289 @@ export async function processMarginalNotes(
     console.log(
       `   ⚠️  ${errors.length} sections with marginal notes had errors`
     );
+  }
+
+  return {
+    chunksProcessed: totalInserted,
+    chunksSkipped: totalSkipped,
+    itemsProcessed: totalItems,
+    errors,
+  };
+}
+
+// ---------- Publication Item Processing (Recommendations/Notices) ----------
+
+/**
+ * Build searchable content for a publication item (recommendation or notice).
+ * These are found in regulations and contain important publication metadata.
+ */
+export function buildPublicationItemContent(
+  item: RegulationPublicationItem,
+  _index: number,
+  documentTitle: string,
+  language: "en" | "fr"
+): string {
+  const parts: string[] = [];
+
+  if (language === "fr") {
+    const typeLabel =
+      item.type === "recommendation" ? "Recommandation" : "Avis";
+    parts.push(`${typeLabel} de: ${documentTitle}`);
+    if (item.publicationRequirement) {
+      const reqLabel =
+        item.publicationRequirement === "STATUTORY"
+          ? "Exigence légale"
+          : "Exigence administrative";
+      parts.push(`Type de publication: ${reqLabel}`);
+    }
+    if (item.sourceSections?.length) {
+      parts.push(`Articles sources: ${item.sourceSections.join(", ")}`);
+    }
+    parts.push(`\n${item.content}`);
+  } else {
+    const typeLabel =
+      item.type === "recommendation" ? "Recommendation" : "Notice";
+    parts.push(`${typeLabel} from: ${documentTitle}`);
+    if (item.publicationRequirement) {
+      const reqLabel =
+        item.publicationRequirement === "STATUTORY"
+          ? "Statutory requirement"
+          : "Administrative requirement";
+      parts.push(`Publication type: ${reqLabel}`);
+    }
+    if (item.sourceSections?.length) {
+      parts.push(`Source sections: ${item.sourceSections.join(", ")}`);
+    }
+    parts.push(`\n${item.content}`);
+  }
+
+  return parts.join("\n");
+}
+
+/**
+ * Process publication items (recommendations and notices) from regulations.
+ * These are important blocks that contain regulatory impact statements,
+ * consultation summaries, and administrative notices.
+ */
+export async function processPublicationItems(
+  options: ProcessOptions
+): Promise<ProcessResult> {
+  const { db, progressTracker, limit, dryRun, skipExisting } = options;
+
+  console.log("• Processing publication items (recommendations/notices)...");
+
+  if (skipExisting) {
+    await ensureProgressSynced(db, progressTracker, "publication_item");
+  }
+
+  let totalInserted = 0;
+  let totalSkipped = 0;
+  let totalItems = 0;
+  const errors: ProcessError[] = [];
+
+  // Process recommendations
+  const [{ count: recCount }] = await db
+    .select({ count: count() })
+    .from(regulations)
+    .where(
+      sql`${regulations.recommendations} IS NOT NULL AND jsonb_array_length(${regulations.recommendations}) > 0`
+    );
+
+  const recLimit = limit ? Math.min(limit, recCount) : recCount;
+  console.log(`   Found ${recLimit} regulations with recommendations`);
+
+  for (let offset = 0; offset < recLimit; offset += DB_FETCH_BATCH_SIZE) {
+    const batchLimit = Math.min(DB_FETCH_BATCH_SIZE, recLimit - offset);
+    const batchNum = Math.floor(offset / DB_FETCH_BATCH_SIZE) + 1;
+    const totalBatches = Math.ceil(recLimit / DB_FETCH_BATCH_SIZE);
+    console.log(
+      `   📥 Fetching recommendations batch ${batchNum}/${totalBatches}...`
+    );
+
+    const batchRegs = await db
+      .select()
+      .from(regulations)
+      .where(
+        sql`${regulations.recommendations} IS NOT NULL AND jsonb_array_length(${regulations.recommendations}) > 0`
+      )
+      .orderBy(regulations.regulationId)
+      .limit(batchLimit)
+      .offset(offset);
+
+    const batchChunks: ChunkData[] = [];
+
+    for (const reg of batchRegs) {
+      const lang = validateLanguage(reg.language);
+      if (!lang) {
+        errors.push({
+          itemType: "publication_item",
+          itemId: `reg:${reg.regulationId}:recommendations`,
+          message: `Invalid language "${reg.language}"`,
+          retryable: false,
+        });
+        continue;
+      }
+
+      const recommendations = reg.recommendations ?? [];
+      for (let i = 0; i < recommendations.length; i++) {
+        const item = recommendations[i];
+        logProgress(offset + totalItems + 1, recLimit, "Recommendations");
+
+        const resourceKey = buildResourceKey(
+          "publication_item",
+          `rec:${reg.regulationId}:${i}`,
+          lang,
+          0
+        );
+        const pairedKey = buildPairedResourceKey(
+          "publication_item",
+          `rec:${reg.regulationId}:${i}`,
+          lang,
+          0
+        );
+
+        batchChunks.push({
+          content: buildPublicationItemContent(item, i, reg.title, lang),
+          chunkIndex: 0,
+          totalChunks: 1,
+          resourceKey,
+          metadata: {
+            sourceType: "publication_item",
+            language: lang,
+            regulationId: reg.regulationId,
+            documentTitle: reg.title,
+            publicationType: "recommendation",
+            publicationRequirement: item.publicationRequirement,
+            publicationSourceSections: item.sourceSections,
+            publicationIndex: i,
+            chunkIndex: 0,
+            pairedResourceKey: pairedKey,
+          },
+        });
+      }
+      totalItems++;
+    }
+
+    const { newChunks, skipped } = filterNewChunks(
+      batchChunks,
+      progressTracker,
+      skipExisting
+    );
+    const inserted = await insertChunksBatched({
+      db,
+      chunks: newChunks,
+      progressTracker,
+      label: `recommendations batch ${batchNum}`,
+      dryRun,
+    });
+
+    totalInserted += inserted;
+    totalSkipped += skipped;
+  }
+
+  // Process notices
+  const [{ count: noticeCount }] = await db
+    .select({ count: count() })
+    .from(regulations)
+    .where(
+      sql`${regulations.notices} IS NOT NULL AND jsonb_array_length(${regulations.notices}) > 0`
+    );
+
+  const noticeLimit = limit ? Math.min(limit, noticeCount) : noticeCount;
+  console.log(`   Found ${noticeLimit} regulations with notices`);
+
+  for (let offset = 0; offset < noticeLimit; offset += DB_FETCH_BATCH_SIZE) {
+    const batchLimit = Math.min(DB_FETCH_BATCH_SIZE, noticeLimit - offset);
+    const batchNum = Math.floor(offset / DB_FETCH_BATCH_SIZE) + 1;
+    const totalBatches = Math.ceil(noticeLimit / DB_FETCH_BATCH_SIZE);
+    console.log(`   📥 Fetching notices batch ${batchNum}/${totalBatches}...`);
+
+    const batchRegs = await db
+      .select()
+      .from(regulations)
+      .where(
+        sql`${regulations.notices} IS NOT NULL AND jsonb_array_length(${regulations.notices}) > 0`
+      )
+      .orderBy(regulations.regulationId)
+      .limit(batchLimit)
+      .offset(offset);
+
+    const batchChunks: ChunkData[] = [];
+
+    for (const reg of batchRegs) {
+      const lang = validateLanguage(reg.language);
+      if (!lang) {
+        errors.push({
+          itemType: "publication_item",
+          itemId: `reg:${reg.regulationId}:notices`,
+          message: `Invalid language "${reg.language}"`,
+          retryable: false,
+        });
+        continue;
+      }
+
+      const notices = reg.notices ?? [];
+      for (let i = 0; i < notices.length; i++) {
+        const item = notices[i];
+        logProgress(offset + totalItems + 1, noticeLimit, "Notices");
+
+        const resourceKey = buildResourceKey(
+          "publication_item",
+          `notice:${reg.regulationId}:${i}`,
+          lang,
+          0
+        );
+        const pairedKey = buildPairedResourceKey(
+          "publication_item",
+          `notice:${reg.regulationId}:${i}`,
+          lang,
+          0
+        );
+
+        batchChunks.push({
+          content: buildPublicationItemContent(item, i, reg.title, lang),
+          chunkIndex: 0,
+          totalChunks: 1,
+          resourceKey,
+          metadata: {
+            sourceType: "publication_item",
+            language: lang,
+            regulationId: reg.regulationId,
+            documentTitle: reg.title,
+            publicationType: "notice",
+            publicationRequirement: item.publicationRequirement,
+            publicationSourceSections: item.sourceSections,
+            publicationIndex: i,
+            chunkIndex: 0,
+            pairedResourceKey: pairedKey,
+          },
+        });
+      }
+      totalItems++;
+    }
+
+    const { newChunks, skipped } = filterNewChunks(
+      batchChunks,
+      progressTracker,
+      skipExisting
+    );
+    const inserted = await insertChunksBatched({
+      db,
+      chunks: newChunks,
+      progressTracker,
+      label: `notices batch ${batchNum}`,
+      dryRun,
+    });
+
+    totalInserted += inserted;
+    totalSkipped += skipped;
+  }
+
+  console.log(
+    `   ↳ Publication Items: ${totalInserted} chunks embedded (${totalSkipped} skipped)`
+  );
+  if (errors.length > 0) {
+    console.log(`   ⚠️  ${errors.length} publication items had errors`);
   }
 
   return {

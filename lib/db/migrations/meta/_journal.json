@@ -183,6 +183,13 @@
       "when": 1765169565613,
       "tag": "0025_normal_wallow",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1765227051085,
+      "tag": "0026_lucky_living_tribunal",
+      "breakpoints": true
     }
   ]
 }

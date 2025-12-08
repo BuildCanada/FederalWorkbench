@@ -17,7 +17,9 @@ import type {
   Act,
   ContentFlags,
   DefinedTerm,
+  PreambleProvision,
   Regulation,
+  RegulationPublicationItem,
   Section,
 } from "@/lib/db/legislation/schema";
 import {
@@ -49,6 +51,8 @@ import {
   buildCrossRefContentFr,
   buildFootnoteContent,
   buildMarginalNoteContent,
+  buildPreambleContent,
+  buildPublicationItemContent,
   buildRelatedProvisionContent,
 } from "@/scripts/embeddings/legislation/additional-content";
 import { buildTermContent } from "@/scripts/embeddings/legislation/defined-terms";
@@ -581,6 +585,35 @@ test.describe("buildActMetadataText", () => {
     expect(text).toContain("Titre abrégé: Code criminel");
   });
 
+  test("includes reversedShortTitle in English", () => {
+    const act = createMockAct({
+      reversedShortTitle: "Code, Criminal",
+    });
+    const text = buildActMetadataText(act);
+
+    expect(text).toContain("Alphabetical Index: Code, Criminal");
+  });
+
+  test("includes reversedShortTitle in French", () => {
+    const act = createMockAct({
+      language: "fr",
+      reversedShortTitle: "Code criminel",
+    });
+    const text = buildActMetadataText(act);
+
+    expect(text).toContain("Index alphabétique: Code criminel");
+  });
+
+  test("omits reversedShortTitle when null", () => {
+    const act = createMockAct({
+      reversedShortTitle: null,
+    });
+    const text = buildActMetadataText(act);
+
+    expect(text).not.toContain("Alphabetical Index");
+    expect(text).not.toContain("Index alphabétique");
+  });
+
   test("includes billType in English", () => {
     const act = createMockAct({
       billType: "govt-public",
@@ -811,6 +844,102 @@ test.describe("buildActMetadataText", () => {
     expect(text).not.toContain("Recent Amendments");
     expect(text).not.toContain("Modifications récentes");
   });
+
+  test("includes shortTitleStatus official in English", () => {
+    const act = createMockAct({
+      shortTitleStatus: "official",
+    });
+    const text = buildActMetadataText(act);
+
+    expect(text).toContain("Short Title Status: official");
+  });
+
+  test("includes shortTitleStatus unofficial in English", () => {
+    const act = createMockAct({
+      shortTitleStatus: "unofficial",
+    });
+    const text = buildActMetadataText(act);
+
+    expect(text).toContain("Short Title Status: unofficial");
+  });
+
+  test("includes shortTitleStatus official in French", () => {
+    const act = createMockAct({
+      language: "fr",
+      shortTitleStatus: "official",
+    });
+    const text = buildActMetadataText(act);
+
+    expect(text).toContain("Statut du titre abrégé: officiel");
+  });
+
+  test("includes shortTitleStatus unofficial in French", () => {
+    const act = createMockAct({
+      language: "fr",
+      shortTitleStatus: "unofficial",
+    });
+    const text = buildActMetadataText(act);
+
+    expect(text).toContain("Statut du titre abrégé: non officiel");
+  });
+
+  test("omits shortTitleStatus when null", () => {
+    const act = createMockAct({
+      shortTitleStatus: null,
+    });
+    const text = buildActMetadataText(act);
+
+    expect(text).not.toContain("Short Title Status");
+    expect(text).not.toContain("Statut du titre abrégé");
+  });
+
+  test("includes consolidatedNumberOfficial yes in English", () => {
+    const act = createMockAct({
+      consolidatedNumberOfficial: "yes",
+    });
+    const text = buildActMetadataText(act);
+
+    expect(text).toContain("Consolidated Number Official: yes");
+  });
+
+  test("includes consolidatedNumberOfficial no in English", () => {
+    const act = createMockAct({
+      consolidatedNumberOfficial: "no",
+    });
+    const text = buildActMetadataText(act);
+
+    expect(text).toContain("Consolidated Number Official: no");
+  });
+
+  test("includes consolidatedNumberOfficial yes in French", () => {
+    const act = createMockAct({
+      language: "fr",
+      consolidatedNumberOfficial: "yes",
+    });
+    const text = buildActMetadataText(act);
+
+    expect(text).toContain("Numéro de consolidation officiel: oui");
+  });
+
+  test("includes consolidatedNumberOfficial no in French", () => {
+    const act = createMockAct({
+      language: "fr",
+      consolidatedNumberOfficial: "no",
+    });
+    const text = buildActMetadataText(act);
+
+    expect(text).toContain("Numéro de consolidation officiel: non");
+  });
+
+  test("omits consolidatedNumberOfficial when null", () => {
+    const act = createMockAct({
+      consolidatedNumberOfficial: null,
+    });
+    const text = buildActMetadataText(act);
+
+    expect(text).not.toContain("Consolidated Number Official");
+    expect(text).not.toContain("Numéro de consolidation officiel");
+  });
 });
 
 test.describe("buildRegulationMetadataText", () => {
@@ -902,6 +1031,39 @@ test.describe("buildRegulationMetadataText", () => {
     expect(text).not.toContain("Consolidation");
     // instrumentNumber is always present since it's required
     expect(text).toContain("Instrument Number");
+  });
+
+  test("includes reversedShortTitle in English", () => {
+    const reg = createMockRegulation({
+      reversedShortTitle: "Insurance Regulations, Employment",
+    });
+    const text = buildRegulationMetadataText(reg);
+
+    expect(text).toContain(
+      "Alphabetical Index: Insurance Regulations, Employment"
+    );
+  });
+
+  test("includes reversedShortTitle in French", () => {
+    const reg = createMockRegulation({
+      language: "fr",
+      reversedShortTitle: "Règlement sur l'assurance-emploi",
+    });
+    const text = buildRegulationMetadataText(reg);
+
+    expect(text).toContain(
+      "Index alphabétique: Règlement sur l'assurance-emploi"
+    );
+  });
+
+  test("omits reversedShortTitle when null", () => {
+    const reg = createMockRegulation({
+      reversedShortTitle: null,
+    });
+    const text = buildRegulationMetadataText(reg);
+
+    expect(text).not.toContain("Alphabetical Index");
+    expect(text).not.toContain("Index alphabétique");
   });
 
   test("handles single enabling authority from array", () => {
@@ -2031,6 +2193,106 @@ test.describe("buildRelatedProvisionContent", () => {
   });
 });
 
+// ---------- Preamble Content Tests ----------
+// NOTE: Preambles are only found on Acts, not Regulations.
+// The database schema (lib/db/legislation/schema.ts) defines preamble only on the acts table.
+// Regulations have different supplementary content (recommendations/notices) instead of preambles.
+
+test.describe("buildPreambleContent", () => {
+  test("builds English preamble content correctly", () => {
+    const preamble: PreambleProvision = {
+      text: "Whereas Canada is founded upon principles that recognize the supremacy of God and the rule of law;",
+      marginalNote: "Preamble",
+    };
+    const content = buildPreambleContent(
+      preamble,
+      0,
+      "Constitution Act, 1982",
+      "en"
+    );
+
+    expect(content).toContain("Preamble of: Constitution Act, 1982");
+    expect(content).toContain("Note: Preamble");
+    expect(content).toContain(
+      "Whereas Canada is founded upon principles that recognize the supremacy of God and the rule of law;"
+    );
+  });
+
+  test("builds French preamble content correctly", () => {
+    const preamble: PreambleProvision = {
+      text: "Attendu que le Canada est fondé sur des principes qui reconnaissent la suprématie de Dieu et la primauté du droit;",
+      marginalNote: "Préambule",
+    };
+    const content = buildPreambleContent(
+      preamble,
+      0,
+      "Loi constitutionnelle de 1982",
+      "fr"
+    );
+
+    expect(content).toContain("Préambule de: Loi constitutionnelle de 1982");
+    expect(content).toContain("Note: Préambule");
+    expect(content).toContain(
+      "Attendu que le Canada est fondé sur des principes qui reconnaissent la suprématie de Dieu et la primauté du droit;"
+    );
+  });
+
+  test("handles preamble without marginal note", () => {
+    const preamble: PreambleProvision = {
+      text: "His Majesty, by and with the advice and consent of the Senate and House of Commons of Canada, enacts as follows:",
+    };
+    const content = buildPreambleContent(preamble, 0, "Criminal Code", "en");
+
+    expect(content).toContain("Preamble of: Criminal Code");
+    expect(content).not.toContain("Note:");
+    expect(content).toContain(
+      "His Majesty, by and with the advice and consent of the Senate and House of Commons of Canada, enacts as follows:"
+    );
+  });
+
+  test("handles multiple preamble provisions with index", () => {
+    const preamble1: PreambleProvision = {
+      text: "Whereas the Parliament of Canada recognizes the importance of access to justice;",
+      marginalNote: "Access to Justice",
+    };
+    const preamble2: PreambleProvision = {
+      text: "And whereas all persons should have equal access to the courts;",
+      marginalNote: "Equality",
+    };
+
+    const content1 = buildPreambleContent(
+      preamble1,
+      0,
+      "Access to Justice Act",
+      "en"
+    );
+    const content2 = buildPreambleContent(
+      preamble2,
+      1,
+      "Access to Justice Act",
+      "en"
+    );
+
+    expect(content1).toContain("Preamble of: Access to Justice Act");
+    expect(content1).toContain("Note: Access to Justice");
+    expect(content2).toContain("Preamble of: Access to Justice Act");
+    expect(content2).toContain("Note: Equality");
+  });
+
+  test("builds French preamble without marginal note", () => {
+    const preamble: PreambleProvision = {
+      text: "Sa Majesté, sur l'avis et avec le consentement du Sénat et de la Chambre des communes du Canada, édicte:",
+    };
+    const content = buildPreambleContent(preamble, 0, "Code criminel", "fr");
+
+    expect(content).toContain("Préambule de: Code criminel");
+    expect(content).not.toContain("Note:");
+    expect(content).toContain(
+      "Sa Majesté, sur l'avis et avec le consentement du Sénat et de la Chambre des communes du Canada, édicte:"
+    );
+  });
+});
+
 test.describe("buildFootnoteContent", () => {
   test("builds English footnote content correctly", () => {
     const footnote = {
@@ -3153,6 +3415,7 @@ test.describe("chunkSection with schedule metadata", () => {
     expect(section.scheduleId).toBe("schedule-I");
     expect(section.scheduleBilingual).toBe("yes");
     expect(section.scheduleSpanLanguages).toBe("no");
+    expect(section.scheduleOriginatingRef).toBe("(Section 2)");
   });
 
   test("schedule sections can be chunked like regular sections", () => {
@@ -3383,6 +3646,606 @@ test.describe("sectionRole metadata field", () => {
       };
       expect(metadata.sectionRole).toBe(expectedRole);
     }
+  });
+});
+
+// ---------- amendmentTarget Tests ----------
+
+test.describe("amendmentTarget metadata field", () => {
+  test("LegResourceMetadata accepts amendmentTarget for amending sections", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "en",
+      documentTitle: "Budget Implementation Act, 2024",
+      actId: "2024-c-15",
+      sectionId: "amending-section-123",
+      sectionLabel: "45",
+      sectionRole: "amending",
+      amendmentTarget: "sec123",
+    };
+
+    expect(metadata.amendmentTarget).toBe("sec123");
+    expect(metadata.sectionRole).toBe("amending");
+  });
+
+  test("amendmentTarget with section reference for Criminal Code amendment", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "en",
+      documentTitle: "Criminal Law Amendment Act, 2024",
+      actId: "2024-c-10",
+      sectionId: "section-501",
+      sectionLabel: "501",
+      sectionRole: "amending",
+      amendmentTarget: "C-46-sec264", // Reference to Criminal Code section 264
+    };
+
+    expect(metadata.amendmentTarget).toBe("C-46-sec264");
+  });
+
+  test("amendmentTarget with long reference for multiple section amendments", () => {
+    // xmlTarget can be long text for amendments affecting multiple sections
+    const longTarget =
+      "C-46-sec-2,C-46-sec-3,C-46-sec-5(a),C-46-sec-5(b),C-46-schedule-I";
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "en",
+      documentTitle: "Omnibus Crime Bill",
+      sectionRole: "amending",
+      amendmentTarget: longTarget,
+    };
+
+    expect(metadata.amendmentTarget).toBe(longTarget);
+  });
+
+  test("amendmentTarget for regulation section", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "regulation_section",
+      language: "en",
+      documentTitle: "Regulatory Amendment Regulations",
+      regulationId: "SOR-2024-100",
+      sectionId: "amend-section-1",
+      sectionLabel: "1",
+      sectionRole: "amending",
+      amendmentTarget: "SOR-86-946-sec5", // Reference to target regulation section
+    };
+
+    expect(metadata.amendmentTarget).toBe("SOR-86-946-sec5");
+    expect(metadata.sourceType).toBe("regulation_section");
+  });
+
+  test("amendmentTarget undefined for non-amending sections", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "en",
+      documentTitle: "Criminal Code",
+      actId: "C-46",
+      sectionLabel: "264",
+      sectionType: "section",
+      // No amendmentTarget for regular sections
+    };
+
+    expect(metadata.amendmentTarget).toBeUndefined();
+  });
+
+  test("amendmentTarget with CIF section type", () => {
+    // Coming-into-force sections may have targets
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "en",
+      documentTitle: "Budget Implementation Act, 2024",
+      sectionLabel: "200",
+      sectionRole: "CIF",
+      amendmentTarget: "sec5-sec50", // CIF provision targeting sections 5-50
+    };
+
+    expect(metadata.sectionRole).toBe("CIF");
+    expect(metadata.amendmentTarget).toBe("sec5-sec50");
+  });
+
+  test("amendmentTarget for French legislation", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "fr",
+      documentTitle: "Loi d'exécution du budget de 2024",
+      sectionRole: "amending",
+      amendmentTarget: "C-46-art264", // French uses "art" for article
+    };
+
+    expect(metadata.language).toBe("fr");
+    expect(metadata.amendmentTarget).toBe("C-46-art264");
+  });
+
+  test("section with both sectionRole and amendmentTarget in embeddings", () => {
+    // Documents the mapping from sections.xmlType to sectionRole and
+    // sections.xmlTarget to amendmentTarget
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "en",
+      documentTitle: "Test Amending Act",
+      actId: "2024-c-1",
+      sectionId: "sec-amend-1",
+      sectionLabel: "1",
+      sectionRole: "amending", // xmlType -> sectionRole
+      amendmentTarget: "A-1-sec5", // xmlTarget -> amendmentTarget
+      marginalNote: "Amendment of Access to Information Act",
+    };
+
+    expect(metadata.sectionRole).toBe("amending");
+    expect(metadata.amendmentTarget).toBe("A-1-sec5");
+    expect(metadata.marginalNote).toBe(
+      "Amendment of Access to Information Act"
+    );
+  });
+});
+
+// ---------- internalReferences Tests ----------
+
+test.describe("internalReferences metadata field", () => {
+  test("LegResourceMetadata accepts internalReferences array", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "en",
+      documentTitle: "Criminal Code",
+      actId: "C-46",
+      sectionId: "section-123",
+      sectionLabel: "264",
+      internalReferences: [
+        {
+          targetLabel: "2",
+          targetId: "section-2",
+          referenceText: "section 2",
+        },
+      ],
+    };
+
+    expect(metadata.internalReferences).toHaveLength(1);
+    expect(metadata.internalReferences?.[0].targetLabel).toBe("2");
+    expect(metadata.internalReferences?.[0].targetId).toBe("section-2");
+    expect(metadata.internalReferences?.[0].referenceText).toBe("section 2");
+  });
+
+  test("LegResourceMetadata accepts multiple internal references", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "en",
+      documentTitle: "Income Tax Act",
+      actId: "I-3.3",
+      sectionId: "section-248",
+      sectionLabel: "248",
+      internalReferences: [
+        {
+          targetLabel: "12",
+          referenceText: "section 12",
+        },
+        {
+          targetLabel: "13",
+          targetId: "section-13",
+          referenceText: "section 13",
+        },
+        {
+          targetLabel: "Schedule I",
+          targetId: "schedule-I",
+          referenceText: "Schedule I",
+        },
+      ],
+    };
+
+    expect(metadata.internalReferences).toHaveLength(3);
+    expect(metadata.internalReferences?.[0].targetLabel).toBe("12");
+    expect(metadata.internalReferences?.[1].targetId).toBe("section-13");
+    expect(metadata.internalReferences?.[2].referenceText).toBe("Schedule I");
+  });
+
+  test("internalReferences with only required targetLabel field", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "en",
+      documentTitle: "Test Act",
+      internalReferences: [
+        {
+          targetLabel: "5",
+        },
+      ],
+    };
+
+    expect(metadata.internalReferences).toHaveLength(1);
+    expect(metadata.internalReferences?.[0].targetLabel).toBe("5");
+    expect(metadata.internalReferences?.[0].targetId).toBeUndefined();
+    expect(metadata.internalReferences?.[0].referenceText).toBeUndefined();
+  });
+
+  test("internalReferences can be combined with other section metadata", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "regulation_section",
+      language: "fr",
+      documentTitle: "Règlement sur les aliments et drogues",
+      regulationId: "CRC-c-870",
+      sectionId: "section-A.01.001",
+      sectionLabel: "A.01.001",
+      sectionStatus: "in-force",
+      sectionType: "section",
+      sectionRole: "normal",
+      hierarchyPath: ["Partie A", "Titre 1"],
+      internalReferences: [
+        {
+          targetLabel: "B.01.001",
+          targetId: "section-B.01.001",
+          referenceText: "article B.01.001",
+        },
+      ],
+      contentFlags: {
+        hasTable: true,
+      },
+    };
+
+    expect(metadata.internalReferences).toHaveLength(1);
+    expect(metadata.sectionRole).toBe("normal");
+    expect(metadata.hierarchyPath).toEqual(["Partie A", "Titre 1"]);
+    expect(metadata.contentFlags?.hasTable).toBe(true);
+  });
+
+  test("internalReferences undefined when section has no cross-references", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "en",
+      documentTitle: "Test Act",
+      sectionLabel: "1",
+      // No internalReferences field
+    };
+
+    expect(metadata.internalReferences).toBeUndefined();
+  });
+
+  test("internalReferences empty array is valid", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "en",
+      documentTitle: "Test Act",
+      internalReferences: [],
+    };
+
+    expect(metadata.internalReferences).toHaveLength(0);
+  });
+
+  test("internalReferences for schedule sections referencing main body", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "schedule",
+      language: "en",
+      documentTitle: "Controlled Drugs and Substances Act",
+      actId: "C-38.8",
+      sectionId: "schedule-I-item-1",
+      sectionLabel: "1",
+      sectionType: "schedule",
+      scheduleId: "schedule-I",
+      scheduleBilingual: "yes",
+      internalReferences: [
+        {
+          targetLabel: "2",
+          targetId: "section-2",
+          referenceText: "subsection 2(1)",
+        },
+        {
+          targetLabel: "4",
+          targetId: "section-4",
+          referenceText: "section 4",
+        },
+      ],
+    };
+
+    expect(metadata.sourceType).toBe("schedule");
+    expect(metadata.scheduleId).toBe("schedule-I");
+    expect(metadata.internalReferences).toHaveLength(2);
+    expect(metadata.internalReferences?.[0].referenceText).toBe(
+      "subsection 2(1)"
+    );
+  });
+});
+
+// ---------- scheduleOriginatingRef Tests ----------
+
+test.describe("scheduleOriginatingRef metadata field", () => {
+  test("LegResourceMetadata accepts scheduleOriginatingRef string", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "schedule",
+      language: "en",
+      documentTitle: "Controlled Drugs and Substances Act",
+      actId: "C-38.8",
+      sectionId: "schedule-I-item-1",
+      sectionLabel: "Schedule I",
+      sectionType: "schedule",
+      scheduleId: "schedule-I",
+      scheduleOriginatingRef: "(Section 2)",
+    };
+
+    expect(metadata.scheduleOriginatingRef).toBe("(Section 2)");
+  });
+
+  test("scheduleOriginatingRef accepts long multi-paragraph references", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "schedule",
+      language: "en",
+      documentTitle: "Income Tax Act",
+      actId: "I-3.3",
+      sectionId: "schedule-I-entry",
+      sectionLabel: "Schedule I",
+      sectionType: "schedule",
+      scheduleId: "schedule-I",
+      scheduleOriginatingRef:
+        "(Paragraphs 56(1)(a) and (c), subparagraph 60(m)(i), paragraphs 81(1)(h), (i), (s) and (s.1) and 110(1)(f), subparagraph 115(2)(e)(i), paragraph 118.1(1)(a), the definitions exempt income and personal trust in subsection 248(1) and subsection 248(25))",
+    };
+
+    expect(metadata.scheduleOriginatingRef).toContain(
+      "Paragraphs 56(1)(a) and (c)"
+    );
+    expect(metadata.scheduleOriginatingRef).toContain("subparagraph 60(m)(i)");
+    expect(metadata.scheduleOriginatingRef).toContain("subsection 248(25)");
+  });
+
+  test("scheduleOriginatingRef for French language schedule", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "schedule",
+      language: "fr",
+      documentTitle: "Loi réglementant certaines drogues et autres substances",
+      actId: "C-38.8",
+      sectionId: "annexe-I-item-1",
+      sectionLabel: "Annexe I",
+      sectionType: "schedule",
+      scheduleId: "schedule-I",
+      scheduleOriginatingRef: "(article 2)",
+    };
+
+    expect(metadata.scheduleOriginatingRef).toBe("(article 2)");
+    expect(metadata.language).toBe("fr");
+  });
+
+  test("scheduleOriginatingRef can be combined with other schedule metadata", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "schedule",
+      language: "en",
+      documentTitle: "Controlled Drugs and Substances Act",
+      actId: "C-38.8",
+      sectionId: "schedule-I-item-1",
+      sectionType: "schedule",
+      scheduleId: "schedule-I",
+      scheduleBilingual: "yes",
+      scheduleSpanLanguages: "no",
+      scheduleOriginatingRef: "(Section 2)",
+      internalReferences: [
+        {
+          targetLabel: "2",
+          targetId: "section-2",
+          referenceText: "section 2",
+        },
+      ],
+      contentFlags: {
+        hasTable: true,
+      },
+    };
+
+    expect(metadata.scheduleId).toBe("schedule-I");
+    expect(metadata.scheduleBilingual).toBe("yes");
+    expect(metadata.scheduleSpanLanguages).toBe("no");
+    expect(metadata.scheduleOriginatingRef).toBe("(Section 2)");
+    expect(metadata.internalReferences).toHaveLength(1);
+    expect(metadata.contentFlags?.hasTable).toBe(true);
+  });
+
+  test("scheduleOriginatingRef undefined for non-schedule sections", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "en",
+      documentTitle: "Criminal Code",
+      actId: "C-46",
+      sectionLabel: "264",
+      sectionType: "section",
+      // No scheduleOriginatingRef for regular sections
+    };
+
+    expect(metadata.scheduleOriginatingRef).toBeUndefined();
+  });
+
+  test("scheduleOriginatingRef for regulation schedule", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "schedule",
+      language: "en",
+      documentTitle: "Food and Drug Regulations",
+      regulationId: "CRC-c-870",
+      sectionId: "schedule-A-item-1",
+      sectionLabel: "Schedule A",
+      sectionType: "schedule",
+      scheduleId: "schedule-A",
+      scheduleOriginatingRef: "(Section A.01.001)",
+    };
+
+    expect(metadata.sourceType).toBe("schedule");
+    expect(metadata.regulationId).toBe("CRC-c-870");
+    expect(metadata.scheduleOriginatingRef).toBe("(Section A.01.001)");
+  });
+
+  test("scheduleOriginatingRef without parentheses is valid", () => {
+    // Some older legislation may not have parentheses around the reference
+    const metadata: LegResourceMetadata = {
+      sourceType: "schedule",
+      language: "en",
+      documentTitle: "Test Act",
+      sectionType: "schedule",
+      scheduleOriginatingRef: "Section 5",
+    };
+
+    expect(metadata.scheduleOriginatingRef).toBe("Section 5");
+  });
+});
+
+// ---------- provisionHeading Tests ----------
+
+test.describe("provisionHeading metadata field", () => {
+  test("LegResourceMetadata accepts provisionHeading object", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "schedule",
+      language: "en",
+      documentTitle: "United Nations Convention against Torture",
+      actId: "C-36",
+      sectionId: "schedule-provision-1",
+      sectionLabel: "Article 1",
+      sectionType: "schedule",
+      scheduleId: "schedule-treaty",
+      provisionHeading: {
+        text: "Definition of Torture",
+        formatRef: "article-heading",
+      },
+    };
+
+    expect(metadata.provisionHeading).toBeDefined();
+    expect(metadata.provisionHeading?.text).toBe("Definition of Torture");
+    expect(metadata.provisionHeading?.formatRef).toBe("article-heading");
+  });
+
+  test("provisionHeading with only required text field", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "schedule",
+      language: "en",
+      documentTitle: "Test Act",
+      provisionHeading: {
+        text: "Heading Text Only",
+      },
+    };
+
+    expect(metadata.provisionHeading?.text).toBe("Heading Text Only");
+    expect(metadata.provisionHeading?.formatRef).toBeUndefined();
+    expect(metadata.provisionHeading?.limsMetadata).toBeUndefined();
+  });
+
+  test("provisionHeading with all fields including limsMetadata", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "schedule",
+      language: "en",
+      documentTitle: "Convention on the Rights of the Child",
+      actId: "C-12",
+      sectionType: "schedule",
+      provisionHeading: {
+        text: "Preamble",
+        formatRef: "preamble-heading",
+        limsMetadata: {
+          enactedDate: "1989-11-20",
+          inForceStartDate: "1990-01-01",
+        },
+      },
+    };
+
+    expect(metadata.provisionHeading?.text).toBe("Preamble");
+    expect(metadata.provisionHeading?.formatRef).toBe("preamble-heading");
+    expect(metadata.provisionHeading?.limsMetadata?.enactedDate).toBe(
+      "1989-11-20"
+    );
+  });
+
+  test("provisionHeading for French language treaty", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "schedule",
+      language: "fr",
+      documentTitle: "Convention contre la torture",
+      actId: "C-36",
+      sectionId: "annexe-provision-1",
+      sectionLabel: "Article premier",
+      sectionType: "schedule",
+      scheduleId: "schedule-treaty",
+      provisionHeading: {
+        text: "Définition de la torture",
+        formatRef: "article-heading",
+      },
+    };
+
+    expect(metadata.language).toBe("fr");
+    expect(metadata.provisionHeading?.text).toBe("Définition de la torture");
+  });
+
+  test("provisionHeading can be combined with other schedule metadata", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "schedule",
+      language: "en",
+      documentTitle: "International Treaty Implementation Act",
+      actId: "I-123",
+      sectionId: "schedule-article-5",
+      sectionLabel: "Article 5",
+      sectionType: "schedule",
+      scheduleId: "schedule-I",
+      scheduleBilingual: "yes",
+      scheduleSpanLanguages: "no",
+      scheduleOriginatingRef: "(Section 2)",
+      provisionHeading: {
+        text: "Obligations of State Parties",
+        formatRef: "article-heading",
+      },
+      internalReferences: [
+        {
+          targetLabel: "2",
+          targetId: "section-2",
+          referenceText: "section 2",
+        },
+      ],
+    };
+
+    expect(metadata.scheduleId).toBe("schedule-I");
+    expect(metadata.scheduleBilingual).toBe("yes");
+    expect(metadata.scheduleOriginatingRef).toBe("(Section 2)");
+    expect(metadata.provisionHeading?.text).toBe(
+      "Obligations of State Parties"
+    );
+    expect(metadata.internalReferences).toHaveLength(1);
+  });
+
+  test("provisionHeading undefined for regular sections", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "en",
+      documentTitle: "Criminal Code",
+      actId: "C-46",
+      sectionLabel: "264",
+      sectionType: "section",
+      // No provisionHeading for regular sections
+    };
+
+    expect(metadata.provisionHeading).toBeUndefined();
+  });
+
+  test("provisionHeading for regulation schedule", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "schedule",
+      language: "en",
+      documentTitle: "Food and Drug Regulations",
+      regulationId: "CRC-c-870",
+      sectionId: "schedule-form-1",
+      sectionLabel: "Form 1",
+      sectionType: "schedule",
+      scheduleId: "schedule-forms",
+      provisionHeading: {
+        text: "Application for Drug Identification Number",
+        formatRef: "form-heading",
+      },
+    };
+
+    expect(metadata.sourceType).toBe("schedule");
+    expect(metadata.regulationId).toBe("CRC-c-870");
+    expect(metadata.provisionHeading?.text).toBe(
+      "Application for Drug Identification Number"
+    );
+  });
+
+  test("provisionHeading with empty formatRef is valid", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "schedule",
+      language: "en",
+      documentTitle: "Test Act",
+      sectionType: "schedule",
+      provisionHeading: {
+        text: "Section Heading",
+        formatRef: "",
+      },
+    };
+
+    expect(metadata.provisionHeading?.text).toBe("Section Heading");
+    expect(metadata.provisionHeading?.formatRef).toBe("");
   });
 });
 
@@ -4060,5 +4923,467 @@ test.describe("parseRegulationXml Order/Provision parsing", () => {
     expect(orderSection?.language).toBe("fr");
     expect(orderSection?.content).toContain("recommandation");
     expect(orderSection?.canonicalSectionId).toBe("DORS-2000-1/fr/order");
+  });
+});
+
+// ---------- Publication Item Content Tests ----------
+
+test.describe("buildPublicationItemContent", () => {
+  test("builds English recommendation content correctly", () => {
+    const item: RegulationPublicationItem = {
+      type: "recommendation",
+      content:
+        "The Minister of Finance recommends that this regulation be made.",
+      publicationRequirement: "STATUTORY",
+      sourceSections: ["12", "15"],
+    };
+    const content = buildPublicationItemContent(
+      item,
+      0,
+      "Income Tax Regulations",
+      "en"
+    );
+
+    expect(content).toContain("Recommendation from: Income Tax Regulations");
+    expect(content).toContain("Publication type: Statutory requirement");
+    expect(content).toContain("Source sections: 12, 15");
+    expect(content).toContain(
+      "The Minister of Finance recommends that this regulation be made."
+    );
+  });
+
+  test("builds English notice content correctly", () => {
+    const item: RegulationPublicationItem = {
+      type: "notice",
+      content: "Notice is hereby given that the regulations have been amended.",
+      publicationRequirement: "ADMINISTRATIVE",
+      sourceSections: ["3"],
+    };
+    const content = buildPublicationItemContent(
+      item,
+      0,
+      "Employment Insurance Regulations",
+      "en"
+    );
+
+    expect(content).toContain("Notice from: Employment Insurance Regulations");
+    expect(content).toContain("Publication type: Administrative requirement");
+    expect(content).toContain("Source sections: 3");
+    expect(content).toContain(
+      "Notice is hereby given that the regulations have been amended."
+    );
+  });
+
+  test("builds French recommendation content correctly", () => {
+    const item: RegulationPublicationItem = {
+      type: "recommendation",
+      content:
+        "Le ministre des Finances recommande la prise du présent règlement.",
+      publicationRequirement: "STATUTORY",
+      sourceSections: ["12", "15"],
+    };
+    const content = buildPublicationItemContent(
+      item,
+      0,
+      "Règlement de l'impôt sur le revenu",
+      "fr"
+    );
+
+    expect(content).toContain(
+      "Recommandation de: Règlement de l'impôt sur le revenu"
+    );
+    expect(content).toContain("Type de publication: Exigence légale");
+    expect(content).toContain("Articles sources: 12, 15");
+    expect(content).toContain(
+      "Le ministre des Finances recommande la prise du présent règlement."
+    );
+  });
+
+  test("builds French notice content correctly", () => {
+    const item: RegulationPublicationItem = {
+      type: "notice",
+      content: "Avis est donné que les modifications ont été apportées.",
+      publicationRequirement: "ADMINISTRATIVE",
+      sourceSections: ["3"],
+    };
+    const content = buildPublicationItemContent(
+      item,
+      0,
+      "Règlement sur l'assurance-emploi",
+      "fr"
+    );
+
+    expect(content).toContain("Avis de: Règlement sur l'assurance-emploi");
+    expect(content).toContain("Type de publication: Exigence administrative");
+    expect(content).toContain("Articles sources: 3");
+    expect(content).toContain(
+      "Avis est donné que les modifications ont été apportées."
+    );
+  });
+
+  test("handles missing optional fields", () => {
+    const item: RegulationPublicationItem = {
+      type: "recommendation",
+      content: "Minimal recommendation content.",
+    };
+    const content = buildPublicationItemContent(
+      item,
+      0,
+      "Test Regulations",
+      "en"
+    );
+
+    expect(content).toContain("Recommendation from: Test Regulations");
+    expect(content).toContain("Minimal recommendation content.");
+    expect(content).not.toContain("Publication type:");
+    expect(content).not.toContain("Source sections:");
+  });
+
+  test("handles empty source sections array", () => {
+    const item: RegulationPublicationItem = {
+      type: "notice",
+      content: "Notice content.",
+      sourceSections: [],
+    };
+    const content = buildPublicationItemContent(
+      item,
+      0,
+      "Test Regulations",
+      "en"
+    );
+
+    expect(content).toContain("Notice from: Test Regulations");
+    expect(content).not.toContain("Source sections:");
+  });
+
+  test("creates searchable content for recommendation queries", () => {
+    const item: RegulationPublicationItem = {
+      type: "recommendation",
+      content:
+        "The Treasury Board recommends the amendment to the pension regulations.",
+      publicationRequirement: "STATUTORY",
+    };
+    const content = buildPublicationItemContent(
+      item,
+      0,
+      "Public Service Pension Regulations",
+      "en"
+    );
+
+    // User searching for these terms should find this
+    expect(content.toLowerCase()).toContain("treasury board");
+    expect(content.toLowerCase()).toContain("pension");
+    expect(content.toLowerCase()).toContain("recommends");
+    expect(content.toLowerCase()).toContain("statutory");
+  });
+
+  test("formats content as newline-separated for embedding clarity", () => {
+    const item: RegulationPublicationItem = {
+      type: "recommendation",
+      content: "Test recommendation content.",
+      publicationRequirement: "STATUTORY",
+      sourceSections: ["1", "2"],
+    };
+    const content = buildPublicationItemContent(
+      item,
+      0,
+      "Test Regulations",
+      "en"
+    );
+
+    // Should be formatted with newlines between fields
+    const lines = content.split("\n");
+    expect(lines.length).toBeGreaterThanOrEqual(3);
+    expect(lines[0]).toContain("Recommendation from:");
+    expect(lines[1]).toContain("Publication type:");
+    expect(lines[2]).toContain("Source sections:");
+  });
+});
+
+test.describe("buildPublicationItemContent metadata", () => {
+  test("publication_item source type is valid", () => {
+    // Verify the source type exists in LegResourceMetadata
+    const metadata: LegResourceMetadata = {
+      sourceType: "publication_item",
+      language: "en",
+      documentTitle: "Test Regulations",
+      regulationId: "SOR-2020-100",
+      publicationType: "recommendation",
+      publicationRequirement: "STATUTORY",
+      publicationSourceSections: ["1", "2", "3"],
+      publicationIndex: 0,
+    };
+
+    expect(metadata.sourceType).toBe("publication_item");
+    expect(metadata.publicationType).toBe("recommendation");
+    expect(metadata.publicationRequirement).toBe("STATUTORY");
+    expect(metadata.publicationSourceSections).toEqual(["1", "2", "3"]);
+    expect(metadata.publicationIndex).toBe(0);
+  });
+
+  test("publication_item metadata supports notice type", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "publication_item",
+      language: "fr",
+      documentTitle: "Règlement test",
+      regulationId: "DORS-2020-100",
+      publicationType: "notice",
+      publicationRequirement: "ADMINISTRATIVE",
+      publicationSourceSections: ["5"],
+      publicationIndex: 1,
+    };
+
+    expect(metadata.publicationType).toBe("notice");
+    expect(metadata.publicationRequirement).toBe("ADMINISTRATIVE");
+  });
+
+  test("publication_item metadata with minimal fields", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "publication_item",
+      language: "en",
+      documentTitle: "Test Regulations",
+      regulationId: "SOR-2020-100",
+      publicationType: "recommendation",
+    };
+
+    expect(metadata.sourceType).toBe("publication_item");
+    expect(metadata.publicationType).toBe("recommendation");
+    expect(metadata.publicationRequirement).toBeUndefined();
+    expect(metadata.publicationSourceSections).toBeUndefined();
+    expect(metadata.publicationIndex).toBeUndefined();
+  });
+});
+
+// ---------- Section-Level Date Fields Tests ----------
+
+test.describe("sectionLastAmendedDate metadata field", () => {
+  test("LegResourceMetadata accepts sectionLastAmendedDate for act section", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "en",
+      documentTitle: "Criminal Code",
+      actId: "C-46",
+      sectionId: "section-264",
+      sectionLabel: "264",
+      sectionType: "section",
+      sectionLastAmendedDate: "2023-06-22",
+    };
+
+    expect(metadata.sectionLastAmendedDate).toBe("2023-06-22");
+  });
+
+  test("sectionLastAmendedDate for regulation section", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "regulation_section",
+      language: "en",
+      documentTitle: "Food and Drug Regulations",
+      regulationId: "CRC-c-870",
+      sectionId: "section-A01001",
+      sectionLabel: "A.01.001",
+      sectionType: "section",
+      sectionLastAmendedDate: "2024-01-15",
+    };
+
+    expect(metadata.sectionLastAmendedDate).toBe("2024-01-15");
+  });
+
+  test("sectionLastAmendedDate for French language section", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "fr",
+      documentTitle: "Code criminel",
+      actId: "C-46",
+      sectionId: "section-264-fr",
+      sectionLabel: "264",
+      sectionType: "section",
+      sectionLastAmendedDate: "2023-06-22",
+    };
+
+    expect(metadata.language).toBe("fr");
+    expect(metadata.sectionLastAmendedDate).toBe("2023-06-22");
+  });
+
+  test("sectionLastAmendedDate can be combined with other section metadata", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "en",
+      documentTitle: "Income Tax Act",
+      actId: "I-3.3",
+      sectionId: "section-125",
+      sectionLabel: "125",
+      sectionType: "section",
+      sectionStatus: "in-force",
+      sectionInForceDate: "2020-01-01",
+      sectionLastAmendedDate: "2023-12-15",
+      sectionRole: "normal",
+      historicalNotes: [{ text: "2023, c. 26, s. 10", type: "amendment" }],
+    };
+
+    expect(metadata.sectionInForceDate).toBe("2020-01-01");
+    expect(metadata.sectionLastAmendedDate).toBe("2023-12-15");
+    expect(metadata.historicalNotes).toHaveLength(1);
+  });
+
+  test("sectionLastAmendedDate undefined for sections without amendments", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "en",
+      documentTitle: "Test Act",
+      actId: "T-1",
+      sectionLabel: "1",
+      sectionType: "section",
+      // No sectionLastAmendedDate for unamended sections
+    };
+
+    expect(metadata.sectionLastAmendedDate).toBeUndefined();
+  });
+
+  test("sectionLastAmendedDate for schedule section", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "schedule",
+      language: "en",
+      documentTitle: "Controlled Drugs and Substances Act",
+      actId: "C-38.8",
+      sectionId: "schedule-I-item-1",
+      sectionLabel: "Schedule I",
+      sectionType: "schedule",
+      scheduleId: "schedule-I",
+      sectionLastAmendedDate: "2022-05-01",
+    };
+
+    expect(metadata.sourceType).toBe("schedule");
+    expect(metadata.sectionLastAmendedDate).toBe("2022-05-01");
+  });
+});
+
+test.describe("sectionEnactedDate metadata field", () => {
+  test("LegResourceMetadata accepts sectionEnactedDate for act section", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "en",
+      documentTitle: "Criminal Code",
+      actId: "C-46",
+      sectionId: "section-264",
+      sectionLabel: "264",
+      sectionType: "section",
+      sectionEnactedDate: "1985-07-15",
+    };
+
+    expect(metadata.sectionEnactedDate).toBe("1985-07-15");
+  });
+
+  test("sectionEnactedDate for regulation section", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "regulation_section",
+      language: "en",
+      documentTitle: "Food and Drug Regulations",
+      regulationId: "CRC-c-870",
+      sectionId: "section-A01001",
+      sectionLabel: "A.01.001",
+      sectionType: "section",
+      sectionEnactedDate: "1978-03-01",
+    };
+
+    expect(metadata.sectionEnactedDate).toBe("1978-03-01");
+  });
+
+  test("sectionEnactedDate for French language section", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "fr",
+      documentTitle: "Code criminel",
+      actId: "C-46",
+      sectionId: "section-264-fr",
+      sectionLabel: "264",
+      sectionType: "section",
+      sectionEnactedDate: "1985-07-15",
+    };
+
+    expect(metadata.language).toBe("fr");
+    expect(metadata.sectionEnactedDate).toBe("1985-07-15");
+  });
+
+  test("sectionEnactedDate can be combined with other section date fields", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "en",
+      documentTitle: "Canada Labour Code",
+      actId: "L-2",
+      sectionId: "section-168",
+      sectionLabel: "168",
+      sectionType: "section",
+      sectionStatus: "in-force",
+      sectionInForceDate: "2000-01-01",
+      sectionEnactedDate: "1985-06-28",
+      sectionLastAmendedDate: "2021-09-01",
+      sectionRole: "normal",
+    };
+
+    expect(metadata.sectionInForceDate).toBe("2000-01-01");
+    expect(metadata.sectionEnactedDate).toBe("1985-06-28");
+    expect(metadata.sectionLastAmendedDate).toBe("2021-09-01");
+  });
+
+  test("sectionEnactedDate undefined for sections without enacted date", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "en",
+      documentTitle: "Test Act",
+      actId: "T-1",
+      sectionLabel: "1",
+      sectionType: "section",
+      // No sectionEnactedDate
+    };
+
+    expect(metadata.sectionEnactedDate).toBeUndefined();
+  });
+
+  test("sectionEnactedDate for schedule section", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "schedule",
+      language: "en",
+      documentTitle: "Income Tax Act",
+      actId: "I-3.3",
+      sectionId: "schedule-I-entry",
+      sectionLabel: "Schedule I",
+      sectionType: "schedule",
+      scheduleId: "schedule-I",
+      sectionEnactedDate: "1970-01-01",
+    };
+
+    expect(metadata.sourceType).toBe("schedule");
+    expect(metadata.sectionEnactedDate).toBe("1970-01-01");
+  });
+
+  test("all section date fields together provide complete temporal context", () => {
+    // This test demonstrates the full temporal metadata available for a section
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "en",
+      documentTitle: "Criminal Code",
+      actId: "C-46",
+      sectionId: "section-271",
+      sectionLabel: "271",
+      sectionType: "section",
+      marginalNote: "Sexual assault",
+      sectionStatus: "in-force",
+      // Complete temporal context for the section:
+      sectionEnactedDate: "1983-01-04", // When section was originally enacted
+      sectionInForceDate: "1983-01-04", // When section came into force
+      sectionLastAmendedDate: "2019-09-19", // Most recent amendment
+      historicalNotes: [
+        { text: "1980-81-82-83, c. 125, s. 19", type: "enactment" },
+        { text: "2019, c. 25, s. 94", type: "amendment" },
+      ],
+    };
+
+    // All three date fields provide different temporal information:
+    // - sectionEnactedDate: original enactment
+    // - sectionInForceDate: when it became law
+    // - sectionLastAmendedDate: most recent change
+    expect(metadata.sectionEnactedDate).toBe("1983-01-04");
+    expect(metadata.sectionInForceDate).toBe("1983-01-04");
+    expect(metadata.sectionLastAmendedDate).toBe("2019-09-19");
+    expect(metadata.historicalNotes).toHaveLength(2);
   });
 });

@@ -24,6 +24,7 @@ import type {
   AmendmentInfo,
   BillHistory,
   ContentFlags,
+  ProvisionHeadingInfo,
   RegulationMakerInfo,
 } from "@/lib/db/legislation/schema";
 
@@ -46,6 +47,7 @@ export const LEG_SOURCE_TYPES = [
   "footnote",
   "schedule",
   "marginal_note",
+  "publication_item",
 ] as const;
 
 export type LegSourceType = (typeof LEG_SOURCE_TYPES)[number];
@@ -233,7 +235,10 @@ export type LegResourceMetadata = {
   hierarchyPath?: string[]; // e.g., ["Part I", "Division 1", "Subdivision A"]
   contentFlags?: ContentFlags;
   sectionInForceDate?: string; // ISO date when section came into force
+  sectionLastAmendedDate?: string; // ISO date when section was last amended (from sections.lastAmendedDate)
+  sectionEnactedDate?: string; // ISO date when section was enacted (from sections.enactedDate)
   sectionRole?: string; // Legislative function: "amending", "transitional", "CIF", "CIFnobold", "repeal", "normal" (mapped from sections.xmlType)
+  amendmentTarget?: string; // Target reference for amending sections - what is being amended (mapped from sections.xmlTarget). Useful for queries like "what amendments affected section X of Y act"
   historicalNotes?: {
     // Mirrors HistoricalNoteItem from legislation schema
     text: string;
@@ -247,6 +252,17 @@ export type LegResourceMetadata = {
   scheduleId?: string; // Schedule ID from XML @id attribute
   scheduleBilingual?: string; // "yes" or "no" - if schedule has bilingual content
   scheduleSpanLanguages?: string; // "yes" or "no" - if schedule spans languages
+  scheduleOriginatingRef?: string; // Reference to originating section (e.g., "(Section 2)" or "(Paragraphs 56(1)(a) and (c)...)")
+
+  // Provision heading (for provisions in schedules/forms with topic headings, e.g., treaty articles)
+  provisionHeading?: ProvisionHeadingInfo;
+
+  // Internal references within the same document (from XRefInternal XML elements)
+  internalReferences?: {
+    targetLabel: string; // Label of the target section/provision
+    targetId?: string; // XML ID of the target element
+    referenceText?: string; // Display text of the reference
+  }[];
 
   // Defined term specific fields
   termId?: string; // FK to legislation.defined_terms.id
@@ -258,6 +274,9 @@ export type LegResourceMetadata = {
 
   // Act metadata fields
   longTitle?: string;
+  reversedShortTitle?: string; // Reversed short title for alphabetical indexes (e.g., "Code, Criminal" instead of "Criminal Code")
+  shortTitleStatus?: "official" | "unofficial"; // Whether the short title is official or unofficial
+  consolidatedNumberOfficial?: "yes" | "no"; // Whether the consolidated number is official
   status?: string; // "in-force", "repealed", etc.
   inForceDate?: string; // ISO date
   consolidationDate?: string;
@@ -327,6 +346,12 @@ export type LegResourceMetadata = {
   footnoteLabel?: string; // Display label (e.g., "*", "†", "1")
   footnotePlacement?: string; // "section" or "page"
   footnoteStatus?: string; // "editorial" or "official"
+
+  // Publication item fields (recommendations/notices in regulations)
+  publicationType?: "recommendation" | "notice"; // Type of publication item
+  publicationRequirement?: "STATUTORY" | "ADMINISTRATIVE"; // Publication requirement
+  publicationSourceSections?: string[]; // Sections this relates to
+  publicationIndex?: number; // Position in the recommendations/notices array
 
   // Bilingual pairing (Task 2.3)
   // Links EN/FR versions of the same content for cross-lingual search

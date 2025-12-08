@@ -116,7 +116,8 @@ export type ProcessError = {
     | "signature_block"
     | "related_provisions"
     | "footnote"
-    | "marginal_note";
+    | "marginal_note"
+    | "publication_item";
   itemId: string;
   message: string;
   retryable: boolean;

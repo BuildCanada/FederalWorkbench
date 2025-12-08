@@ -46,6 +46,9 @@ export function buildRegulationMetadataText(reg: Regulation): string {
     if (reg.longTitle) {
       parts.push(`Titre complet: ${reg.longTitle}`);
     }
+    if (reg.reversedShortTitle) {
+      parts.push(`Index alphabétique: ${reg.reversedShortTitle}`);
+    }
     parts.push(`Identifiant: ${reg.regulationId}`);
     if (reg.instrumentNumber) {
       parts.push(`Numéro d'instrument: ${reg.instrumentNumber}`);
@@ -109,6 +112,9 @@ export function buildRegulationMetadataText(reg: Regulation): string {
     parts.push(`Regulation: ${reg.title}`);
     if (reg.longTitle) {
       parts.push(`Long Title: ${reg.longTitle}`);
+    }
+    if (reg.reversedShortTitle) {
+      parts.push(`Alphabetical Index: ${reg.reversedShortTitle}`);
     }
     parts.push(`ID: ${reg.regulationId}`);
     if (reg.instrumentNumber) {
@@ -207,6 +213,7 @@ function buildRegulationChunks(
       regulationId: reg.regulationId,
       documentTitle: reg.title,
       longTitle: reg.longTitle ?? undefined,
+      reversedShortTitle: reg.reversedShortTitle ?? undefined,
       status: reg.status,
       instrumentNumber: reg.instrumentNumber ?? undefined,
       regulationType: reg.regulationType ?? undefined,
@@ -276,11 +283,17 @@ function buildRegulationChunks(
           hierarchyPath: section.hierarchyPath ?? undefined,
           contentFlags: section.contentFlags ?? undefined,
           sectionInForceDate: section.inForceStartDate ?? undefined,
+          sectionLastAmendedDate: section.lastAmendedDate ?? undefined,
+          sectionEnactedDate: section.enactedDate ?? undefined,
           sectionRole: section.xmlType ?? undefined, // xmlType -> sectionRole
+          amendmentTarget: section.xmlTarget ?? undefined, // xmlTarget -> amendmentTarget
           historicalNotes: section.historicalNotes ?? undefined,
           scheduleId: section.scheduleId ?? undefined,
           scheduleBilingual: section.scheduleBilingual ?? undefined,
           scheduleSpanLanguages: section.scheduleSpanLanguages ?? undefined,
+          scheduleOriginatingRef: section.scheduleOriginatingRef ?? undefined,
+          provisionHeading: section.provisionHeading ?? undefined,
+          internalReferences: section.internalReferences ?? undefined,
           chunkIndex: chunk.chunkIndex,
           pairedResourceKey: sectionPairedKey,
         },

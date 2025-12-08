@@ -19,7 +19,7 @@
  *   --acts-only        Only process acts and act sections
  *   --regs-only        Only process regulations and regulation sections
  *   --terms-only       Only process defined terms
- *   --additional-only  Only process preambles, treaties, cross-refs, ToP, signatures, related provisions, footnotes
+ *   --additional-only  Only process preambles, treaties, cross-refs, ToP, signatures, related provisions, footnotes, publication items
  *   --sync-progress    Rebuild SQLite progress cache from Postgres
  *   --clear-progress   Clear local progress tracking
  *   --link-terms       Only link EN/FR defined term pairs (no embeddings)
@@ -37,6 +37,7 @@
  *   - Related Provisions: Cross-references to related/amending provisions
  *   - Footnotes: Section footnotes as independent embeddings linked via sectionId
  *   - Marginal Notes: Section headings as lightweight index for discoverability
+ *   - Publication Items: Regulation recommendations and notices (Gazette publication content)
  *
  * Memory Usage:
  *   This script loads data in batches to avoid memory issues. For the full
@@ -60,6 +61,7 @@ import {
   processFootnotes,
   processMarginalNotes,
   processPreambles,
+  processPublicationItems,
   processRelatedProvisions,
   processSignatureBlocks,
   processTableOfProvisions,
@@ -318,6 +320,11 @@ async function main() {
     totalChunks += marginalNoteResult.chunksProcessed;
     totalSkipped += marginalNoteResult.chunksSkipped;
     allErrors.push(...marginalNoteResult.errors);
+
+    const publicationItemResult = await processPublicationItems(processOptions);
+    totalChunks += publicationItemResult.chunksProcessed;
+    totalSkipped += publicationItemResult.chunksSkipped;
+    allErrors.push(...publicationItemResult.errors);
   }
 
   const elapsed = Date.now() - startTime;

@@ -44,6 +44,14 @@ export function buildActMetadataText(act: Act): string {
     if (act.runningHead) {
       parts.push(`Titre abrégé: ${act.runningHead}`);
     }
+    if (act.shortTitleStatus) {
+      const statusText =
+        act.shortTitleStatus === "official" ? "officiel" : "non officiel";
+      parts.push(`Statut du titre abrégé: ${statusText}`);
+    }
+    if (act.reversedShortTitle) {
+      parts.push(`Index alphabétique: ${act.reversedShortTitle}`);
+    }
     parts.push(`Identifiant: ${act.actId}`);
     parts.push(`Statut: ${act.status}`);
     if (act.inForceDate) {
@@ -68,6 +76,11 @@ export function buildActMetadataText(act: Act): string {
     }
     if (act.consolidatedNumber) {
       parts.push(`Numéro de consolidation: ${act.consolidatedNumber}`);
+    }
+    if (act.consolidatedNumberOfficial) {
+      const officialText =
+        act.consolidatedNumberOfficial === "yes" ? "oui" : "non";
+      parts.push(`Numéro de consolidation officiel: ${officialText}`);
     }
     if (act.annualStatuteYear && act.annualStatuteChapter) {
       parts.push(
@@ -110,6 +123,12 @@ export function buildActMetadataText(act: Act): string {
     if (act.runningHead) {
       parts.push(`Short Title: ${act.runningHead}`);
     }
+    if (act.shortTitleStatus) {
+      parts.push(`Short Title Status: ${act.shortTitleStatus}`);
+    }
+    if (act.reversedShortTitle) {
+      parts.push(`Alphabetical Index: ${act.reversedShortTitle}`);
+    }
     parts.push(`ID: ${act.actId}`);
     parts.push(`Status: ${act.status}`);
     if (act.inForceDate) {
@@ -134,6 +153,11 @@ export function buildActMetadataText(act: Act): string {
     }
     if (act.consolidatedNumber) {
       parts.push(`Consolidated Number: ${act.consolidatedNumber}`);
+    }
+    if (act.consolidatedNumberOfficial) {
+      parts.push(
+        `Consolidated Number Official: ${act.consolidatedNumberOfficial}`
+      );
     }
     if (act.annualStatuteYear && act.annualStatuteChapter) {
       parts.push(
@@ -210,6 +234,9 @@ function buildActChunks(
       actId: act.actId,
       documentTitle: act.title,
       longTitle: act.longTitle ?? undefined,
+      reversedShortTitle: act.reversedShortTitle ?? undefined,
+      shortTitleStatus: act.shortTitleStatus ?? undefined,
+      consolidatedNumberOfficial: act.consolidatedNumberOfficial ?? undefined,
       status: act.status,
       inForceDate: act.inForceDate ?? undefined,
       consolidationDate: act.consolidationDate ?? undefined,
@@ -278,11 +305,17 @@ function buildActChunks(
           hierarchyPath: section.hierarchyPath ?? undefined,
           contentFlags: section.contentFlags ?? undefined,
           sectionInForceDate: section.inForceStartDate ?? undefined,
+          sectionLastAmendedDate: section.lastAmendedDate ?? undefined,
+          sectionEnactedDate: section.enactedDate ?? undefined,
           sectionRole: section.xmlType ?? undefined, // xmlType -> sectionRole
+          amendmentTarget: section.xmlTarget ?? undefined, // xmlTarget -> amendmentTarget
           historicalNotes: section.historicalNotes ?? undefined,
           scheduleId: section.scheduleId ?? undefined,
           scheduleBilingual: section.scheduleBilingual ?? undefined,
           scheduleSpanLanguages: section.scheduleSpanLanguages ?? undefined,
+          scheduleOriginatingRef: section.scheduleOriginatingRef ?? undefined,
+          provisionHeading: section.provisionHeading ?? undefined,
+          internalReferences: section.internalReferences ?? undefined,
           chunkIndex: chunk.chunkIndex,
           pairedResourceKey: sectionPairedKey,
         },
