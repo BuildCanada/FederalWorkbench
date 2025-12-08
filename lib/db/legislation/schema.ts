@@ -1,5 +1,6 @@
 import type { InferSelectModel } from "drizzle-orm";
 import {
+  boolean,
   date,
   foreignKey,
   index,
@@ -99,11 +100,37 @@ export type RelatedProvisionInfo = {
 };
 
 /**
+ * Treaty section heading for navigation (Parts, Chapters, Articles)
+ */
+export type TreatySectionHeading = {
+  level: number; // 1 = Part, 2 = Chapter/Article, 3 = Sub-section
+  label?: string; // "PART I", "ARTICLE 1"
+  title?: string; // "General Provisions"
+};
+
+/**
+ * Defined term within a treaty
+ */
+export type TreatyDefinition = {
+  term: string;
+  definition: string;
+  definitionHtml?: string;
+};
+
+/**
  * Convention/Agreement/Treaty content
+ * Structured representation of international agreements
  */
 export type TreatyContent = {
-  title?: string;
-  text: string;
+  title?: string; // Main title from first Heading
+  preamble?: string; // Preamble text (party names, recitals before PART I)
+  preambleHtml?: string; // Preamble HTML
+  sections?: TreatySectionHeading[]; // Section headings for TOC/navigation
+  definitions?: TreatyDefinition[]; // Extracted defined terms
+  signatureText?: string; // Closing text ("IN WITNESS WHEREOF...")
+  signatureTextHtml?: string; // Closing HTML
+  text: string; // Full text (required, backward compat)
+  textHtml?: string; // Full HTML for display
 };
 
 /**
@@ -181,6 +208,10 @@ export const acts = legislationSchema.table(
     annualStatuteChapter: varchar("annual_statute_chapter", { length: 50 }),
     // Short title status
     shortTitleStatus: shortTitleStatusEnum("short_title_status"), // "official" or "unofficial"
+    // Reversed short title for alphabetical indexes (from lookup.xml)
+    reversedShortTitle: text("reversed_short_title"),
+    // Whether this document should be consolidated (from lookup.xml)
+    consolidateFlag: boolean("consolidate_flag").default(false),
     // LIMS tracking metadata (Justice Canada internal IDs) - language-specific!
     limsMetadata: jsonb("lims_metadata").$type<LimsMetadata>(),
     // Bill history (parliament, stages, assent dates)
@@ -225,6 +256,19 @@ export type RegulationMakerInfo = {
 };
 
 /**
+ * Publication items specific to regulations (Recommendation/Notice blocks)
+ */
+export type RegulationPublicationItem = {
+  type: "recommendation" | "notice";
+  content: string;
+  contentHtml?: string;
+  publicationRequirement?: "STATUTORY" | "ADMINISTRATIVE";
+  sourceSections?: string[];
+  limsMetadata?: LimsMetadata;
+  footnotes?: FootnoteInfo[];
+};
+
+/**
  * Regulations Table
  * Stores Canadian federal regulations metadata
  *
@@ -252,6 +296,10 @@ export const regulations = legislationSchema.table(
     title: text("title").notNull(),
     // Long title (full formal name) in this language
     longTitle: text("long_title"),
+    // Reversed short title for alphabetical indexes (from lookup.xml)
+    reversedShortTitle: text("reversed_short_title"),
+    // Whether this document should be consolidated (from lookup.xml)
+    consolidateFlag: boolean("consolidate_flag").default(false),
     // Multiple enabling authorities support (regulations can be made under multiple acts)
     enablingAuthorities: jsonb("enabling_authorities").$type<
       EnablingAuthorityInfo[]
@@ -282,6 +330,10 @@ export const regulations = legislationSchema.table(
       jsonb("related_provisions").$type<RelatedProvisionInfo[]>(),
     // Convention/Agreement/Treaty content
     treaties: jsonb("treaties").$type<TreatyContent[]>(),
+    // Recommendation/Notice blocks with publication metadata
+    recommendations:
+      jsonb("recommendations").$type<RegulationPublicationItem[]>(),
+    notices: jsonb("notices").$type<RegulationPublicationItem[]>(),
     // Signature blocks (official signatures on treaties/conventions)
     signatureBlocks: jsonb("signature_blocks").$type<SignatureBlock[]>(),
     // Table of provisions (navigation structure)
@@ -376,6 +428,15 @@ export type TableHeaderInfo = {
 };
 
 /**
+ * Internal reference within the same document (XRefInternal)
+ */
+export type InternalReference = {
+  targetLabel: string;
+  targetId?: string;
+  referenceText?: string;
+};
+
+/**
  * Content type flags for sections
  * Tracks special content that may need different handling in RAG/display
  */
@@ -423,6 +484,17 @@ export type FormattingAttributes = {
   listItem?: boolean;
   languageAlign?: boolean;
   fontStyle?: string;
+};
+
+/**
+ * Provision heading information
+ * Found within Provision elements in schedules/forms (e.g., treaty articles)
+ * Contains subsection/topic titles with formatting hints
+ */
+export type ProvisionHeadingInfo = {
+  text: string;
+  formatRef?: string;
+  limsMetadata?: LimsMetadata;
 };
 
 /**
@@ -490,6 +562,10 @@ export const sections = legislationSchema.table(
     historicalNotes: jsonb("historical_notes").$type<HistoricalNoteItem[]>(),
     // Footnotes in this section
     footnotes: jsonb("footnotes").$type<FootnoteInfo[]>(),
+    // Internal references within the same document (from XRefInternal)
+    internalReferences: jsonb("internal_references").$type<
+      InternalReference[]
+    >(),
     // Schedule-specific fields (for sectionType='schedule')
     scheduleId: varchar("schedule_id", { length: 50 }), // e.g., "RelatedProvs", "NifProvs"
     scheduleBilingual: varchar("schedule_bilingual", { length: 10 }), // "yes" or "no"
@@ -503,6 +579,8 @@ export const sections = legislationSchema.table(
     formattingAttributes: jsonb(
       "formatting_attributes"
     ).$type<FormattingAttributes>(),
+    // Provision heading (for provisions in schedules/forms with topic headings)
+    provisionHeading: jsonb("provision_heading").$type<ProvisionHeadingInfo>(),
     // Timestamp
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },

@@ -14,10 +14,11 @@ config({
 const TEST_PORT = 3100;
 const baseURL = `http://localhost:${TEST_PORT}`;
 
-/* Check if running tests that don't need webServer (db, embeddings, rag) */
+/* Check if running tests that don't need webServer (db, embeddings, lib, rag) */
 const isDbOnly =
   process.argv.includes("--project=db") ||
   process.argv.includes("--project=embeddings") ||
+  process.argv.includes("--project=lib") ||
   process.argv.includes("--project=rag");
 
 /**
@@ -63,6 +64,11 @@ export default defineConfig({
       name: "embeddings",
       testMatch: /embeddings\/.*.test.ts/,
       // Embeddings tests are pure function tests - no browser or webserver needed
+    },
+    {
+      name: "lib",
+      testMatch: /lib\/.*.test.ts/,
+      // Library tests are pure function tests - no browser or webserver needed
     },
     {
       name: "rag",

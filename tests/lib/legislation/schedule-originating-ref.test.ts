@@ -208,6 +208,39 @@ test.describe("OriginatingRef extraction from schedule headers", () => {
     }
   });
 
+  test("extracts OriginatingRef for Section elements within schedule", () => {
+    const xml = createActXmlWithSchedule(`
+      <ScheduleFormHeading>
+        <Label>SCHEDULE</Label>
+        <OriginatingRef>(Section 15)</OriginatingRef>
+        <TitleText>Transitional Provisions</TitleText>
+      </ScheduleFormHeading>
+      <Section>
+        <Label>1</Label>
+        <MarginalNote>Interpretation</MarginalNote>
+        <Text>In this Schedule, "Minister" means...</Text>
+      </Section>
+      <Section>
+        <Label>2</Label>
+        <MarginalNote>Application</MarginalNote>
+        <Text>This Schedule applies to...</Text>
+      </Section>
+    `);
+    const result = parseActXml(xml, "en");
+
+    // Find schedule sections (both List content and Section elements)
+    const scheduleSections = result.sections.filter(
+      (s) => s.sectionType === "schedule"
+    );
+    expect(scheduleSections.length).toBe(2);
+
+    // All sections within the schedule should have the originating ref
+    for (const section of scheduleSections) {
+      expect(section.scheduleOriginatingRef).toBe("(Section 15)");
+      expect(section.scheduleId).toBe("schedule-1");
+    }
+  });
+
   test("handles French OriginatingRef format", () => {
     const xml = `<?xml version="1.0" encoding="utf-8"?>
 <Statute xml:lang="fr">

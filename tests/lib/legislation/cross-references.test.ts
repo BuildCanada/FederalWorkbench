@@ -103,13 +103,17 @@ test.describe("Cross-reference extraction", () => {
   });
 
   test.describe("Ignored reference types", () => {
-    test("ignores XRefInternal (internal section references)", () => {
+    test("keeps XRefInternal out of crossReferences but captures internalReferences", () => {
       const xml = createActXmlWithRefs(
         "As defined in subsection <XRefInternal>3</XRefInternal>(1)."
       );
       const result = parseActXml(xml, "en");
 
       expect(result.crossReferences).toHaveLength(0);
+      expect(result.sections[0].internalReferences).toHaveLength(1);
+      expect(result.sections[0].internalReferences?.[0]).toMatchObject({
+        targetLabel: "3",
+      });
     });
 
     test("ignores non-legislation reference types", () => {

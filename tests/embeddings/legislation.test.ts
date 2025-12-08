@@ -351,6 +351,8 @@ test.describe("buildActMetadataText", () => {
     annualStatuteYear: null,
     annualStatuteChapter: null,
     shortTitleStatus: null,
+    reversedShortTitle: null,
+    consolidateFlag: false,
     limsMetadata: null,
     billHistory: null,
     recentAmendments: null,
@@ -674,6 +676,8 @@ test.describe("buildRegulationMetadataText", () => {
     status: "in-force",
     regulationType: "SOR",
     instrumentNumber: "SOR/86-946",
+    reversedShortTitle: null,
+    consolidateFlag: false,
     registrationDate: "1986-10-01",
     enablingActId: "C-46",
     enablingActTitle: "Employment Insurance Act",
@@ -687,6 +691,8 @@ test.describe("buildRegulationMetadataText", () => {
     recentAmendments: null,
     relatedProvisions: null,
     treaties: null,
+    recommendations: null,
+    notices: null,
     signatureBlocks: null,
     tableOfProvisions: null,
     createdAt: new Date(),
@@ -1010,6 +1016,8 @@ test.describe("shouldSkipSection", () => {
     scheduleOriginatingRef: null,
     contentFlags: null,
     formattingAttributes: null,
+    provisionHeading: null,
+    internalReferences: null,
     createdAt: new Date(),
     ...overrides,
   });
@@ -1193,6 +1201,8 @@ test.describe("chunkSection", () => {
     scheduleOriginatingRef: null,
     contentFlags: null,
     formattingAttributes: null,
+    provisionHeading: null,
+    internalReferences: null,
     createdAt: new Date(),
     ...overrides,
   });
@@ -1348,6 +1358,8 @@ test.describe("groupSectionsBy", () => {
     scheduleOriginatingRef: null,
     contentFlags: null,
     formattingAttributes: null,
+    provisionHeading: null,
+    internalReferences: null,
     createdAt: new Date(),
     ...overrides,
   });
@@ -2708,6 +2720,8 @@ test.describe("chunkSection with legal boundaries", () => {
     scheduleOriginatingRef: null,
     contentFlags: null,
     formattingAttributes: null,
+    provisionHeading: null,
+    internalReferences: null,
     createdAt: new Date(),
     ...overrides,
   });
@@ -2974,6 +2988,8 @@ test.describe("chunkSection with schedule metadata", () => {
     scheduleOriginatingRef: "(Section 2)",
     contentFlags: null,
     formattingAttributes: null,
+    provisionHeading: null,
+    internalReferences: null,
     createdAt: new Date(),
     ...overrides,
   });
@@ -3277,7 +3293,8 @@ test.describe("parseActXml root-level Schedule parsing", () => {
         s.content.includes("Transitional")
     );
     expect(scheduleSection).toBeDefined();
-    expect(scheduleSection?.sectionType).toBe("schedule");
+    // RELATED PROVISIONS schedule with type="amending" should produce amending sectionType
+    expect(scheduleSection?.sectionType).toBe("amending");
   });
 
   test("parses root-level Schedule with NOT IN FORCE content", () => {

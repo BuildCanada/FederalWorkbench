@@ -195,7 +195,8 @@ test.describe("CALS Table parsing", () => {
     const result = parseActXml(xml, "en");
     const contentHtml = result.sections[0].contentHtml;
 
-    expect(contentHtml).toContain('style="vertical-align: bottom"');
+    // valign on thead is preserved as data-valign attribute
+    expect(contentHtml).toContain('data-valign="bottom"');
   });
 });
 

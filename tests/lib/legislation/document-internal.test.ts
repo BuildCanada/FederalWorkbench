@@ -1,9 +1,11 @@
 /**
- * Tests for DocumentInternal node handling in extractHtmlContent.
+ * Tests for DocumentInternal node handling in schedule parsing.
  *
- * Task 7: Handle DocumentInternal nodes so internal references are preserved.
  * DocumentInternal elements typically contain Group elements with GroupHeading
  * and Provision elements, commonly used in treaties, agreements, and schedules.
+ *
+ * The parser creates individual sections for each Provision within DocumentInternal
+ * for better RAG retrieval granularity.
  */
 
 import { expect, test } from "@playwright/test";
@@ -37,8 +39,8 @@ function createActXmlWithSchedule(scheduleContent: string): string {
 </Statute>`;
 }
 
-test.describe("DocumentInternal handling in extractHtmlContent", () => {
-  test("wraps DocumentInternal in section with class", () => {
+test.describe("DocumentInternal provision parsing", () => {
+  test("creates section for each Provision in DocumentInternal", () => {
     const xml = createActXmlWithSchedule(`
       <DocumentInternal>
         <Provision><Text>Agreement text here</Text></Provision>
@@ -51,12 +53,48 @@ test.describe("DocumentInternal handling in extractHtmlContent", () => {
     );
     expect(scheduleSections.length).toBeGreaterThan(0);
 
-    const contentHtml = scheduleSections[0].contentHtml;
-    expect(contentHtml).toContain('<section class="document-internal">');
-    expect(contentHtml).toContain("</section>");
+    const section = scheduleSections[0];
+    expect(section.content).toContain("Agreement text here");
   });
 
-  test("wraps Group elements in div with class", () => {
+  test("wraps provision content in p.provision HTML", () => {
+    const xml = createActXmlWithSchedule(`
+      <DocumentInternal>
+        <Provision><Text>Agreement text here</Text></Provision>
+      </DocumentInternal>
+    `);
+    const result = parseActXml(xml, "en");
+
+    const scheduleSections = result.sections.filter(
+      (s) => s.sectionType === "schedule"
+    );
+    const contentHtml = scheduleSections[0]?.contentHtml || "";
+
+    expect(contentHtml).toContain('<p class="provision">');
+    expect(contentHtml).toContain("Agreement text here");
+    expect(contentHtml).toContain("</p>");
+  });
+
+  test("handles multiple Provisions as separate sections", () => {
+    const xml = createActXmlWithSchedule(`
+      <DocumentInternal>
+        <Provision><Text>First provision text</Text></Provision>
+        <Provision><Text>Second provision text</Text></Provision>
+      </DocumentInternal>
+    `);
+    const result = parseActXml(xml, "en");
+
+    const scheduleSections = result.sections.filter(
+      (s) => s.sectionType === "schedule"
+    );
+
+    // Each provision becomes its own section
+    expect(scheduleSections.length).toBe(2);
+    expect(scheduleSections[0].content).toContain("First provision text");
+    expect(scheduleSections[1].content).toContain("Second provision text");
+  });
+
+  test("includes Group heading in hierarchy path", () => {
     const xml = createActXmlWithSchedule(`
       <DocumentInternal>
         <Group>
@@ -70,18 +108,21 @@ test.describe("DocumentInternal handling in extractHtmlContent", () => {
     const scheduleSections = result.sections.filter(
       (s) => s.sectionType === "schedule"
     );
-    const contentHtml = scheduleSections[0]?.contentHtml || "";
+    expect(scheduleSections.length).toBeGreaterThan(0);
 
-    expect(contentHtml).toContain('<div class="group">');
-    expect(contentHtml).toContain("</div>");
+    const section = scheduleSections[0];
+    expect(section.hierarchyPath).toContain("Article I");
   });
 
-  test("renders GroupHeading as h4 with class", () => {
+  test("extracts Group heading with Label and TitleText", () => {
     const xml = createActXmlWithSchedule(`
       <DocumentInternal>
         <Group>
-          <GroupHeading><Label><Emphasis style="italic">Article I</Emphasis></Label></GroupHeading>
-          <Provision><Text>Definitions section</Text></Provision>
+          <GroupHeading>
+            <Label>ARTICLE II</Label>
+            <TitleText>Membership</TitleText>
+          </GroupHeading>
+          <Provision><Text>Membership provisions here</Text></Provision>
         </Group>
       </DocumentInternal>
     `);
@@ -90,46 +131,22 @@ test.describe("DocumentInternal handling in extractHtmlContent", () => {
     const scheduleSections = result.sections.filter(
       (s) => s.sectionType === "schedule"
     );
-    const contentHtml = scheduleSections[0]?.contentHtml || "";
 
-    expect(contentHtml).toContain('<h4 class="group-heading">');
-    expect(contentHtml).toContain("Article I");
-    expect(contentHtml).toContain("</h4>");
+    const section = scheduleSections[0];
+    // The group heading should include both label and title
+    expect(section.hierarchyPath.join(" ")).toContain("ARTICLE II");
+    expect(section.hierarchyPath.join(" ")).toContain("Membership");
   });
 
-  test("wraps Provision elements in p with class", () => {
-    const xml = createActXmlWithSchedule(`
-      <DocumentInternal>
-        <Provision><Text>First provision text</Text></Provision>
-        <Provision><Text>Second provision text</Text></Provision>
-      </DocumentInternal>
-    `);
-    const result = parseActXml(xml, "en");
-
-    const scheduleSections = result.sections.filter(
-      (s) => s.sectionType === "schedule"
-    );
-    const contentHtml = scheduleSections[0]?.contentHtml || "";
-
-    expect(contentHtml).toContain('<p class="provision">');
-    expect(contentHtml).toContain("First provision text");
-    expect(contentHtml).toContain("Second provision text");
-  });
-
-  test("handles multiple Groups within DocumentInternal", () => {
+  test("handles nested Groups", () => {
     const xml = createActXmlWithSchedule(`
       <DocumentInternal>
         <Group>
-          <GroupHeading><Label>Article I</Label></GroupHeading>
-          <Provision><Text>Definitions</Text></Provision>
-        </Group>
-        <Group>
-          <GroupHeading><Label>Article II</Label></GroupHeading>
-          <Provision><Text>Obligations</Text></Provision>
-        </Group>
-        <Group>
-          <GroupHeading><Label>Article III</Label></GroupHeading>
-          <Provision><Text>Rights</Text></Provision>
+          <GroupHeading><Label>Part I</Label></GroupHeading>
+          <Group>
+            <GroupHeading><Label>Section A</Label></GroupHeading>
+            <Provision><Text>Nested content</Text></Provision>
+          </Group>
         </Group>
       </DocumentInternal>
     `);
@@ -138,26 +155,43 @@ test.describe("DocumentInternal handling in extractHtmlContent", () => {
     const scheduleSections = result.sections.filter(
       (s) => s.sectionType === "schedule"
     );
-    const contentHtml = scheduleSections[0]?.contentHtml || "";
+    expect(scheduleSections.length).toBeGreaterThan(0);
 
-    // Count Groups
-    const groupMatches = contentHtml.match(/<div class="group">/g) || [];
-    expect(groupMatches.length).toBe(3);
-
-    // Verify all articles present
-    expect(contentHtml).toContain("Article I");
-    expect(contentHtml).toContain("Article II");
-    expect(contentHtml).toContain("Article III");
-    expect(contentHtml).toContain("Definitions");
-    expect(contentHtml).toContain("Obligations");
-    expect(contentHtml).toContain("Rights");
+    const section = scheduleSections[0];
+    expect(section.content).toContain("Nested content");
+    // Hierarchy should include both levels
+    expect(section.hierarchyPath).toContain("Part I");
+    expect(section.hierarchyPath).toContain("Section A");
   });
 
-  test("preserves nested content within Provision", () => {
+  test("preserves Provision labels in section label", () => {
     const xml = createActXmlWithSchedule(`
       <DocumentInternal>
         <Provision>
-          <Text>The <DefinedTermEn>deep waterway</DefinedTermEn> means...</Text>
+          <Label>(i)</Label>
+          <Text>First numbered provision</Text>
+        </Provision>
+        <Provision>
+          <Label>(ii)</Label>
+          <Text>Second numbered provision</Text>
+        </Provision>
+      </DocumentInternal>
+    `);
+    const result = parseActXml(xml, "en");
+
+    const scheduleSections = result.sections.filter(
+      (s) => s.sectionType === "schedule"
+    );
+
+    expect(scheduleSections[0].sectionLabel).toContain("(i)");
+    expect(scheduleSections[1].sectionLabel).toContain("(ii)");
+  });
+
+  test("preserves emphasis in provision content", () => {
+    const xml = createActXmlWithSchedule(`
+      <DocumentInternal>
+        <Provision>
+          <Text>This has <Emphasis style="italic">italicized</Emphasis> text</Text>
         </Provision>
       </DocumentInternal>
     `);
@@ -168,78 +202,213 @@ test.describe("DocumentInternal handling in extractHtmlContent", () => {
     );
     const contentHtml = scheduleSections[0]?.contentHtml || "";
 
-    expect(contentHtml).toContain("<dfn>");
-    expect(contentHtml).toContain("deep waterway");
-    expect(contentHtml).toContain("</dfn>");
-  });
-
-  test("handles SectionPiece elements", () => {
-    const xml = createActXmlWithSchedule(`
-      <DocumentInternal>
-        <SectionPiece>
-          <Text>Section piece content</Text>
-        </SectionPiece>
-      </DocumentInternal>
-    `);
-    const result = parseActXml(xml, "en");
-
-    const scheduleSections = result.sections.filter(
-      (s) => s.sectionType === "schedule"
-    );
-    const contentHtml = scheduleSections[0]?.contentHtml || "";
-
-    expect(contentHtml).toContain('<div class="section-piece">');
-    expect(contentHtml).toContain("Section piece content");
-    expect(contentHtml).toContain("</div>");
-  });
-
-  test("preserves emphasis within GroupHeading", () => {
-    const xml = createActXmlWithSchedule(`
-      <DocumentInternal>
-        <Group>
-          <GroupHeading>
-            <Label><Emphasis style="italic">Article IV</Emphasis></Label>
-          </GroupHeading>
-          <Provision><Text>Content</Text></Provision>
-        </Group>
-      </DocumentInternal>
-    `);
-    const result = parseActXml(xml, "en");
-
-    const scheduleSections = result.sections.filter(
-      (s) => s.sectionType === "schedule"
-    );
-    const contentHtml = scheduleSections[0]?.contentHtml || "";
-
     expect(contentHtml).toContain("<em>");
-    expect(contentHtml).toContain("Article IV");
+    expect(contentHtml).toContain("italicized");
     expect(contentHtml).toContain("</em>");
   });
+});
 
-  test("handles complex agreement structure", () => {
-    // This mirrors the structure found in real legislation agreements
+test.describe("ProvisionHeading extraction in DocumentInternal", () => {
+  test("extracts ProvisionHeading text from Provision elements", () => {
     const xml = createActXmlWithSchedule(`
-      <Provision><Text><Emphasis style="smallcaps">Agreement</Emphasis> made this third day of December</Text></Provision>
-      <Provision><Text><Emphasis style="smallcaps">Between</Emphasis></Text></Provision>
-      <Provision><Text>The Government of Canada</Text></Provision>
       <DocumentInternal>
         <Group>
-          <GroupHeading><Label><Emphasis style="italic">Article I</Emphasis></Label></GroupHeading>
-          <Provision>
-            <Text>For the purposes of this Agreement:</Text>
-            <Provision>
-              <Label>(a)</Label>
-              <Text><DefinedTermEn>deep waterway</DefinedTermEn> means adequate provision for navigation</Text>
-            </Provision>
-            <Provision>
-              <Label>(b)</Label>
-              <Text><DefinedTermEn>International Section</DefinedTermEn> means that part of the river</Text>
-            </Provision>
+          <GroupHeading><Label>ARTICLE II</Label><TitleText>Membership</TitleText></GroupHeading>
+          <Provision lims:inforce-start-date="2012-12-14" format-ref="indent-0-0">
+            <Label>Section 1</Label>
+            <ProvisionHeading lims:inforce-start-date="2012-12-14" format-ref="indent-0-0">
+              <Emphasis style="italic">Original members</Emphasis>
+            </ProvisionHeading>
+            <Text>The original members shall be those countries whose governments accept membership.</Text>
           </Provision>
         </Group>
-        <Group>
-          <GroupHeading><Label><Emphasis style="italic">Article II</Emphasis></Label></GroupHeading>
-          <Provision><Text>Canada will do all in its power...</Text></Provision>
+      </DocumentInternal>
+    `);
+    const result = parseActXml(xml, "en");
+
+    const sectionsWithPH = result.sections.filter(
+      (s) => s.provisionHeading !== undefined
+    );
+    expect(sectionsWithPH.length).toBe(1);
+
+    const section = sectionsWithPH[0];
+    expect(section.provisionHeading).toBeDefined();
+    expect(section.provisionHeading?.text).toBe("Original members");
+  });
+
+  test("extracts ProvisionHeading format-ref attribute", () => {
+    const xml = createActXmlWithSchedule(`
+      <DocumentInternal>
+        <Provision format-ref="indent-0-0">
+          <Label>Section 1</Label>
+          <ProvisionHeading format-ref="heading-2">
+            Custom Heading Format
+          </ProvisionHeading>
+          <Text>Content here.</Text>
+        </Provision>
+      </DocumentInternal>
+    `);
+    const result = parseActXml(xml, "en");
+
+    const sectionsWithPH = result.sections.filter(
+      (s) => s.provisionHeading !== undefined
+    );
+    expect(sectionsWithPH.length).toBe(1);
+
+    const section = sectionsWithPH[0];
+    expect(section.provisionHeading?.formatRef).toBe("heading-2");
+  });
+
+  test("extracts ProvisionHeading LIMS metadata", () => {
+    const xml = createActXmlWithSchedule(`
+      <DocumentInternal>
+        <Provision format-ref="indent-0-0">
+          <Label>Section 1</Label>
+          <ProvisionHeading lims:inforce-start-date="2012-12-14" lims:fid="12345" lims:id="12345" format-ref="indent-0-0">
+            Heading with LIMS
+          </ProvisionHeading>
+          <Text>Content here.</Text>
+        </Provision>
+      </DocumentInternal>
+    `);
+    const result = parseActXml(xml, "en");
+
+    const sectionsWithPH = result.sections.filter(
+      (s) => s.provisionHeading !== undefined
+    );
+    expect(sectionsWithPH.length).toBe(1);
+
+    const section = sectionsWithPH[0];
+    expect(section.provisionHeading?.limsMetadata).toBeDefined();
+    expect(section.provisionHeading?.limsMetadata?.fid).toBe("12345");
+    expect(section.provisionHeading?.limsMetadata?.id).toBe("12345");
+    expect(section.provisionHeading?.limsMetadata?.inForceStartDate).toBe(
+      "2012-12-14"
+    );
+  });
+
+  test("handles multiple Provisions with ProvisionHeading", () => {
+    const xml = createActXmlWithSchedule(`
+      <DocumentInternal>
+        <Provision>
+          <ProvisionHeading>First Heading</ProvisionHeading>
+          <Text>First content</Text>
+        </Provision>
+        <Provision>
+          <ProvisionHeading>Second Heading</ProvisionHeading>
+          <Text>Second content</Text>
+        </Provision>
+      </DocumentInternal>
+    `);
+    const result = parseActXml(xml, "en");
+
+    const sectionsWithPH = result.sections.filter(
+      (s) => s.provisionHeading !== undefined
+    );
+    expect(sectionsWithPH.length).toBe(2);
+
+    expect(sectionsWithPH[0].provisionHeading?.text).toBe("First Heading");
+    expect(sectionsWithPH[1].provisionHeading?.text).toBe("Second Heading");
+  });
+
+  test("handles ProvisionHeading with emphasis", () => {
+    const xml = createActXmlWithSchedule(`
+      <DocumentInternal>
+        <Provision>
+          <ProvisionHeading>
+            <Emphasis style="italic">Emphasized Heading</Emphasis>
+          </ProvisionHeading>
+          <Text>Content</Text>
+        </Provision>
+      </DocumentInternal>
+    `);
+    const result = parseActXml(xml, "en");
+
+    const sectionsWithPH = result.sections.filter(
+      (s) => s.provisionHeading !== undefined
+    );
+    expect(sectionsWithPH.length).toBe(1);
+
+    const section = sectionsWithPH[0];
+    expect(section.provisionHeading?.text).toBe("Emphasized Heading");
+  });
+});
+
+test.describe("DocumentInternal metadata extraction", () => {
+  test("extracts LIMS metadata from Provision", () => {
+    const xml = createActXmlWithSchedule(`
+      <DocumentInternal>
+        <Provision lims:inforce-start-date="2012-12-14" lims:fid="31271" lims:id="31271">
+          <Text>Provision with metadata</Text>
+        </Provision>
+      </DocumentInternal>
+    `);
+    const result = parseActXml(xml, "en");
+
+    const scheduleSections = result.sections.filter(
+      (s) => s.sectionType === "schedule"
+    );
+
+    const section = scheduleSections[0];
+    expect(section.limsMetadata).toBeDefined();
+    expect(section.limsMetadata?.fid).toBe("31271");
+    expect(section.inForceStartDate).toBe("2012-12-14");
+  });
+
+  test("extracts format-ref from Provision", () => {
+    const xml = createActXmlWithSchedule(`
+      <DocumentInternal>
+        <Provision format-ref="indent-2-2">
+          <Text>Formatted provision</Text>
+        </Provision>
+      </DocumentInternal>
+    `);
+    const result = parseActXml(xml, "en");
+
+    const scheduleSections = result.sections.filter(
+      (s) => s.sectionType === "schedule"
+    );
+
+    const section = scheduleSections[0];
+    expect(section.formattingAttributes?.formatRef).toBe("indent-2-2");
+  });
+
+  test("sets schedule context on sections", () => {
+    const xml = createActXmlWithSchedule(`
+      <DocumentInternal>
+        <Provision><Text>Content</Text></Provision>
+      </DocumentInternal>
+    `);
+    const result = parseActXml(xml, "en");
+
+    const scheduleSections = result.sections.filter(
+      (s) => s.sectionType === "schedule"
+    );
+
+    const section = scheduleSections[0];
+    expect(section.scheduleId).toBeDefined();
+    expect(section.actId).toBe("T-1");
+  });
+});
+
+test.describe("Real-world DocumentInternal patterns", () => {
+  test("parses IMF Agreement style structure", () => {
+    const xml = createActXmlWithSchedule(`
+      <DocumentInternal lims:inforce-start-date="2012-12-14" lims:fid="31270" lims:id="31270">
+        <Provision lims:inforce-start-date="2012-12-14" lims:fid="31271" lims:id="31271" format-ref="indent-0-0" language-align="no" list-item="no">
+          <Text>Articles of Agreement of the International Monetary Fund</Text>
+        </Provision>
+        <Provision lims:inforce-start-date="2012-12-14" lims:fid="31272" lims:id="31272" format-ref="indent-0-0" language-align="no" list-item="no">
+          <Text>The Governments on whose behalf the present Agreement is signed agree as follows:</Text>
+        </Provision>
+        <Group lims:inforce-start-date="2012-12-14" lims:fid="31273" lims:id="31273">
+          <GroupHeading lims:inforce-start-date="2012-12-14" lims:fid="31274" lims:id="31274" format-ref="group1-part">
+            <Label>INTRODUCTORY ARTICLE</Label>
+          </GroupHeading>
+          <Provision lims:inforce-start-date="2012-12-14" lims:fid="31275" lims:id="31275" format-ref="indent-2-2" language-align="no" list-item="no">
+            <Label>(i)</Label>
+            <Text>The International Monetary Fund is established and shall operate in accordance with the provisions of this Agreement.</Text>
+          </Provision>
         </Group>
       </DocumentInternal>
     `);
@@ -248,61 +417,25 @@ test.describe("DocumentInternal handling in extractHtmlContent", () => {
     const scheduleSections = result.sections.filter(
       (s) => s.sectionType === "schedule"
     );
-    expect(scheduleSections.length).toBeGreaterThan(0);
 
-    const contentHtml = scheduleSections[0]?.contentHtml || "";
+    // Should have 3 sections: 2 provisions + 1 from group
+    expect(scheduleSections.length).toBe(3);
 
-    // Verify structure is preserved
-    expect(contentHtml).toContain('<section class="document-internal">');
-    expect(contentHtml).toContain('<div class="group">');
-    expect(contentHtml).toContain('<h4 class="group-heading">');
-
-    // Verify content is present
-    expect(contentHtml).toContain("Agreement");
-    expect(contentHtml).toContain("Article I");
-    expect(contentHtml).toContain("Article II");
-    expect(contentHtml).toContain("deep waterway");
-    expect(contentHtml).toContain("International Section");
-  });
-
-  test("handles French DocumentInternal structure", () => {
-    const xml = `<?xml version="1.0" encoding="utf-8"?>
-<Statute xml:lang="fr">
-  <Identification>
-    <Chapter>
-      <ConsolidatedNumber>T-1</ConsolidatedNumber>
-    </Chapter>
-    <ShortTitle>Loi test</ShortTitle>
-  </Identification>
-  <Body>
-    <Section>
-      <Label>1</Label>
-      <Text>Contenu principal</Text>
-    </Section>
-  </Body>
-  <Schedule id="annexe-1">
-    <ScheduleFormHeading>
-      <Label>ANNEXE</Label>
-      <TitleText>Accord</TitleText>
-    </ScheduleFormHeading>
-    <DocumentInternal>
-      <Group>
-        <GroupHeading><Label><Emphasis style="italic">Article premier</Emphasis></Label></GroupHeading>
-        <Provision><Text>Définitions applicables</Text></Provision>
-      </Group>
-    </DocumentInternal>
-  </Schedule>
-</Statute>`;
-    const result = parseActXml(xml, "fr");
-
-    const scheduleSections = result.sections.filter(
-      (s) => s.sectionType === "schedule"
+    // First provision - title
+    expect(scheduleSections[0].content).toContain(
+      "Articles of Agreement of the International Monetary Fund"
     );
-    expect(scheduleSections.length).toBeGreaterThan(0);
 
-    const contentHtml = scheduleSections[0]?.contentHtml || "";
-    expect(contentHtml).toContain('<section class="document-internal">');
-    expect(contentHtml).toContain("Article premier");
-    expect(contentHtml).toContain("Définitions applicables");
+    // Second provision - preamble
+    expect(scheduleSections[1].content).toContain(
+      "The Governments on whose behalf"
+    );
+
+    // Third provision - from group with label
+    expect(scheduleSections[2].content).toContain(
+      "The International Monetary Fund is established"
+    );
+    expect(scheduleSections[2].sectionLabel).toContain("(i)");
+    expect(scheduleSections[2].hierarchyPath).toContain("INTRODUCTORY ARTICLE");
   });
 });

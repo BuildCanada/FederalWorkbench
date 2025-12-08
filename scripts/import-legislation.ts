@@ -33,6 +33,13 @@ import {
   sections,
 } from "@/lib/db/legislation/schema";
 import {
+  getEnablingActFromRelationships,
+  type LookupData,
+  lookupRegulation,
+  lookupStatute,
+  parseLookupXml,
+} from "@/lib/legislation/lookup-parser";
+import {
   getLegislationFiles,
   normalizeRegulationId,
   parseLegislationXml,
@@ -42,6 +49,7 @@ import type {
   LegislationType,
   ParsedDocument,
 } from "@/lib/legislation/types";
+import { linkDefinedTermPairs } from "./embeddings/legislation/link-defined-terms";
 
 // Database connection
 const connectionString = process.env.POSTGRES_URL;
@@ -169,6 +177,9 @@ type ImportStats = {
   sectionsInserted: number;
   definedTermsInserted: number;
   crossReferencesInserted: number;
+  // Term linking stats (populated after all files processed)
+  termPairsLinked: number;
+  termPairsNoMatch: number;
 };
 
 const stats: ImportStats = {
@@ -180,7 +191,81 @@ const stats: ImportStats = {
   sectionsInserted: 0,
   definedTermsInserted: 0,
   crossReferencesInserted: 0,
+  termPairsLinked: 0,
+  termPairsNoMatch: 0,
 };
+
+// Load lookup.xml metadata
+const LOOKUP_PATH = `${BASE_PATH}/lookup/lookup.xml`;
+let lookupData: LookupData | null = null;
+
+/**
+ * Load the lookup.xml data for enrichment
+ */
+function loadLookupData(): LookupData | null {
+  try {
+    const data = parseLookupXml(LOOKUP_PATH);
+    log(
+      `Loaded lookup.xml: ${data.statutes.size} statutes, ${data.regulations.size} regulations`
+    );
+    return data;
+  } catch (error) {
+    log(
+      `Warning: Could not load lookup.xml: ${error instanceof Error ? error.message : String(error)}`
+    );
+    return null;
+  }
+}
+
+/**
+ * Enrich a parsed document with lookup.xml metadata
+ * - Adds reversedShortTitle and consolidateFlag
+ * - Validates/populates enablingActId from relationships
+ */
+function enrichDocumentWithLookup(doc: ParsedDocument): void {
+  if (!lookupData) {
+    return;
+  }
+
+  if (doc.type === "act" && doc.act) {
+    const lookup = lookupStatute(lookupData, doc.act.actId, doc.act.language);
+    if (lookup) {
+      doc.act.reversedShortTitle = lookup.reversedShortTitle;
+      doc.act.consolidateFlag = lookup.consolidateFlag;
+      logVerbose(
+        `  Enriched act ${doc.act.actId} (${doc.act.language}): reversedShortTitle="${lookup.reversedShortTitle}", consolidateFlag=${lookup.consolidateFlag}`
+      );
+    }
+  } else if (doc.type === "regulation" && doc.regulation) {
+    const lookup = lookupRegulation(
+      lookupData,
+      doc.regulation.instrumentNumber,
+      doc.regulation.language
+    );
+    if (lookup) {
+      doc.regulation.reversedShortTitle = lookup.reversedShortTitle;
+      doc.regulation.consolidateFlag = lookup.consolidateFlag;
+      logVerbose(
+        `  Enriched regulation ${doc.regulation.regulationId} (${doc.regulation.language}): reversedShortTitle="${lookup.reversedShortTitle}", consolidateFlag=${lookup.consolidateFlag}`
+      );
+
+      // If enablingActId is not set, try to get it from relationships
+      if (!doc.regulation.enablingActId && lookup.id) {
+        const enablingActId = getEnablingActFromRelationships(
+          lookupData,
+          lookup.id,
+          doc.regulation.language
+        );
+        if (enablingActId) {
+          doc.regulation.enablingActId = enablingActId;
+          logVerbose(
+            `  Set enablingActId from relationships: ${enablingActId}`
+          );
+        }
+      }
+    }
+  }
+}
 
 /**
  * Check if an act already exists in the database for a specific language
@@ -263,6 +348,8 @@ async function insertDocument(doc: ParsedDocument): Promise<void> {
         annualStatuteYear: doc.act.annualStatuteYear,
         annualStatuteChapter: doc.act.annualStatuteChapter,
         shortTitleStatus: doc.act.shortTitleStatus,
+        reversedShortTitle: doc.act.reversedShortTitle,
+        consolidateFlag: doc.act.consolidateFlag ?? false,
         limsMetadata: doc.act.limsMetadata,
         billHistory: doc.act.billHistory,
         recentAmendments: doc.act.recentAmendments,
@@ -282,6 +369,8 @@ async function insertDocument(doc: ParsedDocument): Promise<void> {
         gazettePart: doc.regulation.gazettePart,
         title: doc.regulation.title,
         longTitle: doc.regulation.longTitle,
+        reversedShortTitle: doc.regulation.reversedShortTitle,
+        consolidateFlag: doc.regulation.consolidateFlag ?? false,
         enablingAuthorities: doc.regulation.enablingAuthorities,
         enablingActId: doc.regulation.enablingActId,
         enablingActTitle: doc.regulation.enablingActTitle,
@@ -295,6 +384,8 @@ async function insertDocument(doc: ParsedDocument): Promise<void> {
         recentAmendments: doc.regulation.recentAmendments,
         relatedProvisions: doc.regulation.relatedProvisions,
         treaties: doc.regulation.treaties,
+        recommendations: doc.regulation.recommendations,
+        notices: doc.regulation.notices,
         signatureBlocks: doc.regulation.signatureBlocks,
         tableOfProvisions: doc.regulation.tableOfProvisions,
       });
@@ -331,6 +422,8 @@ async function insertDocument(doc: ParsedDocument): Promise<void> {
         scheduleOriginatingRef: section.scheduleOriginatingRef,
         contentFlags: section.contentFlags,
         formattingAttributes: section.formattingAttributes,
+        provisionHeading: section.provisionHeading,
+        internalReferences: section.internalReferences ?? null,
       }));
       await tx.insert(sections).values(sectionValues);
       stats.sectionsInserted += doc.sections.length;
@@ -517,6 +610,9 @@ async function main() {
     await truncateLegislationTables();
   }
 
+  // Load lookup.xml metadata for enrichment
+  lookupData = loadLookupData();
+
   // Get list of files to process
   let files: {
     path: string;
@@ -563,6 +659,7 @@ async function main() {
       logVerbose(`Processing: ${file.path}`);
 
       const doc = parseLegislationXml(file.path, file.language);
+      enrichDocumentWithLookup(doc);
       await insertDocument(doc);
 
       stats.filesProcessed++;
@@ -583,6 +680,29 @@ async function main() {
     }
   }
 
+  // Link bilingual defined term pairs
+  // This must happen after all files are processed so both EN and FR terms exist
+  if (stats.definedTermsInserted > 0 || !dryRun) {
+    log("");
+    log("=== Linking Bilingual Term Pairs ===");
+    try {
+      const linkStats = await linkDefinedTermPairs(db, { dryRun });
+      stats.termPairsLinked = linkStats.pairsLinked;
+      stats.termPairsNoMatch = linkStats.noMatchFound;
+      log(`Term pairs linked: ${stats.termPairsLinked}`);
+      if (stats.termPairsNoMatch > 0) {
+        log(`Terms without match: ${stats.termPairsNoMatch}`);
+      }
+    } catch (error) {
+      log(
+        `ERROR linking term pairs: ${error instanceof Error ? error.message : String(error)}`
+      );
+      if (verbose && error instanceof Error) {
+        console.error(error.stack);
+      }
+    }
+  }
+
   log("");
   log("=== Import Complete ===");
   log(`Files processed: ${stats.filesProcessed}`);
@@ -594,6 +714,7 @@ async function main() {
     log(`Sections inserted: ${stats.sectionsInserted}`);
     log(`Defined terms inserted: ${stats.definedTermsInserted}`);
     log(`Cross references inserted: ${stats.crossReferencesInserted}`);
+    log(`Term pairs linked: ${stats.termPairsLinked}`);
   }
 
   process.exit(stats.filesFailed > 0 ? 1 : 0);
