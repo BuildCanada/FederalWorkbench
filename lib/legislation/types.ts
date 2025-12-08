@@ -32,6 +32,7 @@ export type LimsMetadata = {
   enactId?: string;
   pitDate?: string;
   currentDate?: string;
+  inForceStartDate?: string;
 };
 
 /**
@@ -286,8 +287,11 @@ export type ParsedAct = {
   hasPreviousVersion?: string;
   // Chapter information
   consolidatedNumber?: string;
+  consolidatedNumberOfficial?: "yes" | "no"; // ConsolidatedNumber official attribute
   annualStatuteYear?: string;
   annualStatuteChapter?: string;
+  // Short title status
+  shortTitleStatus?: "official" | "unofficial"; // ShortTitle status attribute
   // LIMS tracking (language-specific!)
   limsMetadata?: LimsMetadata;
   billHistory?: BillHistory;
@@ -373,6 +377,7 @@ export type ParsedSection = {
   scheduleId?: string;
   scheduleBilingual?: string;
   scheduleSpanLanguages?: string;
+  scheduleOriginatingRef?: string;
   // Content flags for special content types
   contentFlags?: ContentFlags;
   // Lower Priority: Formatting attributes

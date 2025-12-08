@@ -15,6 +15,18 @@ import { nanoid } from "nanoid";
 
 export const legislationSchema = pgSchema("legislation");
 
+// Enum for ShortTitle status attribute
+export const shortTitleStatusEnum = legislationSchema.enum(
+  "short_title_status",
+  ["official", "unofficial"]
+);
+
+// Enum for ConsolidatedNumber official attribute
+export const consolidatedNumberOfficialEnum = legislationSchema.enum(
+  "consolidated_number_official",
+  ["yes", "no"]
+);
+
 /**
  * LIMS metadata - Justice Canada tracking information
  * Common attributes found on XML elements
@@ -26,6 +38,7 @@ export type LimsMetadata = {
   enactId?: string; // lims:enactId - enactment reference
   pitDate?: string; // lims:pit-date - point in time
   currentDate?: string; // lims:current-date
+  inForceStartDate?: string; // lims:inforce-start-date
 };
 
 /**
@@ -161,8 +174,13 @@ export const acts = legislationSchema.table(
     hasPreviousVersion: varchar("has_previous_version", { length: 10 }), // "true" or "false"
     // Chapter information (e.g., "A-1", "2019, c. 10")
     consolidatedNumber: varchar("consolidated_number", { length: 50 }),
+    consolidatedNumberOfficial: consolidatedNumberOfficialEnum(
+      "consolidated_number_official"
+    ), // "yes" or "no"
     annualStatuteYear: varchar("annual_statute_year", { length: 20 }),
     annualStatuteChapter: varchar("annual_statute_chapter", { length: 50 }),
+    // Short title status
+    shortTitleStatus: shortTitleStatusEnum("short_title_status"), // "official" or "unofficial"
     // LIMS tracking metadata (Justice Canada internal IDs) - language-specific!
     limsMetadata: jsonb("lims_metadata").$type<LimsMetadata>(),
     // Bill history (parliament, stages, assent dates)
@@ -476,6 +494,9 @@ export const sections = legislationSchema.table(
     scheduleId: varchar("schedule_id", { length: 50 }), // e.g., "RelatedProvs", "NifProvs"
     scheduleBilingual: varchar("schedule_bilingual", { length: 10 }), // "yes" or "no"
     scheduleSpanLanguages: varchar("schedule_span_languages", { length: 10 }),
+    scheduleOriginatingRef: varchar("schedule_originating_ref", {
+      length: 255,
+    }), // e.g., "(Section 2)"
     // Content flags for special content types (tables, formulas, images, partial repeals)
     contentFlags: jsonb("content_flags").$type<ContentFlags>(),
     // Formatting attributes for provisions/lists

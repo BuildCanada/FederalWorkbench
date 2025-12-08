@@ -121,12 +121,31 @@ function extractLimsMetadata(
   const currentDate = parseDate(
     el["@_lims:current-date"] as string | undefined
   );
+  const inForceStartDate = parseDate(
+    el["@_lims:inforce-start-date"] as string | undefined
+  );
 
-  if (!fid && !id && !enactedDate && !enactId && !pitDate && !currentDate) {
+  if (
+    !fid &&
+    !id &&
+    !enactedDate &&
+    !enactId &&
+    !pitDate &&
+    !currentDate &&
+    !inForceStartDate
+  ) {
     return;
   }
 
-  return { fid, id, enactedDate, enactId, pitDate, currentDate };
+  return {
+    fid,
+    id,
+    enactedDate,
+    enactId,
+    pitDate,
+    currentDate,
+    inForceStartDate,
+  };
 }
 
 /**
@@ -1402,6 +1421,22 @@ function extractHtmlContent(el: unknown): string {
           html += `<span lang="${lang || ""}">${extractHtmlContent(item)}</span>`;
           break;
         }
+        // Bilingual content elements - keep EN/FR separated
+        case "BilingualGroup": {
+          // Container for bilingual content - wrap in a div with class
+          html += `<div class="bilingual-group">${extractHtmlContent(item)}</div>`;
+          break;
+        }
+        case "BilingualItemEn": {
+          // English content within bilingual group
+          html += `<span lang="en" class="bilingual-en">${extractHtmlContent(item)}</span>`;
+          break;
+        }
+        case "BilingualItemFr": {
+          // French content within bilingual group
+          html += `<span lang="fr" class="bilingual-fr">${extractHtmlContent(item)}</span>`;
+          break;
+        }
         case "XRefExternal":
         case "XRefInternal":
           html += `<a class="xref">${extractHtmlContent(item)}</a>`;
@@ -1417,6 +1452,138 @@ function extractHtmlContent(el: unknown): string {
         case "Repealed":
           html += `<span class="repealed">${extractHtmlContent(item)}</span>`;
           break;
+        // CALS Table elements
+        case "TableGroup":
+        case "table": {
+          const itemObj = item as Record<string, unknown>;
+          const attrs: string[] = [];
+          // Carry over CALS attributes
+          if (itemObj["@_frame"]) {
+            attrs.push(
+              `data-frame="${escapeHtml(String(itemObj["@_frame"]))}"`
+            );
+          }
+          if (itemObj["@_colsep"]) {
+            attrs.push(
+              `data-colsep="${escapeHtml(String(itemObj["@_colsep"]))}"`
+            );
+          }
+          if (itemObj["@_rowsep"]) {
+            attrs.push(
+              `data-rowsep="${escapeHtml(String(itemObj["@_rowsep"]))}"`
+            );
+          }
+          if (itemObj["@_bilingual"]) {
+            attrs.push(
+              `data-bilingual="${escapeHtml(String(itemObj["@_bilingual"]))}"`
+            );
+          }
+          const attrStr = attrs.length > 0 ? ` ${attrs.join(" ")}` : "";
+          html += `<table${attrStr}>${extractHtmlContent(item)}</table>`;
+          break;
+        }
+        case "tgroup": {
+          // tgroup contains colspec, thead, tbody - process children directly
+          html += extractHtmlContent(item);
+          break;
+        }
+        case "colspec": {
+          // colspec defines column widths - skip in HTML but could add data attributes if needed
+          break;
+        }
+        case "thead": {
+          const itemObj = item as Record<string, unknown>;
+          const attrs: string[] = [];
+          if (itemObj["@_valign"]) {
+            attrs.push(
+              `style="vertical-align: ${escapeHtml(String(itemObj["@_valign"]))}"`
+            );
+          }
+          const attrStr = attrs.length > 0 ? ` ${attrs.join(" ")}` : "";
+          html += `<thead${attrStr}>${extractTableRows(item, true)}</thead>`;
+          break;
+        }
+        case "tbody": {
+          const itemObj = item as Record<string, unknown>;
+          const attrs: string[] = [];
+          if (itemObj["@_valign"]) {
+            attrs.push(
+              `style="vertical-align: ${escapeHtml(String(itemObj["@_valign"]))}"`
+            );
+          }
+          const attrStr = attrs.length > 0 ? ` ${attrs.join(" ")}` : "";
+          html += `<tbody${attrStr}>${extractTableRows(item, false)}</tbody>`;
+          break;
+        }
+        case "row": {
+          // Handle row elements that appear directly (not within thead/tbody)
+          html += extractTableRow(item, false);
+          break;
+        }
+        case "entry": {
+          // Handle entry elements that appear directly (not within row)
+          html += extractTableCell(item, false);
+          break;
+        }
+        // List elements
+        case "List": {
+          const itemObj = item as Record<string, unknown>;
+          // Determine list type from attributes
+          // The XML doesn't seem to have explicit style="arabic/roman/bullet"
+          // but we check for it anyway and default to ul
+          const style = itemObj["@_style"] as string | undefined;
+          let listTag = "ul";
+          let typeAttr = "";
+          if (style === "arabic" || style === "decimal") {
+            listTag = "ol";
+            typeAttr = ' type="1"';
+          } else if (style === "lower-roman" || style === "roman") {
+            listTag = "ol";
+            typeAttr = ' type="i"';
+          } else if (style === "upper-roman") {
+            listTag = "ol";
+            typeAttr = ' type="I"';
+          } else if (style === "lower-alpha") {
+            listTag = "ol";
+            typeAttr = ' type="a"';
+          } else if (style === "upper-alpha") {
+            listTag = "ol";
+            typeAttr = ' type="A"';
+          }
+          html += `<${listTag}${typeAttr}>${extractListItems(item)}</${listTag}>`;
+          break;
+        }
+        case "Item": {
+          // Handle Item elements that appear directly (not within List)
+          html += `<li>${extractHtmlContent(item)}</li>`;
+          break;
+        }
+        // DocumentInternal elements - preserve internal document structure
+        // These are containers for groups of articles in agreements, treaties, etc.
+        case "DocumentInternal": {
+          // Wrap in a section with class for styling/identification
+          html += `<section class="document-internal">${extractHtmlContent(item)}</section>`;
+          break;
+        }
+        // Group elements within DocumentInternal
+        case "Group": {
+          html += `<div class="group">${extractHtmlContent(item)}</div>`;
+          break;
+        }
+        case "GroupHeading": {
+          html += `<h4 class="group-heading">${extractHtmlContent(item)}</h4>`;
+          break;
+        }
+        // Provision elements (text blocks within agreements)
+        case "Provision": {
+          html += `<p class="provision">${extractHtmlContent(item)}</p>`;
+          break;
+        }
+        // SectionPiece - sub-section content
+        case "SectionPiece": {
+          html += `<div class="section-piece">${extractHtmlContent(item)}</div>`;
+          break;
+        }
         default:
           html += extractHtmlContent(item);
       }
@@ -1433,6 +1600,110 @@ function escapeHtml(text: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+/**
+ * Extract table rows from thead or tbody element
+ */
+function extractTableRows(el: unknown, isHeader: boolean): string {
+  if (!el || typeof el !== "object") {
+    return "";
+  }
+  const obj = el as Record<string, unknown>;
+  let html = "";
+
+  if (obj.row) {
+    const rows = Array.isArray(obj.row) ? obj.row : [obj.row];
+    for (const row of rows) {
+      html += extractTableRow(row, isHeader);
+    }
+  }
+
+  return html;
+}
+
+/**
+ * Extract a single table row
+ */
+function extractTableRow(el: unknown, isHeader: boolean): string {
+  if (!el || typeof el !== "object") {
+    return "";
+  }
+  const obj = el as Record<string, unknown>;
+  let html = "<tr>";
+
+  if (obj.entry) {
+    const entries = Array.isArray(obj.entry) ? obj.entry : [obj.entry];
+    for (const entry of entries) {
+      html += extractTableCell(entry, isHeader);
+    }
+  }
+
+  html += "</tr>";
+  return html;
+}
+
+/**
+ * Extract a single table cell (td or th)
+ */
+function extractTableCell(el: unknown, isHeader: boolean): string {
+  if (!el || typeof el !== "object") {
+    return "";
+  }
+  const obj = el as Record<string, unknown>;
+  const tag = isHeader ? "th" : "td";
+  const attrs: string[] = [];
+
+  // Handle colspan via namest/nameend or morerows
+  if (obj["@_namest"] && obj["@_nameend"]) {
+    // CALS uses column names; we'd need colspec info to calculate colspan
+    // For now, store as data attributes
+    attrs.push(`data-namest="${escapeHtml(String(obj["@_namest"]))}"`);
+    attrs.push(`data-nameend="${escapeHtml(String(obj["@_nameend"]))}"`);
+  }
+  if (obj["@_morerows"]) {
+    const morerows = Number.parseInt(String(obj["@_morerows"]), 10);
+    if (!Number.isNaN(morerows) && morerows > 0) {
+      attrs.push(`rowspan="${morerows + 1}"`);
+    }
+  }
+  if (obj["@_align"]) {
+    attrs.push(`style="text-align: ${escapeHtml(String(obj["@_align"]))}"`);
+  }
+  if (obj["@_valign"]) {
+    attrs.push(
+      `style="vertical-align: ${escapeHtml(String(obj["@_valign"]))}"`
+    );
+  }
+  if (obj["@_colsep"]) {
+    attrs.push(`data-colsep="${escapeHtml(String(obj["@_colsep"]))}"`);
+  }
+  if (obj["@_rowsep"]) {
+    attrs.push(`data-rowsep="${escapeHtml(String(obj["@_rowsep"]))}"`);
+  }
+
+  const attrStr = attrs.length > 0 ? ` ${attrs.join(" ")}` : "";
+  return `<${tag}${attrStr}>${extractHtmlContent(el)}</${tag}>`;
+}
+
+/**
+ * Extract list items from a List element
+ */
+function extractListItems(el: unknown): string {
+  if (!el || typeof el !== "object") {
+    return "";
+  }
+  const obj = el as Record<string, unknown>;
+  let html = "";
+
+  if (obj.Item) {
+    const items = Array.isArray(obj.Item) ? obj.Item : [obj.Item];
+    for (const item of items) {
+      html += `<li>${extractHtmlContent(item)}</li>`;
+    }
+  }
+
+  return html;
 }
 
 /**
@@ -1497,6 +1768,7 @@ type ScheduleContext = {
   scheduleSpanLanguages?: string;
   scheduleLabel?: string;
   scheduleTitle?: string;
+  scheduleOriginatingRef?: string;
 };
 
 /**
@@ -1776,6 +2048,9 @@ function extractDefinedTermFromDefinition(
   // Default scope if not provided
   const defaultScopeType: DefinitionScopeType = actId ? "act" : "regulation";
 
+  // Extract LIMS metadata from the Definition element
+  const limsMetadata = extractLimsMetadata(defEl);
+
   return {
     language,
     term,
@@ -1788,6 +2063,7 @@ function extractDefinedTermFromDefinition(
     scopeType: scope?.scopeType || defaultScopeType,
     scopeSections: scope?.scopeSections,
     scopeRawText: scope?.scopeRawText,
+    limsMetadata,
   };
 }
 
@@ -1870,7 +2146,7 @@ function extractScheduleContext(
     | string
     | undefined;
 
-  // Extract label and title from ScheduleFormHeading
+  // Extract label, title, and originating reference from ScheduleFormHeading
   if (scheduleEl.ScheduleFormHeading) {
     const heading = scheduleEl.ScheduleFormHeading as Record<string, unknown>;
     if (heading.Label) {
@@ -1878,6 +2154,12 @@ function extractScheduleContext(
     }
     if (heading.TitleText) {
       context.scheduleTitle = extractTextContent(heading.TitleText);
+    }
+    // Extract OriginatingRef - e.g., "(Section 2)" or "(Subsections 4(1) and 5(2))"
+    if (heading.OriginatingRef) {
+      context.scheduleOriginatingRef = extractTextContent(
+        heading.OriginatingRef
+      );
     }
   }
 
@@ -1998,6 +2280,7 @@ function extractScheduleListContent(options: ExtractScheduleListOptions): {
           scheduleId: scheduleContext.scheduleId,
           scheduleBilingual: scheduleContext.scheduleBilingual,
           scheduleSpanLanguages: scheduleContext.scheduleSpanLanguages,
+          scheduleOriginatingRef: scheduleContext.scheduleOriginatingRef,
           actId,
           regulationId,
         });
@@ -2068,6 +2351,7 @@ function extractScheduleListContent(options: ExtractScheduleListOptions): {
             scheduleId: scheduleContext.scheduleId,
             scheduleBilingual: scheduleContext.scheduleBilingual,
             scheduleSpanLanguages: scheduleContext.scheduleSpanLanguages,
+            scheduleOriginatingRef: scheduleContext.scheduleOriginatingRef,
             actId,
             regulationId,
           });
@@ -2128,6 +2412,7 @@ function extractScheduleListContent(options: ExtractScheduleListOptions): {
             scheduleId: scheduleContext.scheduleId,
             scheduleBilingual: scheduleContext.scheduleBilingual,
             scheduleSpanLanguages: scheduleContext.scheduleSpanLanguages,
+            scheduleOriginatingRef: scheduleContext.scheduleOriginatingRef,
             actId,
             regulationId,
           });
@@ -2674,6 +2959,29 @@ export function parseActXml(
 
   // Extract chapter info
   const consolidatedNumber = extractTextContent(chapter.ConsolidatedNumber);
+
+  // Extract official markers for title and consolidated number
+  const consolidatedNumberObj = chapter.ConsolidatedNumber as
+    | Record<string, unknown>
+    | undefined;
+  const consolidatedNumberOfficialRaw = consolidatedNumberObj?.["@_official"] as
+    | string
+    | undefined;
+  const consolidatedNumberOfficial =
+    consolidatedNumberOfficialRaw === "yes" ||
+    consolidatedNumberOfficialRaw === "no"
+      ? (consolidatedNumberOfficialRaw as "yes" | "no")
+      : undefined;
+
+  const shortTitleObj = identification.ShortTitle as
+    | Record<string, unknown>
+    | undefined;
+  const shortTitleStatusRaw = shortTitleObj?.["@_status"] as string | undefined;
+  const shortTitleStatus =
+    shortTitleStatusRaw === "official" || shortTitleStatusRaw === "unofficial"
+      ? (shortTitleStatusRaw as "official" | "unofficial")
+      : undefined;
+
   let annualStatuteYear: string | undefined;
   let annualStatuteChapter: string | undefined;
   if (chapter.AnnualStatuteId) {
@@ -2724,8 +3032,10 @@ export function parseActXml(
     billType,
     hasPreviousVersion,
     consolidatedNumber,
+    consolidatedNumberOfficial,
     annualStatuteYear,
     annualStatuteChapter,
+    shortTitleStatus,
     limsMetadata,
     billHistory,
     recentAmendments,

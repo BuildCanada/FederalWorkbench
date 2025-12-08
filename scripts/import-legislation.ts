@@ -259,8 +259,10 @@ async function insertDocument(doc: ParsedDocument): Promise<void> {
         billType: doc.act.billType,
         hasPreviousVersion: doc.act.hasPreviousVersion,
         consolidatedNumber: doc.act.consolidatedNumber,
+        consolidatedNumberOfficial: doc.act.consolidatedNumberOfficial,
         annualStatuteYear: doc.act.annualStatuteYear,
         annualStatuteChapter: doc.act.annualStatuteChapter,
+        shortTitleStatus: doc.act.shortTitleStatus,
         limsMetadata: doc.act.limsMetadata,
         billHistory: doc.act.billHistory,
         recentAmendments: doc.act.recentAmendments,
@@ -326,6 +328,7 @@ async function insertDocument(doc: ParsedDocument): Promise<void> {
         scheduleId: section.scheduleId,
         scheduleBilingual: section.scheduleBilingual,
         scheduleSpanLanguages: section.scheduleSpanLanguages,
+        scheduleOriginatingRef: section.scheduleOriginatingRef,
         contentFlags: section.contentFlags,
         formattingAttributes: section.formattingAttributes,
       }));

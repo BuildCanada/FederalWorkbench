@@ -53,12 +53,8 @@
           "name": "Chat_userId_User_id_fk",
           "tableFrom": "Chat",
           "tableTo": "User",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -118,12 +114,8 @@
           "name": "Document_userId_User_id_fk",
           "tableFrom": "Document",
           "tableTo": "User",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -131,10 +123,7 @@
       "compositePrimaryKeys": {
         "Document_id_createdAt_pk": {
           "name": "Document_id_createdAt_pk",
-          "columns": [
-            "id",
-            "createdAt"
-          ]
+          "columns": ["id", "createdAt"]
         }
       },
       "uniqueConstraints": {},
@@ -196,12 +185,8 @@
           "name": "Message_v2_chatId_Chat_id_fk",
           "tableFrom": "Message_v2",
           "tableTo": "Chat",
-          "columnsFrom": [
-            "chatId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["chatId"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -254,12 +239,8 @@
           "name": "Message_chatId_Chat_id_fk",
           "tableFrom": "Message",
           "tableTo": "Chat",
-          "columnsFrom": [
-            "chatId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["chatId"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -300,12 +281,8 @@
           "name": "Stream_chatId_Chat_id_fk",
           "tableFrom": "Stream",
           "tableTo": "Chat",
-          "columnsFrom": [
-            "chatId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["chatId"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -313,9 +290,7 @@
       "compositePrimaryKeys": {
         "Stream_id_pk": {
           "name": "Stream_id_pk",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -390,12 +365,8 @@
           "name": "Suggestion_userId_User_id_fk",
           "tableFrom": "Suggestion",
           "tableTo": "User",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -403,14 +374,8 @@
           "name": "Suggestion_documentId_documentCreatedAt_Document_id_createdAt_fk",
           "tableFrom": "Suggestion",
           "tableTo": "Document",
-          "columnsFrom": [
-            "documentId",
-            "documentCreatedAt"
-          ],
-          "columnsTo": [
-            "id",
-            "createdAt"
-          ],
+          "columnsFrom": ["documentId", "documentCreatedAt"],
+          "columnsTo": ["id", "createdAt"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -418,9 +383,7 @@
       "compositePrimaryKeys": {
         "Suggestion_id_pk": {
           "name": "Suggestion_id_pk",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -489,12 +452,8 @@
           "name": "Vote_v2_chatId_Chat_id_fk",
           "tableFrom": "Vote_v2",
           "tableTo": "Chat",
-          "columnsFrom": [
-            "chatId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["chatId"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -502,12 +461,8 @@
           "name": "Vote_v2_messageId_Message_v2_id_fk",
           "tableFrom": "Vote_v2",
           "tableTo": "Message_v2",
-          "columnsFrom": [
-            "messageId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["messageId"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -515,10 +470,7 @@
       "compositePrimaryKeys": {
         "Vote_v2_chatId_messageId_pk": {
           "name": "Vote_v2_chatId_messageId_pk",
-          "columns": [
-            "chatId",
-            "messageId"
-          ]
+          "columns": ["chatId", "messageId"]
         }
       },
       "uniqueConstraints": {},
@@ -555,12 +507,8 @@
           "name": "Vote_chatId_Chat_id_fk",
           "tableFrom": "Vote",
           "tableTo": "Chat",
-          "columnsFrom": [
-            "chatId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["chatId"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -568,12 +516,8 @@
           "name": "Vote_messageId_Message_id_fk",
           "tableFrom": "Vote",
           "tableTo": "Message",
-          "columnsFrom": [
-            "messageId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["messageId"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -581,10 +525,7 @@
       "compositePrimaryKeys": {
         "Vote_chatId_messageId_pk": {
           "name": "Vote_chatId_messageId_pk",
-          "columns": [
-            "chatId",
-            "messageId"
-          ]
+          "columns": ["chatId", "messageId"]
         }
       },
       "uniqueConstraints": {},
@@ -717,12 +658,8 @@
           "tableFrom": "leg_embeddings",
           "tableTo": "leg_resources",
           "schemaTo": "rag",
-          "columnsFrom": [
-            "resource_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["resource_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1039,9 +976,7 @@
         "leg_resources_resource_key_unique": {
           "name": "leg_resources_resource_key_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "resource_key"
-          ]
+          "columns": ["resource_key"]
         }
       },
       "policies": {},
@@ -1127,12 +1062,8 @@
           "tableFrom": "parl_embeddings",
           "tableTo": "parl_resources",
           "schemaTo": "rag",
-          "columnsFrom": [
-            "resource_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["resource_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1433,10 +1364,7 @@
         "acts_act_id_language_unique": {
           "name": "acts_act_id_language_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "act_id",
-            "language"
-          ]
+          "columns": ["act_id", "language"]
         }
       },
       "policies": {},
@@ -2030,10 +1958,7 @@
         "regulations_regulation_id_language_unique": {
           "name": "regulations_regulation_id_language_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "regulation_id",
-            "language"
-          ]
+          "columns": ["regulation_id", "language"]
         }
       },
       "policies": {},
@@ -2422,14 +2347,8 @@
           "tableFrom": "sections",
           "tableTo": "acts",
           "schemaTo": "legislation",
-          "columnsFrom": [
-            "act_id",
-            "language"
-          ],
-          "columnsTo": [
-            "act_id",
-            "language"
-          ],
+          "columnsFrom": ["act_id", "language"],
+          "columnsTo": ["act_id", "language"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2438,14 +2357,8 @@
           "tableFrom": "sections",
           "tableTo": "regulations",
           "schemaTo": "legislation",
-          "columnsFrom": [
-            "regulation_id",
-            "language"
-          ],
-          "columnsTo": [
-            "regulation_id",
-            "language"
-          ],
+          "columnsFrom": ["regulation_id", "language"],
+          "columnsTo": ["regulation_id", "language"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2771,12 +2684,8 @@
           "tableFrom": "bills_bill",
           "tableTo": "core_electedmember",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "sponsor_member_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["sponsor_member_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -2785,12 +2694,8 @@
           "tableFrom": "bills_bill",
           "tableTo": "core_politician",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "sponsor_politician_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["sponsor_politician_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -2799,12 +2704,8 @@
           "tableFrom": "bills_bill",
           "tableTo": "core_session",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -2881,12 +2782,8 @@
           "tableFrom": "bills_bill_similar_bills",
           "tableTo": "bills_bill",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "from_bill_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["from_bill_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -2895,12 +2792,8 @@
           "tableFrom": "bills_bill_similar_bills",
           "tableTo": "bills_bill",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "to_bill_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["to_bill_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -2910,10 +2803,7 @@
         "bills_bill_similar_bills_from_bill_id_to_bill_id_87b85e17_uniq": {
           "name": "bills_bill_similar_bills_from_bill_id_to_bill_id_87b85e17_uniq",
           "nullsNotDistinct": false,
-          "columns": [
-            "from_bill_id",
-            "to_bill_id"
-          ]
+          "columns": ["from_bill_id", "to_bill_id"]
         }
       },
       "policies": {},
@@ -3007,12 +2897,8 @@
           "tableFrom": "bills_billtext",
           "tableTo": "bills_bill",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "bill_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["bill_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -3022,9 +2908,7 @@
         "bills_billtext_docid_unique": {
           "name": "bills_billtext_docid_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "docid"
-          ]
+          "columns": ["docid"]
         }
       },
       "policies": {},
@@ -3145,12 +3029,8 @@
           "tableFrom": "bills_membervote",
           "tableTo": "core_electedmember",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "member_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["member_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -3159,12 +3039,8 @@
           "tableFrom": "bills_membervote",
           "tableTo": "core_politician",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "politician_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["politician_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -3173,12 +3049,8 @@
           "tableFrom": "bills_membervote",
           "tableTo": "bills_votequestion",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "votequestion_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["votequestion_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -3262,12 +3134,8 @@
           "tableFrom": "bills_partyvote",
           "tableTo": "core_party",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "party_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["party_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -3276,12 +3144,8 @@
           "tableFrom": "bills_partyvote",
           "tableTo": "bills_votequestion",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "votequestion_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["votequestion_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -3291,10 +3155,7 @@
         "bills_partyvote_party_id_3db5377c11c3b9f1_uniq": {
           "name": "bills_partyvote_party_id_3db5377c11c3b9f1_uniq",
           "nullsNotDistinct": false,
-          "columns": [
-            "party_id",
-            "votequestion_id"
-          ]
+          "columns": ["party_id", "votequestion_id"]
         }
       },
       "policies": {},
@@ -3447,12 +3308,8 @@
           "tableFrom": "bills_votequestion",
           "tableTo": "bills_bill",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "bill_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["bill_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -3461,12 +3318,8 @@
           "tableFrom": "bills_votequestion",
           "tableTo": "core_session",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -3475,12 +3328,8 @@
           "tableFrom": "bills_votequestion",
           "tableTo": "hansards_statement",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "context_statement_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["context_statement_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -3595,12 +3444,8 @@
           "tableFrom": "committees_committee",
           "tableTo": "committees_committee",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "parent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["parent_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -3610,9 +3455,7 @@
         "committees_committee_slug_unique": {
           "name": "committees_committee_slug_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "slug"
-          ]
+          "columns": ["slug"]
         }
       },
       "policies": {},
@@ -3678,12 +3521,8 @@
           "tableFrom": "committees_committeeactivity",
           "tableTo": "committees_committee",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "committee_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["committee_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -3776,12 +3615,8 @@
           "tableFrom": "committees_committeeactivityinsession",
           "tableTo": "committees_committeeactivity",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "activity_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["activity_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -3790,12 +3625,8 @@
           "tableFrom": "committees_committeeactivityinsession",
           "tableTo": "core_session",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -3805,17 +3636,12 @@
         "committees_committeeactivityinsession_source_id_unique": {
           "name": "committees_committeeactivityinsession_source_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "source_id"
-          ]
+          "columns": ["source_id"]
         },
         "committees_committeeactivityi_activity_id_7357f535d6955621_uniq": {
           "name": "committees_committeeactivityi_activity_id_7357f535d6955621_uniq",
           "nullsNotDistinct": false,
-          "columns": [
-            "activity_id",
-            "session_id"
-          ]
+          "columns": ["activity_id", "session_id"]
         }
       },
       "policies": {},
@@ -3934,12 +3760,8 @@
           "tableFrom": "committees_committeeinsession",
           "tableTo": "core_session",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -3948,12 +3770,8 @@
           "tableFrom": "committees_committeeinsession",
           "tableTo": "committees_committee",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "committee_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["committee_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -3963,18 +3781,12 @@
         "committees_committeeinsession_acronym_4d7dee190bc1dac4_uniq": {
           "name": "committees_committeeinsession_acronym_4d7dee190bc1dac4_uniq",
           "nullsNotDistinct": false,
-          "columns": [
-            "acronym",
-            "session_id"
-          ]
+          "columns": ["acronym", "session_id"]
         },
         "committees_committeeinsession_session_id_7ce4b4057e46edfd_uniq": {
           "name": "committees_committeeinsession_session_id_7ce4b4057e46edfd_uniq",
           "nullsNotDistinct": false,
-          "columns": [
-            "session_id",
-            "committee_id"
-          ]
+          "columns": ["session_id", "committee_id"]
         }
       },
       "policies": {},
@@ -4144,12 +3956,8 @@
           "tableFrom": "committees_committeemeeting",
           "tableTo": "committees_committee",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "committee_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["committee_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -4158,12 +3966,8 @@
           "tableFrom": "committees_committeemeeting",
           "tableTo": "core_session",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -4172,12 +3976,8 @@
           "tableFrom": "committees_committeemeeting",
           "tableTo": "hansards_document",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "evidence_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["evidence_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -4187,18 +3987,12 @@
         "committees_committeemeeting_evidence_id_unique": {
           "name": "committees_committeemeeting_evidence_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "evidence_id"
-          ]
+          "columns": ["evidence_id"]
         },
         "committees_committeemeeting_session_id_792939e90cda4ac1_uniq": {
           "name": "committees_committeemeeting_session_id_792939e90cda4ac1_uniq",
           "nullsNotDistinct": false,
-          "columns": [
-            "session_id",
-            "number",
-            "committee_id"
-          ]
+          "columns": ["session_id", "number", "committee_id"]
         }
       },
       "policies": {},
@@ -4266,12 +4060,8 @@
           "tableFrom": "committees_committeemeeting_activities",
           "tableTo": "committees_committeemeeting",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "committeemeeting_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["committeemeeting_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -4280,12 +4070,8 @@
           "tableFrom": "committees_committeemeeting_activities",
           "tableTo": "committees_committeeactivity",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "committeeactivity_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["committeeactivity_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -4295,10 +4081,7 @@
         "committees_committeem_committeemeeting_id_36a83bbd36111342_uniq": {
           "name": "committees_committeem_committeemeeting_id_36a83bbd36111342_uniq",
           "nullsNotDistinct": false,
-          "columns": [
-            "committeemeeting_id",
-            "committeeactivity_id"
-          ]
+          "columns": ["committeemeeting_id", "committeeactivity_id"]
         }
       },
       "policies": {},
@@ -4445,12 +4228,8 @@
           "tableFrom": "committees_committeereport",
           "tableTo": "committees_committee",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "committee_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["committee_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -4459,12 +4238,8 @@
           "tableFrom": "committees_committeereport",
           "tableTo": "core_session",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -4473,12 +4248,8 @@
           "tableFrom": "committees_committeereport",
           "tableTo": "committees_committeereport",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "parent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["parent_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -4488,9 +4259,7 @@
         "committees_committeereport_source_id_unique": {
           "name": "committees_committeereport_source_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "source_id"
-          ]
+          "columns": ["source_id"]
         }
       },
       "policies": {},
@@ -4621,12 +4390,8 @@
           "tableFrom": "core_electedmember",
           "tableTo": "core_politician",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "politician_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["politician_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -4635,12 +4400,8 @@
           "tableFrom": "core_electedmember",
           "tableTo": "core_riding",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "riding_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["riding_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -4649,12 +4410,8 @@
           "tableFrom": "core_electedmember",
           "tableTo": "core_party",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "party_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["party_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -4726,12 +4483,8 @@
           "tableFrom": "core_electedmember_sessions",
           "tableTo": "core_electedmember",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "electedmember_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["electedmember_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -4740,12 +4493,8 @@
           "tableFrom": "core_electedmember_sessions",
           "tableTo": "core_session",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -4755,10 +4504,7 @@
         "core_electedmember_sessions_electedmember_id_6d9c051f_uniq": {
           "name": "core_electedmember_sessions_electedmember_id_6d9c051f_uniq",
           "nullsNotDistinct": false,
-          "columns": [
-            "electedmember_id",
-            "session_id"
-          ]
+          "columns": ["electedmember_id", "session_id"]
         }
       },
       "policies": {},
@@ -4873,12 +4619,8 @@
           "tableFrom": "core_partyalternatename",
           "tableTo": "core_party",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "party_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["party_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -5073,12 +4815,8 @@
           "tableFrom": "core_politicianinfo",
           "tableTo": "core_politician",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "politician_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["politician_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -5175,9 +4913,7 @@
         "core_riding_slug_unique": {
           "name": "core_riding_slug_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "slug"
-          ]
+          "columns": ["slug"]
         }
       },
       "policies": {},
@@ -5354,12 +5090,8 @@
           "tableFrom": "elections_candidacy",
           "tableTo": "core_politician",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "candidate_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["candidate_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -5368,12 +5100,8 @@
           "tableFrom": "elections_candidacy",
           "tableTo": "core_riding",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "riding_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["riding_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -5382,12 +5110,8 @@
           "tableFrom": "elections_candidacy",
           "tableTo": "core_party",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "party_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["party_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -5396,12 +5120,8 @@
           "tableFrom": "elections_candidacy",
           "tableTo": "elections_election",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "election_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["election_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -5615,12 +5335,8 @@
           "tableFrom": "hansards_document",
           "tableTo": "core_session",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -5630,9 +5346,7 @@
         "hansards_document_source_id_unique": {
           "name": "hansards_document_source_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "source_id"
-          ]
+          "columns": ["source_id"]
         }
       },
       "policies": {},
@@ -6044,12 +5758,8 @@
           "tableFrom": "hansards_statement",
           "tableTo": "hansards_document",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "document_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["document_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -6058,12 +5768,8 @@
           "tableFrom": "hansards_statement",
           "tableTo": "core_electedmember",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "member_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["member_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -6072,12 +5778,8 @@
           "tableFrom": "hansards_statement",
           "tableTo": "core_politician",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "politician_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["politician_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -6086,12 +5788,8 @@
           "tableFrom": "hansards_statement",
           "tableTo": "bills_bill",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "bill_debated_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["bill_debated_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -6101,10 +5799,7 @@
         "hansards_statement_document_id_77a67b806d7aef3_uniq": {
           "name": "hansards_statement_document_id_77a67b806d7aef3_uniq",
           "nullsNotDistinct": false,
-          "columns": [
-            "document_id",
-            "slug"
-          ]
+          "columns": ["document_id", "slug"]
         }
       },
       "policies": {},
@@ -6181,12 +5876,8 @@
           "tableFrom": "hansards_statement_bills",
           "tableTo": "hansards_statement",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "statement_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["statement_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -6195,12 +5886,8 @@
           "tableFrom": "hansards_statement_bills",
           "tableTo": "bills_bill",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "bill_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["bill_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -6210,10 +5897,7 @@
         "hansards_statement_bills_statement_id_55ead5ec_uniq": {
           "name": "hansards_statement_bills_statement_id_55ead5ec_uniq",
           "nullsNotDistinct": false,
-          "columns": [
-            "statement_id",
-            "bill_id"
-          ]
+          "columns": ["statement_id", "bill_id"]
         }
       },
       "policies": {},
@@ -6281,12 +5965,8 @@
           "tableFrom": "hansards_statement_mentioned_politicians",
           "tableTo": "hansards_statement",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "statement_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["statement_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -6295,12 +5975,8 @@
           "tableFrom": "hansards_statement_mentioned_politicians",
           "tableTo": "core_politician",
           "schemaTo": "parliament",
-          "columnsFrom": [
-            "politician_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["politician_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -6310,10 +5986,7 @@
         "hansards_statement_mentioned_statement_id_144d57244608b1e4_uniq": {
           "name": "hansards_statement_mentioned_statement_id_144d57244608b1e4_uniq",
           "nullsNotDistinct": false,
-          "columns": [
-            "statement_id",
-            "politician_id"
-          ]
+          "columns": ["statement_id", "politician_id"]
         }
       },
       "policies": {},
