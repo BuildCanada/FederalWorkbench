@@ -309,6 +309,7 @@ function buildActChunks(
           sectionEnactedDate: section.enactedDate ?? undefined,
           sectionRole: section.xmlType ?? undefined, // xmlType -> sectionRole
           amendmentTarget: section.xmlTarget ?? undefined, // xmlTarget -> amendmentTarget
+          changeType: section.changeType ?? undefined,
           historicalNotes: section.historicalNotes ?? undefined,
           scheduleId: section.scheduleId ?? undefined,
           scheduleBilingual: section.scheduleBilingual ?? undefined,

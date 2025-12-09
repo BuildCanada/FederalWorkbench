@@ -21,6 +21,7 @@ import type {
   Regulation,
   RegulationPublicationItem,
   Section,
+  TreatyContent,
 } from "@/lib/db/legislation/schema";
 import {
   DEFAULT_EMBEDDING_MODEL,
@@ -54,6 +55,7 @@ import {
   buildPreambleContent,
   buildPublicationItemContent,
   buildRelatedProvisionContent,
+  buildTreatyContent,
 } from "@/scripts/embeddings/legislation/additional-content";
 import { buildTermContent } from "@/scripts/embeddings/legislation/defined-terms";
 import { buildRegulationMetadataText } from "@/scripts/embeddings/legislation/regulations";
@@ -3779,6 +3781,131 @@ test.describe("amendmentTarget metadata field", () => {
   });
 });
 
+// ---------- changeType Tests ----------
+
+test.describe("changeType metadata field", () => {
+  test("LegResourceMetadata accepts changeType for inserted sections", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "en",
+      documentTitle: "Criminal Code",
+      actId: "C-46",
+      sectionId: "section-new-1",
+      sectionLabel: "264.1",
+      changeType: "ins",
+    };
+
+    expect(metadata.changeType).toBe("ins");
+  });
+
+  test("LegResourceMetadata accepts changeType for deleted sections", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "en",
+      documentTitle: "Criminal Code",
+      actId: "C-46",
+      sectionId: "section-deleted-1",
+      sectionLabel: "264.2",
+      changeType: "del",
+    };
+
+    expect(metadata.changeType).toBe("del");
+  });
+
+  test("LegResourceMetadata accepts changeType for official sections", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "en",
+      documentTitle: "Criminal Code",
+      actId: "C-46",
+      sectionId: "section-off-1",
+      sectionLabel: "265",
+      changeType: "off",
+    };
+
+    expect(metadata.changeType).toBe("off");
+  });
+
+  test("LegResourceMetadata accepts changeType for alternative text sections", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "en",
+      documentTitle: "Criminal Code",
+      actId: "C-46",
+      sectionId: "section-alt-1",
+      sectionLabel: "266",
+      changeType: "alt",
+    };
+
+    expect(metadata.changeType).toBe("alt");
+  });
+
+  test("changeType can be combined with other section metadata", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "en",
+      documentTitle: "Criminal Code",
+      actId: "C-46",
+      sectionId: "section-combined-1",
+      sectionLabel: "267",
+      sectionStatus: "in-force",
+      sectionType: "section",
+      sectionRole: "amending",
+      amendmentTarget: "A-1-sec5",
+      changeType: "ins",
+    };
+
+    expect(metadata.changeType).toBe("ins");
+    expect(metadata.sectionRole).toBe("amending");
+    expect(metadata.amendmentTarget).toBe("A-1-sec5");
+    expect(metadata.sectionStatus).toBe("in-force");
+  });
+
+  test("changeType for regulation section", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "regulation_section",
+      language: "en",
+      documentTitle: "Food and Drug Regulations",
+      regulationId: "CRC-c-870",
+      sectionId: "section-reg-1",
+      sectionLabel: "A.01.001",
+      changeType: "ins",
+    };
+
+    expect(metadata.changeType).toBe("ins");
+    expect(metadata.regulationId).toBe("CRC-c-870");
+  });
+
+  test("changeType undefined for sections without amendment tracking", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "en",
+      documentTitle: "Access to Information Act",
+      actId: "A-1",
+      sectionId: "section-normal-1",
+      sectionLabel: "1",
+      // No changeType for regular sections
+    };
+
+    expect(metadata.changeType).toBeUndefined();
+  });
+
+  test("changeType for French legislation", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "fr",
+      documentTitle: "Code criminel",
+      actId: "C-46",
+      sectionId: "section-fr-1",
+      sectionLabel: "264.1",
+      changeType: "ins",
+    };
+
+    expect(metadata.language).toBe("fr");
+    expect(metadata.changeType).toBe("ins");
+  });
+});
+
 // ---------- internalReferences Tests ----------
 
 test.describe("internalReferences metadata field", () => {
@@ -5385,5 +5512,424 @@ test.describe("sectionEnactedDate metadata field", () => {
     expect(metadata.sectionInForceDate).toBe("1983-01-04");
     expect(metadata.sectionLastAmendedDate).toBe("2019-09-19");
     expect(metadata.historicalNotes).toHaveLength(2);
+  });
+});
+
+// ---------- buildTreatyContent Tests ----------
+
+test.describe("buildTreatyContent", () => {
+  test("builds basic treaty content without definitions", () => {
+    const treaty: TreatyContent = {
+      title: "Convention on Biological Diversity",
+      text: "The Contracting Parties, conscious of the intrinsic value of biological diversity...",
+    };
+
+    const content = buildTreatyContent(treaty, "Canada Wildlife Act", "en");
+
+    expect(content).toContain(
+      "Treaty/Convention: Convention on Biological Diversity"
+    );
+    expect(content).toContain("Source: Canada Wildlife Act");
+    expect(content).toContain("The Contracting Parties");
+    expect(content).not.toContain("Treaty Definitions:");
+  });
+
+  test("builds treaty content with definitions in English", () => {
+    const treaty: TreatyContent = {
+      title: "Convention on Biological Diversity",
+      text: "The Contracting Parties agree to the following terms...",
+      definitions: [
+        {
+          term: "Biological diversity",
+          definition: "The variability among living organisms from all sources",
+        },
+        {
+          term: "Genetic resources",
+          definition: "Genetic material of actual or potential value",
+        },
+      ],
+    };
+
+    const content = buildTreatyContent(treaty, "Canada Wildlife Act", "en");
+
+    expect(content).toContain(
+      "Treaty/Convention: Convention on Biological Diversity"
+    );
+    expect(content).toContain("Treaty Definitions:");
+    expect(content).toContain(
+      "• Biological diversity: The variability among living organisms"
+    );
+    expect(content).toContain(
+      "• Genetic resources: Genetic material of actual or potential value"
+    );
+  });
+
+  test("builds treaty content with definitions in French", () => {
+    const treaty: TreatyContent = {
+      title: "Convention sur la diversité biologique",
+      text: "Les Parties contractantes conviennent des termes suivants...",
+      definitions: [
+        {
+          term: "Diversité biologique",
+          definition: "Variabilité des organismes vivants de toute origine",
+        },
+        {
+          term: "Ressources génétiques",
+          definition:
+            "Matériel génétique ayant une valeur effective ou potentielle",
+        },
+      ],
+    };
+
+    const content = buildTreatyContent(
+      treaty,
+      "Loi sur les espèces sauvages du Canada",
+      "fr"
+    );
+
+    expect(content).toContain(
+      "Traité/Convention: Convention sur la diversité biologique"
+    );
+    expect(content).toContain("Source: Loi sur les espèces sauvages du Canada");
+    expect(content).toContain("Définitions du traité:");
+    expect(content).toContain(
+      "• Diversité biologique: Variabilité des organismes vivants"
+    );
+    expect(content).toContain(
+      "• Ressources génétiques: Matériel génétique ayant une valeur"
+    );
+  });
+
+  test("handles treaty with empty definitions array", () => {
+    const treaty: TreatyContent = {
+      title: "Simple Treaty",
+      text: "Treaty text content.",
+      definitions: [],
+    };
+
+    const content = buildTreatyContent(treaty, "Test Act", "en");
+
+    expect(content).toContain("Treaty/Convention: Simple Treaty");
+    expect(content).not.toContain("Treaty Definitions:");
+  });
+
+  test("handles treaty without title", () => {
+    const treaty: TreatyContent = {
+      text: "Treaty text without a formal title.",
+      definitions: [
+        {
+          term: "Party",
+          definition: "A state or regional economic integration organization",
+        },
+      ],
+    };
+
+    const content = buildTreatyContent(treaty, "Implementation Act", "en");
+
+    expect(content).not.toContain("Treaty/Convention:");
+    expect(content).toContain("Source: Implementation Act");
+    expect(content).toContain("Treaty Definitions:");
+    expect(content).toContain(
+      "• Party: A state or regional economic integration organization"
+    );
+  });
+
+  test("includes multiple definitions preserving order", () => {
+    const treaty: TreatyContent = {
+      title: "Multi-Definition Treaty",
+      text: "Base text.",
+      definitions: [
+        { term: "Term A", definition: "Definition A" },
+        { term: "Term B", definition: "Definition B" },
+        { term: "Term C", definition: "Definition C" },
+      ],
+    };
+
+    const content = buildTreatyContent(treaty, "Test Act", "en");
+
+    // Verify all definitions are present
+    expect(content).toContain("• Term A: Definition A");
+    expect(content).toContain("• Term B: Definition B");
+    expect(content).toContain("• Term C: Definition C");
+
+    // Verify order is preserved (A before B before C)
+    const indexA = content.indexOf("Term A");
+    const indexB = content.indexOf("Term B");
+    const indexC = content.indexOf("Term C");
+    expect(indexA).toBeLessThan(indexB);
+    expect(indexB).toBeLessThan(indexC);
+  });
+});
+
+// ---------- treatyDefinitionCount Metadata Tests ----------
+
+test.describe("treatyDefinitionCount metadata field", () => {
+  test("LegResourceMetadata accepts treatyDefinitionCount for act treaties", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "treaty",
+      language: "en",
+      documentTitle: "Canada Wildlife Act",
+      actId: "W-9",
+      treatyTitle: "Convention on Biological Diversity",
+      treatyDefinitionCount: 5,
+    };
+
+    expect(metadata.treatyDefinitionCount).toBe(5);
+    expect(metadata.treatyTitle).toBe("Convention on Biological Diversity");
+  });
+
+  test("LegResourceMetadata accepts treatyDefinitionCount for regulation treaties", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "treaty",
+      language: "en",
+      documentTitle: "Wild Animal and Plant Trade Regulations",
+      regulationId: "SOR-96-263",
+      treatyTitle: "CITES Convention",
+      treatyDefinitionCount: 12,
+    };
+
+    expect(metadata.treatyDefinitionCount).toBe(12);
+    expect(metadata.regulationId).toBe("SOR-96-263");
+  });
+
+  test("treatyDefinitionCount can be zero", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "treaty",
+      language: "en",
+      documentTitle: "Test Act",
+      treatyTitle: "Simple Treaty",
+      treatyDefinitionCount: 0,
+    };
+
+    expect(metadata.treatyDefinitionCount).toBe(0);
+  });
+
+  test("treatyDefinitionCount can be undefined for treaties without definitions", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "treaty",
+      language: "en",
+      documentTitle: "Test Act",
+      treatyTitle: "Treaty Without Definitions",
+      // No treatyDefinitionCount
+    };
+
+    expect(metadata.treatyDefinitionCount).toBeUndefined();
+  });
+
+  test("treatyDefinitionCount for French treaty", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "treaty",
+      language: "fr",
+      documentTitle: "Loi sur les espèces sauvages du Canada",
+      actId: "W-9",
+      treatyTitle: "Convention sur la diversité biologique",
+      treatyDefinitionCount: 8,
+    };
+
+    expect(metadata.language).toBe("fr");
+    expect(metadata.treatyDefinitionCount).toBe(8);
+  });
+
+  test("treaty metadata with all fields", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "treaty",
+      language: "en",
+      documentTitle: "Canada Wildlife Act",
+      actId: "W-9",
+      treatyTitle: "Convention on International Trade in Endangered Species",
+      treatyDefinitionCount: 15,
+      chunkIndex: 0,
+      pairedResourceKey: "treaty:act:W-9:0:fr:0",
+    };
+
+    expect(metadata.sourceType).toBe("treaty");
+    expect(metadata.treatyTitle).toBe(
+      "Convention on International Trade in Endangered Species"
+    );
+    expect(metadata.treatyDefinitionCount).toBe(15);
+    expect(metadata.chunkIndex).toBe(0);
+    expect(metadata.pairedResourceKey).toBe("treaty:act:W-9:0:fr:0");
+  });
+});
+
+// ---------- buildTreatyContent Section Headings Tests ----------
+
+test.describe("buildTreatyContent with section headings", () => {
+  test("builds treaty content with section headings outline in English", () => {
+    const treaty: TreatyContent = {
+      title: "Convention on Biological Diversity",
+      text: "The Contracting Parties agree...",
+      sections: [
+        { level: 1, label: "PART I", title: "General Provisions" },
+        { level: 2, label: "ARTICLE 1", title: "Objectives" },
+        { level: 2, label: "ARTICLE 2", title: "Use of Terms" },
+        { level: 1, label: "PART II", title: "Conservation" },
+      ],
+    };
+
+    const content = buildTreatyContent(treaty, "Canada Wildlife Act", "en");
+
+    expect(content).toContain("Treaty Structure:");
+    expect(content).toContain("PART I: General Provisions");
+    expect(content).toContain("  ARTICLE 1: Objectives");
+    expect(content).toContain("  ARTICLE 2: Use of Terms");
+    expect(content).toContain("PART II: Conservation");
+  });
+
+  test("builds treaty content with section headings outline in French", () => {
+    const treaty: TreatyContent = {
+      title: "Convention sur la diversité biologique",
+      text: "Les Parties contractantes conviennent...",
+      sections: [
+        { level: 1, label: "PARTIE I", title: "Dispositions générales" },
+        { level: 2, label: "ARTICLE 1", title: "Objectifs" },
+        { level: 2, label: "ARTICLE 2", title: "Emploi des termes" },
+      ],
+    };
+
+    const content = buildTreatyContent(
+      treaty,
+      "Loi sur les espèces sauvages du Canada",
+      "fr"
+    );
+
+    expect(content).toContain("Structure du traité:");
+    expect(content).toContain("PARTIE I: Dispositions générales");
+    expect(content).toContain("  ARTICLE 1: Objectifs");
+    expect(content).toContain("  ARTICLE 2: Emploi des termes");
+  });
+
+  test("handles section with only label", () => {
+    const treaty: TreatyContent = {
+      title: "Test Treaty",
+      text: "Treaty content.",
+      sections: [{ level: 1, label: "PART I" }],
+    };
+
+    const content = buildTreatyContent(treaty, "Test Act", "en");
+
+    expect(content).toContain("Treaty Structure:");
+    expect(content).toContain("PART I");
+  });
+
+  test("handles section with only title", () => {
+    const treaty: TreatyContent = {
+      title: "Test Treaty",
+      text: "Treaty content.",
+      sections: [{ level: 1, title: "Introduction" }],
+    };
+
+    const content = buildTreatyContent(treaty, "Test Act", "en");
+
+    expect(content).toContain("Treaty Structure:");
+    expect(content).toContain("Introduction");
+  });
+
+  test("applies indentation based on level", () => {
+    const treaty: TreatyContent = {
+      title: "Test Treaty",
+      text: "Treaty content.",
+      sections: [
+        { level: 1, label: "PART I", title: "Level 1" },
+        { level: 2, label: "CHAPTER 1", title: "Level 2" },
+        { level: 3, label: "SECTION 1", title: "Level 3" },
+        { level: 4, label: "SUB 1", title: "Level 4 (same as 3)" },
+      ],
+    };
+
+    const content = buildTreatyContent(treaty, "Test Act", "en");
+
+    // Level 1 = no indent
+    expect(content).toContain("PART I: Level 1");
+    expect(content).not.toContain("  PART I");
+
+    // Level 2 = 2 spaces indent
+    expect(content).toContain("  CHAPTER 1: Level 2");
+
+    // Level 3+ = 4 spaces indent
+    expect(content).toContain("    SECTION 1: Level 3");
+    expect(content).toContain("    SUB 1: Level 4 (same as 3)");
+  });
+
+  test("handles empty sections array", () => {
+    const treaty: TreatyContent = {
+      title: "Simple Treaty",
+      text: "Treaty content.",
+      sections: [],
+    };
+
+    const content = buildTreatyContent(treaty, "Test Act", "en");
+
+    expect(content).not.toContain("Treaty Structure:");
+  });
+
+  test("handles undefined sections", () => {
+    const treaty: TreatyContent = {
+      title: "Simple Treaty",
+      text: "Treaty content.",
+    };
+
+    const content = buildTreatyContent(treaty, "Test Act", "en");
+
+    expect(content).not.toContain("Treaty Structure:");
+  });
+
+  test("sections appear before main text", () => {
+    const treaty: TreatyContent = {
+      title: "Test Treaty",
+      text: "Main treaty text here.",
+      sections: [{ level: 1, label: "PART I", title: "Introduction" }],
+    };
+
+    const content = buildTreatyContent(treaty, "Test Act", "en");
+
+    const structureIndex = content.indexOf("Treaty Structure:");
+    const mainTextIndex = content.indexOf("Main treaty text here.");
+
+    expect(structureIndex).toBeLessThan(mainTextIndex);
+  });
+
+  test("combines sections with definitions", () => {
+    const treaty: TreatyContent = {
+      title: "Comprehensive Treaty",
+      text: "Treaty text.",
+      sections: [{ level: 1, label: "PART I", title: "Definitions" }],
+      definitions: [{ term: "Party", definition: "A contracting state" }],
+    };
+
+    const content = buildTreatyContent(treaty, "Test Act", "en");
+
+    // Verify all three parts are present
+    expect(content).toContain("Treaty Structure:");
+    expect(content).toContain("PART I: Definitions");
+    expect(content).toContain("Treaty text.");
+    expect(content).toContain("Treaty Definitions:");
+    expect(content).toContain("• Party: A contracting state");
+
+    // Verify order: structure < text < definitions
+    const structureIndex = content.indexOf("Treaty Structure:");
+    const textIndex = content.indexOf("Treaty text.");
+    const definitionsIndex = content.indexOf("Treaty Definitions:");
+
+    expect(structureIndex).toBeLessThan(textIndex);
+    expect(textIndex).toBeLessThan(definitionsIndex);
+  });
+
+  test("skips sections with no label and no title", () => {
+    const treaty: TreatyContent = {
+      title: "Test Treaty",
+      text: "Treaty content.",
+      sections: [
+        { level: 1, label: "PART I", title: "Valid Section" },
+        { level: 2 }, // Empty section - should be skipped
+        { level: 2, label: "ARTICLE 1", title: "Another Valid" },
+      ],
+    };
+
+    const content = buildTreatyContent(treaty, "Test Act", "en");
+
+    expect(content).toContain("PART I: Valid Section");
+    expect(content).toContain("ARTICLE 1: Another Valid");
+    // The empty section should not add an empty line or cause issues
   });
 });

@@ -239,6 +239,7 @@ export type LegResourceMetadata = {
   sectionEnactedDate?: string; // ISO date when section was enacted (from sections.enactedDate)
   sectionRole?: string; // Legislative function: "amending", "transitional", "CIF", "CIFnobold", "repeal", "normal" (mapped from sections.xmlType)
   amendmentTarget?: string; // Target reference for amending sections - what is being amended (mapped from sections.xmlTarget). Useful for queries like "what amendments affected section X of Y act"
+  changeType?: string; // Amendment tracking: "ins" (insertion), "del" (deletion), "off" (official), "alt" (alternative). Enables queries like "find inserted amendments" or "show deleted provisions"
   historicalNotes?: {
     // Mirrors HistoricalNoteItem from legislation schema
     text: string;
@@ -314,6 +315,7 @@ export type LegResourceMetadata = {
 
   // Treaty-specific fields
   treatyTitle?: string; // Title of the treaty/convention
+  treatyDefinitionCount?: number; // Number of defined terms in the treaty (for term discoverability)
 
   // Cross-reference fields
   crossRefId?: string; // FK to legislation.cross_references.id

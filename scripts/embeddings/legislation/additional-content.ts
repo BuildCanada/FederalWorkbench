@@ -207,9 +207,35 @@ export async function processPreambles(
 // ---------- Treaty Processing ----------
 
 /**
- * Build searchable content for a treaty/convention.
+ * Format a section heading with appropriate indentation based on level.
+ * Level 1 = Part (no indent), Level 2 = Chapter/Article (2 spaces), Level 3+ = Sub-section (4 spaces)
  */
-function buildTreatyContent(
+function formatSectionHeading(section: {
+  level: number;
+  label?: string;
+  title?: string;
+}): string {
+  const indent = section.level === 1 ? "" : section.level === 2 ? "  " : "    ";
+  const labelPart = section.label ?? "";
+  const titlePart = section.title ?? "";
+
+  if (labelPart && titlePart) {
+    return `${indent}${labelPart}: ${titlePart}`;
+  }
+  if (labelPart) {
+    return `${indent}${labelPart}`;
+  }
+  if (titlePart) {
+    return `${indent}${titlePart}`;
+  }
+  return "";
+}
+
+/**
+ * Build searchable content for a treaty/convention.
+ * Includes section headings outline and structured definitions for better discoverability.
+ */
+export function buildTreatyContent(
   treaty: TreatyContent,
   documentTitle: string,
   language: "en" | "fr"
@@ -221,13 +247,53 @@ function buildTreatyContent(
       parts.push(`Traité/Convention: ${treaty.title}`);
     }
     parts.push(`Source: ${documentTitle}`);
+
+    // Append section headings outline for navigation/searchability
+    if (treaty.sections && treaty.sections.length > 0) {
+      parts.push("\n\nStructure du traité:");
+      for (const section of treaty.sections) {
+        const formatted = formatSectionHeading(section);
+        if (formatted) {
+          parts.push(formatted);
+        }
+      }
+    }
+
     parts.push(`\n${treaty.text}`);
+
+    // Append structured definitions for better term discoverability
+    if (treaty.definitions && treaty.definitions.length > 0) {
+      parts.push("\n\nDéfinitions du traité:");
+      for (const def of treaty.definitions) {
+        parts.push(`• ${def.term}: ${def.definition}`);
+      }
+    }
   } else {
     if (treaty.title) {
       parts.push(`Treaty/Convention: ${treaty.title}`);
     }
     parts.push(`Source: ${documentTitle}`);
+
+    // Append section headings outline for navigation/searchability
+    if (treaty.sections && treaty.sections.length > 0) {
+      parts.push("\n\nTreaty Structure:");
+      for (const section of treaty.sections) {
+        const formatted = formatSectionHeading(section);
+        if (formatted) {
+          parts.push(formatted);
+        }
+      }
+    }
+
     parts.push(`\n${treaty.text}`);
+
+    // Append structured definitions for better term discoverability
+    if (treaty.definitions && treaty.definitions.length > 0) {
+      parts.push("\n\nTreaty Definitions:");
+      for (const def of treaty.definitions) {
+        parts.push(`• ${def.term}: ${def.definition}`);
+      }
+    }
   }
 
   return parts.join("\n");
@@ -316,6 +382,7 @@ export async function processTreaties(
             actId: act.actId,
             documentTitle: act.title,
             treatyTitle: treaty.title,
+            treatyDefinitionCount: treaty.definitions?.length,
             chunkIndex: 0,
             pairedResourceKey: pairedKey,
           },
@@ -405,6 +472,7 @@ export async function processTreaties(
             regulationId: reg.regulationId,
             documentTitle: reg.title,
             treatyTitle: treaty.title,
+            treatyDefinitionCount: treaty.definitions?.length,
             chunkIndex: 0,
             pairedResourceKey: pairedKey,
           },
@@ -1836,18 +1904,20 @@ export async function processFootnotes(
       }
 
       const footnoteList = section.footnotes ?? [];
-      for (const footnote of footnoteList) {
+      for (let fnIdx = 0; fnIdx < footnoteList.length; fnIdx++) {
+        const footnote = footnoteList[fnIdx];
         logProgress(offset + totalItems + 1, totalCount, "Footnotes");
 
+        // Include array index in key to handle sections with duplicate footnote IDs
         const resourceKey = buildResourceKey(
           "footnote",
-          `${section.id}:${footnote.id}`,
+          `${section.id}:${footnote.id}:${fnIdx}`,
           lang,
           0
         );
         const pairedKey = buildPairedResourceKey(
           "footnote",
-          `${section.id}:${footnote.id}`,
+          `${section.id}:${footnote.id}:${fnIdx}`,
           lang,
           0
         );
