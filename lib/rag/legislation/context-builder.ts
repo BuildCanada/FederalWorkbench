@@ -57,7 +57,8 @@ type BuildContextOptions = {
  * Prefers higher similarity scores when duplicates are found.
  * Handles all source types: act, act_section, regulation, regulation_section,
  * defined_term, preamble, treaty, cross_reference, table_of_provisions,
- * signature_block, related_provisions, footnote, marginal_note
+ * signature_block, related_provisions, footnote, marginal_note, schedule,
+ * publication_item
  */
 function deduplicateResults(
   results: LegislationSearchResult[]
@@ -117,6 +118,10 @@ function deduplicateResults(
       case "schedule":
         // Unique per schedule section (uses sectionId like act_section/regulation_section)
         key = `schedule:${meta.actId ?? meta.regulationId ?? ""}:${meta.sectionId ?? ""}:${meta.chunkIndex ?? 0}`;
+        break;
+      case "publication_item":
+        // Unique per publication item (recommendation/notice) in a regulation
+        key = `pub:${meta.actId ?? meta.regulationId ?? ""}:${meta.publicationType ?? ""}:${meta.publicationIndex ?? 0}:${meta.language ?? ""}`;
         break;
       default:
         // Fallback for any future types

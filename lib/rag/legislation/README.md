@@ -80,7 +80,7 @@ Helpers:
 Builds LLM-ready context with citation prefix `L`:
 
 - Deduplicates by act/reg + section + chunk index.
-- Similarity sort (no cross-encoder reranker yet); defaults to top 10 via `RERANKER_CONFIG.DEFAULT_TOP_N`.
+- Cross-encoder reranking via Cohere's `rerank-multilingual-v3.0` model; defaults to top 10 via `RERANKER_CONFIG.DEFAULT_TOP_N`.
 - Snippet truncation (~480 chars) with sentence-aware cut and duplicate snippet removal.
 
 ### 5. Hydration (`lib/rag/legislation/hydrate.ts`)
@@ -93,14 +93,25 @@ Hydrates the top act or regulation for artifact display:
 
 ## Data Sources
 
-The system indexes four legislation source types:
+The system indexes 15 legislation source types:
 
 | Source Type | Description | Chunked |
 |-------------|-------------|---------|
-| `act` | Act metadata | No (metadata chunk) |
-| `act_section` | Act sections | Yes |
-| `regulation` | Regulation metadata | No (metadata chunk) |
+| `act` | Act metadata (title, dates, enabling legislation) | No |
+| `act_section` | Act sections (numbered provisions) | Yes |
+| `regulation` | Regulation metadata | No |
 | `regulation_section` | Regulation sections | Yes |
+| `defined_term` | Defined terms from interpretation sections | No |
+| `preamble` | Act/regulation preambles | No |
+| `treaty` | International treaties/conventions | No |
+| `cross_reference` | References to other legislation | No |
+| `table_of_provisions` | Document table of contents | No |
+| `signature_block` | Official signatures and attestations | No |
+| `related_provisions` | Related provisions notes | No |
+| `footnote` | Section footnotes | No |
+| `schedule` | Schedules and appendices | Yes |
+| `marginal_note` | Section headings/marginal notes | No |
+| `publication_item` | Regulation recommendations/notices | No |
 
 ## Database Schema
 
@@ -110,7 +121,7 @@ Stores legislation content chunks with metadata:
 
 ```typescript
 type LegResourceMetadata = {
-  sourceType: "act" | "act_section" | "regulation" | "regulation_section";
+  sourceType: LegSourceType; // See LEG_SOURCE_TYPES in schema.ts
   language: "en" | "fr";
   chunkIndex?: number; // 0 for metadata, 1+ for content
   actId?: string;
@@ -119,6 +130,7 @@ type LegResourceMetadata = {
   sectionLabel?: string;
   marginalNote?: string;
   documentTitle: string;
+  // Additional fields vary by source type (termId, scheduleId, footnoteId, etc.)
 };
 ```
 

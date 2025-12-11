@@ -19,10 +19,26 @@ import type { LegislationSearchResult } from "./search";
 
 const dbg = ragDebug("leg:rerank");
 
-// Initialize Cohere client with API key from env
-const cohere = new CohereClient({
-  token: process.env.COHERE_API_KEY,
-});
+// Lazy-initialized Cohere client for better error messages
+let _cohereClient: CohereClient | null = null;
+
+/**
+ * Get the Cohere client, initializing it on first use.
+ * Throws a clear error if COHERE_API_KEY is not set.
+ */
+function getCohereClient(): CohereClient {
+  if (!_cohereClient) {
+    const apiKey = process.env.COHERE_API_KEY;
+    if (!apiKey) {
+      throw new Error(
+        "COHERE_API_KEY environment variable is required for legislation reranking. " +
+          "Set it in your .env.local file or disable reranking in your search options."
+      );
+    }
+    _cohereClient = new CohereClient({ token: apiKey });
+  }
+  return _cohereClient;
+}
 
 /**
  * Reranked search result with updated similarity score
@@ -75,7 +91,7 @@ export async function rerankLegislationResults(
   }
 
   try {
-    const response = await cohere.v2.rerank({
+    const response = await getCohereClient().v2.rerank({
       model: RERANKER_CONFIG.MODEL,
       query,
       documents: results.map((r) => r.content),

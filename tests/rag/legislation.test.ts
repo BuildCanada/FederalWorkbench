@@ -20,6 +20,7 @@ import {
   buildFootnoteCitation,
   buildMarginalNoteCitation,
   buildPreambleCitation,
+  buildPublicationItemCitation,
   buildRegulationCitation,
   buildRegulationSectionCitation,
   buildRelatedProvisionsCitation,
@@ -625,6 +626,86 @@ test.describe("buildScheduleCitation", () => {
   });
 });
 
+test.describe("buildPublicationItemCitation", () => {
+  test("builds citation for recommendation publication item", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "publication_item",
+      language: "en",
+      regulationId: "SOR-2020-123",
+      documentTitle: "Test Regulations",
+      publicationType: "recommendation",
+      publicationIndex: 1,
+    };
+    const citation = buildPublicationItemCitation(metadata, 1);
+
+    expect(citation.id).toBe(1);
+    expect(citation.textEn).toBe("[Test Regulations, Recommendation]");
+    expect(citation.textFr).toBe("[Test Regulations, Recommandation]");
+    expect(citation.titleEn).toBe("Recommendation in Test Regulations");
+    expect(citation.titleFr).toBe("Recommandation dans Test Regulations");
+    expect(citation.sourceType).toBe("publication_item");
+  });
+
+  test("builds citation for notice publication item", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "publication_item",
+      language: "en",
+      regulationId: "SOR-2020-123",
+      documentTitle: "Test Regulations",
+      publicationType: "notice",
+      publicationIndex: 0,
+    };
+    const citation = buildPublicationItemCitation(metadata, 2);
+
+    expect(citation.textEn).toBe("[Test Regulations, Notice]");
+    expect(citation.textFr).toBe("[Test Regulations, Avis]");
+    expect(citation.titleEn).toBe("Notice in Test Regulations");
+    expect(citation.titleFr).toBe("Avis dans Test Regulations");
+  });
+
+  test("handles publication item associated with act", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "publication_item",
+      language: "en",
+      actId: "C-46",
+      documentTitle: "Criminal Code",
+      publicationType: "recommendation",
+      publicationIndex: 0,
+    };
+    const citation = buildPublicationItemCitation(metadata, 3);
+
+    expect(citation.textEn).toBe("[Criminal Code, Recommendation]");
+    expect(citation.urlEn).toContain("/eng/acts/C-46/");
+  });
+
+  test("defaults to Notice when publicationType is unrecognized", () => {
+    const metadata: LegResourceMetadata = {
+      sourceType: "publication_item",
+      language: "en",
+      regulationId: "SOR-2020-123",
+      documentTitle: "Test Regulations",
+      publicationType: "other" as "notice", // Force unrecognized type
+    };
+    const citation = buildPublicationItemCitation(metadata, 4);
+
+    expect(citation.textEn).toBe("[Test Regulations, Notice]");
+    expect(citation.textFr).toBe("[Test Regulations, Avis]");
+  });
+
+  test("handles missing document title", () => {
+    // Test fallback when documentTitle is undefined at runtime
+    const metadata = {
+      sourceType: "publication_item",
+      language: "en",
+      regulationId: "SOR-2020-123",
+      publicationType: "recommendation",
+    } as LegResourceMetadata;
+    const citation = buildPublicationItemCitation(metadata, 5);
+
+    expect(citation.textEn).toBe("[Regulation, Recommendation]");
+  });
+});
+
 test.describe("buildCitation (dispatcher)", () => {
   test("dispatches to correct builder for each source type", () => {
     const sourceTypes: LegResourceMetadata["sourceType"][] = [
@@ -642,6 +723,7 @@ test.describe("buildCitation (dispatcher)", () => {
       "footnote",
       "marginal_note",
       "schedule",
+      "publication_item",
     ];
 
     for (const sourceType of sourceTypes) {
@@ -1642,6 +1724,310 @@ test.describe("Source type arrays include schedule", () => {
   });
 });
 
+// ---------- Publication Item Source Type Tests ----------
+
+test.describe("Source type arrays include publication_item", () => {
+  test("context builder deduplicates publication_item results correctly", async () => {
+    // Create two publication_item results for the same publication (same regulationId, type, index, language)
+    // The deduplicator should keep only the higher similarity one
+    const pubItem1: LegislationSearchResult = {
+      content: "Recommendation content from first result",
+      metadata: {
+        sourceType: "publication_item",
+        language: "en",
+        regulationId: "SOR-2020-123",
+        documentTitle: "Test Regulations",
+        publicationType: "recommendation",
+        publicationIndex: 0,
+      },
+      similarity: 0.9,
+      citation: {
+        id: 1,
+        prefixedId: "",
+        textEn: "[Test Regulations, Recommendation]",
+        textFr: "[Test Regulations, Recommandation]",
+        urlEn: "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2020-123/",
+        urlFr: "https://laws-lois.justice.gc.ca/fra/reglements/SOR-2020-123/",
+        titleEn: "Recommendation in Test Regulations",
+        titleFr: "Recommandation dans Test Regulations",
+        sourceType: "publication_item",
+      },
+    };
+
+    const pubItem2: LegislationSearchResult = {
+      content: "Recommendation duplicate with lower score",
+      metadata: {
+        sourceType: "publication_item",
+        language: "en",
+        regulationId: "SOR-2020-123",
+        documentTitle: "Test Regulations",
+        publicationType: "recommendation",
+        publicationIndex: 0,
+      },
+      similarity: 0.7, // Lower similarity - should be deduplicated
+      citation: {
+        id: 2,
+        prefixedId: "",
+        textEn: "[Test Regulations, Recommendation]",
+        textFr: "[Test Regulations, Recommandation]",
+        urlEn: "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2020-123/",
+        urlFr: "https://laws-lois.justice.gc.ca/fra/reglements/SOR-2020-123/",
+        titleEn: "Recommendation in Test Regulations",
+        titleFr: "Recommandation dans Test Regulations",
+        sourceType: "publication_item",
+      },
+    };
+
+    const context = await buildLegislationContext(
+      "recommendation",
+      [pubItem1, pubItem2],
+      {
+        language: "en",
+        reranker: mockReranker,
+      }
+    );
+
+    // Should only have one citation since both are for the same publication item
+    expect(context.citations).toHaveLength(1);
+    // The higher similarity result should be kept
+    expect(context.prompt).toContain(
+      "Recommendation content from first result"
+    );
+    expect(context.prompt).not.toContain("duplicate with lower score");
+  });
+
+  test("context builder keeps different publication_item results separate", async () => {
+    // Two publication items with different indices should both be kept
+    const pubItem1: LegislationSearchResult = {
+      content: "First recommendation content",
+      metadata: {
+        sourceType: "publication_item",
+        language: "en",
+        regulationId: "SOR-2020-123",
+        documentTitle: "Test Regulations",
+        publicationType: "recommendation",
+        publicationIndex: 0,
+      },
+      similarity: 0.9,
+      citation: {
+        id: 1,
+        prefixedId: "",
+        textEn: "[Test Regulations, Recommendation]",
+        textFr: "[Test Regulations, Recommandation]",
+        urlEn: "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2020-123/",
+        urlFr: "https://laws-lois.justice.gc.ca/fra/reglements/SOR-2020-123/",
+        titleEn: "Recommendation in Test Regulations",
+        titleFr: "Recommandation dans Test Regulations",
+        sourceType: "publication_item",
+      },
+    };
+
+    const pubItem2: LegislationSearchResult = {
+      content: "Second recommendation content",
+      metadata: {
+        sourceType: "publication_item",
+        language: "en",
+        regulationId: "SOR-2020-123",
+        documentTitle: "Test Regulations",
+        publicationType: "recommendation",
+        publicationIndex: 1, // Different index
+      },
+      similarity: 0.85,
+      citation: {
+        id: 2,
+        prefixedId: "",
+        textEn: "[Test Regulations, Recommendation]",
+        textFr: "[Test Regulations, Recommandation]",
+        urlEn: "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2020-123/",
+        urlFr: "https://laws-lois.justice.gc.ca/fra/reglements/SOR-2020-123/",
+        titleEn: "Recommendation in Test Regulations",
+        titleFr: "Recommandation dans Test Regulations",
+        sourceType: "publication_item",
+      },
+    };
+
+    const context = await buildLegislationContext(
+      "recommendations",
+      [pubItem1, pubItem2],
+      {
+        language: "en",
+        reranker: mockReranker,
+      }
+    );
+
+    // Both should be kept (different publication indices)
+    expect(context.citations).toHaveLength(2);
+    expect(context.prompt).toContain("First recommendation");
+    expect(context.prompt).toContain("Second recommendation");
+  });
+
+  test("context builder distinguishes publication_item by type", async () => {
+    // Recommendation and notice for same regulation should both be kept
+    const recommendation: LegislationSearchResult = {
+      content: "Recommendation content",
+      metadata: {
+        sourceType: "publication_item",
+        language: "en",
+        regulationId: "SOR-2020-123",
+        documentTitle: "Test Regulations",
+        publicationType: "recommendation",
+        publicationIndex: 0,
+      },
+      similarity: 0.9,
+      citation: {
+        id: 1,
+        prefixedId: "",
+        textEn: "[Test Regulations, Recommendation]",
+        textFr: "[Test Regulations, Recommandation]",
+        urlEn: "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2020-123/",
+        urlFr: "https://laws-lois.justice.gc.ca/fra/reglements/SOR-2020-123/",
+        titleEn: "Recommendation in Test Regulations",
+        titleFr: "Recommandation dans Test Regulations",
+        sourceType: "publication_item",
+      },
+    };
+
+    const notice: LegislationSearchResult = {
+      content: "Notice content",
+      metadata: {
+        sourceType: "publication_item",
+        language: "en",
+        regulationId: "SOR-2020-123",
+        documentTitle: "Test Regulations",
+        publicationType: "notice", // Different type
+        publicationIndex: 0,
+      },
+      similarity: 0.85,
+      citation: {
+        id: 2,
+        prefixedId: "",
+        textEn: "[Test Regulations, Notice]",
+        textFr: "[Test Regulations, Avis]",
+        urlEn: "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2020-123/",
+        urlFr: "https://laws-lois.justice.gc.ca/fra/reglements/SOR-2020-123/",
+        titleEn: "Notice in Test Regulations",
+        titleFr: "Avis dans Test Regulations",
+        sourceType: "publication_item",
+      },
+    };
+
+    const context = await buildLegislationContext(
+      "regulation publications",
+      [recommendation, notice],
+      {
+        language: "en",
+        reranker: mockReranker,
+      }
+    );
+
+    // Both should be kept (different publication types)
+    expect(context.citations).toHaveLength(2);
+    expect(context.prompt).toContain("Recommendation content");
+    expect(context.prompt).toContain("Notice content");
+  });
+
+  test("context builder distinguishes publication_item by language", async () => {
+    // Same publication item in different languages should both be kept
+    const pubItemEn: LegislationSearchResult = {
+      content: "English recommendation content",
+      metadata: {
+        sourceType: "publication_item",
+        language: "en",
+        regulationId: "SOR-2020-123",
+        documentTitle: "Test Regulations",
+        publicationType: "recommendation",
+        publicationIndex: 0,
+      },
+      similarity: 0.9,
+      citation: {
+        id: 1,
+        prefixedId: "",
+        textEn: "[Test Regulations, Recommendation]",
+        textFr: "[Test Regulations, Recommandation]",
+        urlEn: "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2020-123/",
+        urlFr: "https://laws-lois.justice.gc.ca/fra/reglements/SOR-2020-123/",
+        titleEn: "Recommendation in Test Regulations",
+        titleFr: "Recommandation dans Test Regulations",
+        sourceType: "publication_item",
+      },
+    };
+
+    const pubItemFr: LegislationSearchResult = {
+      content: "Contenu de la recommandation en français",
+      metadata: {
+        sourceType: "publication_item",
+        language: "fr", // Different language
+        regulationId: "SOR-2020-123",
+        documentTitle: "Règlement d'essai",
+        publicationType: "recommendation",
+        publicationIndex: 0,
+      },
+      similarity: 0.85,
+      citation: {
+        id: 2,
+        prefixedId: "",
+        textEn: "[Test Regulations, Recommendation]",
+        textFr: "[Règlement d'essai, Recommandation]",
+        urlEn: "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2020-123/",
+        urlFr: "https://laws-lois.justice.gc.ca/fra/reglements/SOR-2020-123/",
+        titleEn: "Recommendation in Test Regulations",
+        titleFr: "Recommandation dans Règlement d'essai",
+        sourceType: "publication_item",
+      },
+    };
+
+    const context = await buildLegislationContext(
+      "recommandation recommendation",
+      [pubItemEn, pubItemFr],
+      {
+        language: "en",
+        reranker: mockReranker,
+      }
+    );
+
+    // Both should be kept (different languages)
+    expect(context.citations).toHaveLength(2);
+    expect(context.prompt).toContain("English recommendation");
+    expect(context.prompt).toContain("français");
+  });
+
+  test("publication_item appears in context output with correct formatting", async () => {
+    const pubItem: LegislationSearchResult = {
+      content: "This is the recommendation content for testing",
+      metadata: {
+        sourceType: "publication_item",
+        language: "en",
+        regulationId: "SOR-2020-123",
+        documentTitle: "Test Regulations",
+        publicationType: "recommendation",
+        publicationIndex: 0,
+      },
+      similarity: 0.9,
+      citation: {
+        id: 1,
+        prefixedId: "",
+        textEn: "[Test Regulations, Recommendation]",
+        textFr: "[Test Regulations, Recommandation]",
+        urlEn: "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2020-123/",
+        urlFr: "https://laws-lois.justice.gc.ca/fra/reglements/SOR-2020-123/",
+        titleEn: "Recommendation in Test Regulations",
+        titleFr: "Recommandation dans Test Regulations",
+        sourceType: "publication_item",
+      },
+    };
+
+    const context = await buildLegislationContext("recommendation", [pubItem], {
+      language: "en",
+      reranker: mockReranker,
+    });
+
+    // Should include publication_item source type in output
+    expect(context.prompt).toContain("(publication_item)");
+    expect(context.prompt).toContain("Test Regulations");
+    expect(context.prompt).toContain("recommendation content for testing");
+  });
+});
+
 test.describe("Bilingual search result structure", () => {
   // Helper to create a mock result
   const createMockResult = (
@@ -2138,6 +2524,77 @@ test.describe("Hydration format functions", () => {
       expect(result.metadata.regulationId).toBe("C.R.C._c. 870");
     });
   });
+
+  test.describe("Publication item hydration", () => {
+    test("formats publication item with recommendation type", () => {
+      const result = createMockSearchResult("publication_item", {
+        content: "The Minister recommends that...",
+        metadata: {
+          sourceType: "publication_item",
+          language: "en",
+          documentTitle: "Test Regulations",
+          regulationId: "SOR-2020-123",
+          publicationType: "recommendation",
+          publicationIndex: 0,
+        },
+      });
+
+      expect(result.metadata.publicationType).toBe("recommendation");
+      expect(result.metadata.publicationIndex).toBe(0);
+      expect(result.content).toContain("recommends");
+    });
+
+    test("formats publication item with notice type", () => {
+      const result = createMockSearchResult("publication_item", {
+        content: "Notice is hereby given that...",
+        metadata: {
+          sourceType: "publication_item",
+          language: "en",
+          documentTitle: "Test Regulations",
+          regulationId: "SOR-2020-123",
+          publicationType: "notice",
+          publicationIndex: 1,
+        },
+      });
+
+      expect(result.metadata.publicationType).toBe("notice");
+      expect(result.metadata.publicationIndex).toBe(1);
+    });
+
+    test("handles French publication item", () => {
+      const result = createMockSearchResult("publication_item", {
+        content: "Le ministre recommande que...",
+        metadata: {
+          sourceType: "publication_item",
+          language: "fr",
+          documentTitle: "Règlement d'essai",
+          regulationId: "SOR-2020-123",
+          publicationType: "recommendation",
+          publicationIndex: 0,
+        },
+      });
+
+      expect(result.metadata.language).toBe("fr");
+      expect(result.content).toContain("recommande");
+    });
+
+    test("handles publication item associated with act", () => {
+      const result = createMockSearchResult("publication_item", {
+        content: "Publication content for act",
+        metadata: {
+          sourceType: "publication_item",
+          language: "en",
+          documentTitle: "Criminal Code",
+          actId: "C-46",
+          publicationType: "notice",
+          publicationIndex: 0,
+        },
+      });
+
+      expect(result.metadata.actId).toBe("C-46");
+      expect(result.metadata.regulationId).toBeUndefined();
+    });
+  });
 });
 
 test.describe("HydratedLegislationSource type", () => {
@@ -2156,6 +2613,7 @@ test.describe("HydratedLegislationSource type", () => {
       "signature_block",
       "marginal_note",
       "schedule",
+      "publication_item",
     ];
 
     // Verify each source type is accepted
@@ -2228,6 +2686,7 @@ const TOC_ID_PATTERN = /^toc-/;
 const SIG_ID_PATTERN = /^sig-/;
 const MARGINAL_ID_PATTERN = /^marginal-/;
 const SCHEDULE_ID_PATTERN = /^schedule-/;
+const PUBLICATION_ID_PATTERN = /^pub-/;
 
 test.describe("Hydration ID generation patterns", () => {
   // These tests document the expected ID patterns for each source type
@@ -2281,6 +2740,12 @@ test.describe("Hydration ID generation patterns", () => {
     // Expected pattern: schedule-{actId|regulationId}-{sectionId|scheduleId}
     expect("schedule-C-46-sch-1").toMatch(SCHEDULE_ID_PATTERN);
   });
+
+  test("publication item ID includes document, type, and index", () => {
+    // Expected pattern: pub-{actId|regulationId}-{publicationType}-{publicationIndex}
+    expect("pub-SOR-2020-123-recommendation-0").toMatch(PUBLICATION_ID_PATTERN);
+    expect("pub-C-46-notice-1").toMatch(PUBLICATION_ID_PATTERN);
+  });
 });
 
 // Regex for French unavailability notes (matches singular and plural forms)
@@ -2307,6 +2772,7 @@ test.describe("Hydration language fallback", () => {
       "Table non disponible en français.",
       "Signature non disponible en français.",
       "Annexe non disponible en français.",
+      "Publication non disponible en français.",
     ];
 
     for (const note of frenchNotes) {

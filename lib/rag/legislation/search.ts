@@ -85,6 +85,75 @@ function buildCacheKey(
 }
 
 /**
+ * Options for building filter conditions
+ */
+type FilterConditionOptions = {
+  language?: "en" | "fr";
+  sourceType?: LegResourceMetadata["sourceType"];
+  actId?: string;
+  regulationId?: string;
+  scopeType?: string;
+  sectionScope?: string;
+  /** Whether to include language filter (default true, false for fallback) */
+  includeLanguage?: boolean;
+};
+
+/**
+ * Build filter conditions for legislation search
+ *
+ * Centralizes condition building to avoid duplication between main search
+ * and language fallback paths.
+ */
+function buildFilterConditions(
+  opts: FilterConditionOptions
+): ReturnType<typeof sql>[] {
+  const {
+    language,
+    sourceType,
+    actId,
+    regulationId,
+    scopeType,
+    sectionScope,
+    includeLanguage = true,
+  } = opts;
+  const conditions: ReturnType<typeof sql>[] = [];
+
+  // Optional language filter (can be disabled for fallback)
+  if (language && includeLanguage) {
+    conditions.push(sql`${legResources.language} = ${language}`);
+  }
+  if (sourceType) {
+    conditions.push(sql`${legResources.sourceType} = ${sourceType}`);
+  }
+  // actId and regulationId use JSONB (less frequently filtered)
+  if (actId) {
+    conditions.push(sql`${legResources.metadata}->>'actId' = ${actId}`);
+  }
+  if (regulationId) {
+    conditions.push(
+      sql`${legResources.metadata}->>'regulationId' = ${regulationId}`
+    );
+  }
+  // Scope filtering for defined terms
+  if (scopeType) {
+    conditions.push(sql`${legResources.metadata}->>'scopeType' = ${scopeType}`);
+  }
+  if (sectionScope) {
+    // Return terms where either:
+    // 1. scopeType is "act" or "regulation" (applies to all sections), OR
+    // 2. scopeSections array contains the specified section label
+    conditions.push(
+      sql`(
+        ${legResources.metadata}->>'scopeType' IN ('act', 'regulation')
+        OR ${legResources.metadata}->'scopeSections' ? ${sectionScope}
+      )`
+    );
+  }
+
+  return conditions;
+}
+
+/**
  * Search legislation using hybrid vector + keyword search
  *
  * Combines:
@@ -137,52 +206,26 @@ export async function searchLegislation(
   // Hybrid search weights
   const { VECTOR_WEIGHT, KEYWORD_WEIGHT } = HYBRID_SEARCH_CONFIG;
 
-  // Build WHERE conditions
-  const conditions: ReturnType<typeof sql>[] = [];
-
   // Base condition: vector OR keyword match
-  conditions.push(
-    sql`(
-      (1 - (${legEmbeddings.embedding} <=> ${embeddingVector}::vector)) >= ${similarityThreshold}
-      OR (${legEmbeddings.tsv} IS NOT NULL AND ${legEmbeddings.tsv} @@ plainto_tsquery('simple', ${query}))
-    )`
+  const baseCondition = sql`(
+    (1 - (${legEmbeddings.embedding} <=> ${embeddingVector}::vector)) >= ${similarityThreshold}
+    OR (${legEmbeddings.tsv} IS NOT NULL AND ${legEmbeddings.tsv} @@ plainto_tsquery('simple', ${query}))
+  )`;
+
+  // Build filter conditions using helper (includes language filter)
+  const filterOpts = {
+    language,
+    sourceType,
+    actId,
+    regulationId,
+    scopeType,
+    sectionScope,
+  };
+  const filterConditions = buildFilterConditions(filterOpts);
+  const whereClause = sql.join(
+    [baseCondition, ...filterConditions],
+    sql` AND `
   );
-
-  // Optional filters - use denormalized columns for language/sourceType (faster)
-  if (language) {
-    conditions.push(sql`${legResources.language} = ${language}`);
-  }
-  if (sourceType) {
-    conditions.push(sql`${legResources.sourceType} = ${sourceType}`);
-  }
-  // actId and regulationId still use JSONB (less frequently filtered)
-  if (actId) {
-    conditions.push(sql`${legResources.metadata}->>'actId' = ${actId}`);
-  }
-  if (regulationId) {
-    conditions.push(
-      sql`${legResources.metadata}->>'regulationId' = ${regulationId}`
-    );
-  }
-
-  // Scope filtering for defined terms (Task 2.2)
-  if (scopeType) {
-    // Filter by exact scope type
-    conditions.push(sql`${legResources.metadata}->>'scopeType' = ${scopeType}`);
-  }
-  if (sectionScope) {
-    // Return terms where either:
-    // 1. scopeType is "act" or "regulation" (applies to all sections), OR
-    // 2. scopeSections array contains the specified section label
-    conditions.push(
-      sql`(
-        ${legResources.metadata}->>'scopeType' IN ('act', 'regulation')
-        OR ${legResources.metadata}->'scopeSections' ? ${sectionScope}
-      )`
-    );
-  }
-
-  const whereClause = sql.join(conditions, sql` AND `);
 
   // Hybrid score
   const hybridScore = sql<number>`(
@@ -208,45 +251,15 @@ export async function searchLegislation(
 
   // Fallback: if language filter produced zero hits, retry without language filter
   if (language && results.length === 0) {
-    // Rebuild conditions without language filter
-    const fallbackConditions: ReturnType<typeof sql>[] = [];
-    fallbackConditions.push(
-      sql`(
-        (1 - (${legEmbeddings.embedding} <=> ${embeddingVector}::vector)) >= ${similarityThreshold}
-        OR (${legEmbeddings.tsv} IS NOT NULL AND ${legEmbeddings.tsv} @@ plainto_tsquery('simple', ${query}))
-      )`
+    // Rebuild conditions without language filter using helper
+    const fallbackFilters = buildFilterConditions({
+      ...filterOpts,
+      includeLanguage: false,
+    });
+    const fallbackWhere = sql.join(
+      [baseCondition, ...fallbackFilters],
+      sql` AND `
     );
-    if (sourceType) {
-      fallbackConditions.push(
-        sql`${legResources.metadata}->>'sourceType' = ${sourceType}`
-      );
-    }
-    if (actId) {
-      fallbackConditions.push(
-        sql`${legResources.metadata}->>'actId' = ${actId}`
-      );
-    }
-    if (regulationId) {
-      fallbackConditions.push(
-        sql`${legResources.metadata}->>'regulationId' = ${regulationId}`
-      );
-    }
-    // Include scope filters in fallback (Task 2.2)
-    if (scopeType) {
-      fallbackConditions.push(
-        sql`${legResources.metadata}->>'scopeType' = ${scopeType}`
-      );
-    }
-    if (sectionScope) {
-      fallbackConditions.push(
-        sql`(
-          ${legResources.metadata}->>'scopeType' IN ('act', 'regulation')
-          OR ${legResources.metadata}->'scopeSections' ? ${sectionScope}
-        )`
-      );
-    }
-
-    const fallbackWhere = sql.join(fallbackConditions, sql` AND `);
     results = await db
       .select({
         content: legEmbeddings.content,
@@ -307,6 +320,7 @@ const ACT_SOURCE_TYPES: LegResourceMetadata["sourceType"][] = [
   "related_provisions",
   "footnote",
   "marginal_note",
+  "publication_item",
 ];
 
 /**
@@ -325,6 +339,7 @@ const REGULATION_SOURCE_TYPES: LegResourceMetadata["sourceType"][] = [
   "related_provisions",
   "footnote",
   "marginal_note",
+  "publication_item",
 ];
 
 /**
@@ -565,6 +580,13 @@ function buildResourceKeyFromMetadata(
         sourceId = `${meta.sectionId}:${meta.footnoteId}`;
       }
       break;
+    case "publication_item":
+      if (meta.actId && meta.publicationIndex != null) {
+        sourceId = `act:${meta.actId}:${meta.publicationType}:${meta.publicationIndex}`;
+      } else if (meta.regulationId && meta.publicationIndex != null) {
+        sourceId = `reg:${meta.regulationId}:${meta.publicationType}:${meta.publicationIndex}`;
+      }
+      break;
     default:
       return null;
   }
@@ -668,6 +690,18 @@ export type LegislationMetadataSearchOptions = {
     | "registrationDate";
   orderDirection?: "asc" | "desc";
 };
+
+/**
+ * Valid orderBy fields for metadata search.
+ * Used for defense-in-depth validation before sql.raw() usage.
+ */
+const VALID_ORDER_FIELDS = [
+  "lastAmendedDate",
+  "enactedDate",
+  "inForceDate",
+  "consolidationDate",
+  "registrationDate",
+] as const;
 
 /**
  * Result from metadata-only search.
@@ -835,6 +869,10 @@ export async function searchLegislationByMetadata(
   // Build ORDER BY clause
   let orderClause: ReturnType<typeof sql>;
   if (orderBy) {
+    // Defense-in-depth: validate orderBy against allowlist before sql.raw()
+    if (!VALID_ORDER_FIELDS.includes(orderBy)) {
+      throw new Error(`Invalid orderBy field: ${orderBy}`);
+    }
     const orderField = sql`${legResources.metadata}->>'${sql.raw(orderBy)}'`;
     orderClause =
       orderDirection === "asc"

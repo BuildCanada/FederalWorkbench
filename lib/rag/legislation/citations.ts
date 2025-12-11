@@ -83,8 +83,8 @@ export function buildActCitation(
     textFr: `[${title}]`,
     urlEn,
     urlFr,
-    titleEn: metadata.language === "en" ? title : title,
-    titleFr: metadata.language === "fr" ? title : title,
+    titleEn: title,
+    titleFr: title,
     sourceType: "act",
   };
 }
@@ -115,8 +115,8 @@ export function buildActSectionCitation(
     textFr: `[${title}${sectionTextFr}]`,
     urlEn,
     urlFr,
-    titleEn: metadata.language === "en" ? title : title,
-    titleFr: metadata.language === "fr" ? title : title,
+    titleEn: title,
+    titleFr: title,
     sourceType: "act_section",
   };
 }
@@ -141,8 +141,8 @@ export function buildRegulationCitation(
     textFr: `[${title}]`,
     urlEn,
     urlFr,
-    titleEn: metadata.language === "en" ? title : title,
-    titleFr: metadata.language === "fr" ? title : title,
+    titleEn: title,
+    titleFr: title,
     sourceType: "regulation",
   };
 }
@@ -173,8 +173,8 @@ export function buildRegulationSectionCitation(
     textFr: `[${title}${sectionTextFr}]`,
     urlEn,
     urlFr,
-    titleEn: metadata.language === "en" ? title : title,
-    titleFr: metadata.language === "fr" ? title : title,
+    titleEn: title,
+    titleFr: title,
     sourceType: "regulation_section",
   };
 }
@@ -565,6 +565,33 @@ export function buildFootnoteCitation(
 }
 
 /**
+ * Build a citation for a publication item (recommendation/notice in regulation)
+ */
+export function buildPublicationItemCitation(
+  metadata: LegResourceMetadata,
+  citationId: number
+): LegislationCitation {
+  const title = metadata.documentTitle || "Regulation";
+  const pubType =
+    metadata.publicationType === "recommendation" ? "Recommendation" : "Notice";
+  const pubTypeFr =
+    metadata.publicationType === "recommendation" ? "Recommandation" : "Avis";
+  const { urlEn, urlFr } = buildParentUrls(metadata);
+
+  return {
+    id: citationId,
+    prefixedId: "", // Set by context-builder
+    textEn: `[${title}, ${pubType}]`,
+    textFr: `[${title}, ${pubTypeFr}]`,
+    urlEn,
+    urlFr,
+    titleEn: `${pubType} in ${title}`,
+    titleFr: `${pubTypeFr} dans ${title}`,
+    sourceType: "publication_item",
+  };
+}
+
+/**
  * Build citation from metadata, dispatching to appropriate builder
  */
 export function buildCitation(
@@ -600,6 +627,8 @@ export function buildCitation(
       return buildMarginalNoteCitation(metadata, citationId);
     case "schedule":
       return buildScheduleCitation(metadata, citationId);
+    case "publication_item":
+      return buildPublicationItemCitation(metadata, citationId);
     default:
       // Fallback for any unexpected type
       return {

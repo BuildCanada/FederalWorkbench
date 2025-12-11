@@ -457,8 +457,5 @@ export function chunkSection(
  * We embed everything including repealed sections - they're part of the legal record.
  */
 export function shouldSkipSection(section: Section): boolean {
-  if (!section.content?.trim()) {
-    return true;
-  }
-  return false;
+  return !section.content?.trim();
 }
