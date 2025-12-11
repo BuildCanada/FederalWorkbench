@@ -14,12 +14,13 @@ config({
 const TEST_PORT = 3100;
 const baseURL = `http://localhost:${TEST_PORT}`;
 
-/* Check if running tests that don't need webServer (db, embeddings, lib, rag) */
+/* Check if running tests that don't need webServer (db, embeddings, lib, rag, scripts) */
 const isDbOnly =
   process.argv.includes("--project=db") ||
   process.argv.includes("--project=embeddings") ||
   process.argv.includes("--project=lib") ||
-  process.argv.includes("--project=rag");
+  process.argv.includes("--project=rag") ||
+  process.argv.includes("--project=scripts");
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -74,6 +75,11 @@ export default defineConfig({
       name: "rag",
       testMatch: /rag\/.*.test.ts/,
       // RAG tests are pure function tests for search/retrieval - no browser or webserver needed
+    },
+    {
+      name: "scripts",
+      testMatch: /scripts\/.*.test.ts/,
+      // Scripts tests are pure function tests - no browser or webserver needed
     },
     {
       name: "e2e",

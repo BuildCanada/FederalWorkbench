@@ -10,6 +10,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   varchar,
 } from "drizzle-orm/pg-core";
 import { nanoid } from "nanoid";
@@ -597,7 +598,9 @@ export const sections = legislationSchema.table(
     }).onDelete("cascade"),
     index("sections_act_id_idx").on(table.actId),
     index("sections_regulation_id_idx").on(table.regulationId),
-    index("sections_canonical_section_id_idx").on(table.canonicalSectionId),
+    uniqueIndex("sections_canonical_section_id_idx").on(
+      table.canonicalSectionId
+    ),
     index("sections_language_idx").on(table.language),
     index("sections_section_type_idx").on(table.sectionType),
     // Composite index for bilingual toggle query

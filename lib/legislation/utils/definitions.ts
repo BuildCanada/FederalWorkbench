@@ -17,6 +17,10 @@ const SECTIONS_APPLY_REGEX =
 const ARTICLES_APPLY_REGEX =
   /(?:s'appliquent|appliquent)\s*(?:aux|au)\s*articles?\s*(?:à\.?)?\s*([\d\s.,àto-]+)/i;
 
+// Patterns for filtering emphasis text that is NOT a paired term
+const STATUTE_REF_PATTERN = /^[A-Z]\.\d/; // "S.C. 2004", "R.S. 1985"
+const YEAR_PATTERN = /^\d{4}/; // "2004", "1985"
+
 /**
  * Information about definition scope parsed from XML
  */
@@ -267,6 +271,169 @@ function extractTermStrings(termEl: unknown): string[] {
 }
 
 /**
+ * Extract paired term from <Emphasis style="italic"> elements.
+ *
+ * Some older legislation XML uses <Emphasis> instead of <DefinedTermFr/En> for
+ * the paired term. This is a fallback for those cases.
+ *
+ * Example XML:
+ *   <Text>In this Part, <DefinedTermEn>elevating device</DefinedTermEn> means
+ *   an escalator...(<Emphasis style="italic">appareil de levage</Emphasis>)</Text>
+ *
+ * We only extract from Emphasis elements with style="italic" that appear to be
+ * paired terms (typically short text without periods).
+ */
+function extractPairedTermFromEmphasis(emphasisEl: unknown): string[] {
+  if (!emphasisEl) {
+    return [];
+  }
+
+  const emphasisArray = Array.isArray(emphasisEl) ? emphasisEl : [emphasisEl];
+  const terms: string[] = [];
+
+  for (const el of emphasisArray) {
+    if (typeof el !== "object" || el === null) {
+      // Could be a plain string emphasis (no attributes)
+      if (typeof el === "string") {
+        const trimmed = el.trim();
+        // Skip if it looks like a full sentence or reference
+        if (
+          trimmed.length > 0 &&
+          trimmed.length < 100 &&
+          !trimmed.includes(".")
+        ) {
+          terms.push(trimmed);
+        }
+      }
+      continue;
+    }
+
+    const emphObj = el as Record<string, unknown>;
+
+    // Check for style="italic" - this is the common pattern for paired terms
+    const style = emphObj["@_style"];
+    if (style !== "italic") {
+      continue;
+    }
+
+    // Extract the text content
+    const text = extractTextContent(el);
+    if (!text) {
+      continue;
+    }
+
+    // Filter out non-term content:
+    // - Skip very long text (likely not a term definition)
+    // - Skip text containing periods (likely a sentence/reference)
+    // - Skip text that looks like a statute reference
+    const trimmed = text.trim();
+    if (
+      trimmed.length > 0 &&
+      trimmed.length < 100 &&
+      !trimmed.includes(".") &&
+      !STATUTE_REF_PATTERN.test(trimmed) && // Skip patterns like "S.C. 2004"
+      !YEAR_PATTERN.test(trimmed) // Skip year patterns
+    ) {
+      terms.push(trimmed);
+    }
+  }
+
+  return terms;
+}
+
+/**
+ * Nested XML element types that can contain paragraph structures with terms.
+ * These elements may have Text children containing DefinedTermEn/Fr tags.
+ */
+const NESTED_PARAGRAPH_ELEMENTS = [
+  "Paragraph",
+  "Subparagraph",
+  "Clause",
+  "Subclause",
+  "ContinuedParagraph",
+  "ContinuedDefinition",
+  "ContinuedSectionSubsection",
+] as const;
+
+/**
+ * Recursively extract terms from an element and its nested children.
+ *
+ * Searches Text elements at any nesting level within paragraph structures.
+ * Handles deeply nested XML like:
+ *   Paragraph > Subparagraph > Text > DefinedTermFr
+ *   Paragraph > Subparagraph > ContinuedParagraph > Text > DefinedTermFr
+ */
+function extractTermsFromElement(
+  element: unknown,
+  termKey: "DefinedTermEn" | "DefinedTermFr"
+): string[] {
+  if (!element || typeof element !== "object") {
+    return [];
+  }
+
+  const terms: string[] = [];
+  const obj = element as Record<string, unknown>;
+
+  // Check if this element has a Text child with the term key
+  if (obj.Text && typeof obj.Text === "object") {
+    const textObj = obj.Text as Record<string, unknown>;
+    const found = extractTermStrings(textObj[termKey]);
+    terms.push(...found);
+  }
+
+  // Recursively search nested paragraph elements
+  for (const key of NESTED_PARAGRAPH_ELEMENTS) {
+    const child = obj[key];
+    if (!child) {
+      continue;
+    }
+
+    const childArray = Array.isArray(child) ? child : [child];
+    for (const item of childArray) {
+      terms.push(...extractTermsFromElement(item, termKey));
+    }
+  }
+
+  return terms;
+}
+
+/**
+ * Search for DefinedTermEn/Fr in nested Paragraph elements.
+ *
+ * List-style definitions place the paired term at the end of the last paragraph,
+ * which may be deeply nested in Subparagraph or ContinuedParagraph elements:
+ *
+ * <Definition>
+ *   <Text><DefinedTermEn>peace officer</DefinedTermEn> includes</Text>
+ *   <Paragraph>
+ *     <Label>(g)</Label>
+ *     <Subparagraph>
+ *       <Label>(ii)</Label>
+ *       <Text>...(<DefinedTermFr>agent de la paix</DefinedTermFr>)</Text>
+ *     </Subparagraph>
+ *   </Paragraph>
+ * </Definition>
+ */
+function extractTermsFromParagraphs(
+  paragraphs: unknown,
+  termKey: "DefinedTermEn" | "DefinedTermFr"
+): string[] {
+  if (!paragraphs) {
+    return [];
+  }
+
+  const paragraphArray = Array.isArray(paragraphs) ? paragraphs : [paragraphs];
+  const terms: string[] = [];
+
+  for (const para of paragraphArray) {
+    terms.push(...extractTermsFromElement(para, termKey));
+  }
+
+  // Deduplicate to handle edge cases where same term appears at multiple nesting levels
+  return [...new Set(terms)];
+}
+
+/**
  * Extract defined terms from a Definition element
  *
  * A single Definition element may contain multiple DefinedTermEn/Fr elements,
@@ -288,8 +455,80 @@ export function extractDefinedTermFromDefinition(
     typeof textEl === "object" ? (textEl as Record<string, unknown>) : {};
 
   // Extract all terms from both languages (may be multiple per Definition)
-  const termsEn = extractTermStrings(textObj.DefinedTermEn);
-  const termsFr = extractTermStrings(textObj.DefinedTermFr);
+  // First check the main Text element
+  let termsEn = extractTermStrings(textObj.DefinedTermEn);
+  let termsFr = extractTermStrings(textObj.DefinedTermFr);
+
+  // For list-style definitions, the paired term may be in nested Paragraph elements
+  // or in sibling elements like ContinuedDefinition/ContinuedSectionSubsection.
+  // Only search if we're missing one language's terms.
+  if (termsEn.length === 0 || termsFr.length === 0) {
+    // Search Paragraph elements (which may have deeply nested terms)
+    const paragraphTermsEn = extractTermsFromParagraphs(
+      defEl.Paragraph,
+      "DefinedTermEn"
+    );
+    const paragraphTermsFr = extractTermsFromParagraphs(
+      defEl.Paragraph,
+      "DefinedTermFr"
+    );
+
+    // Also search ContinuedDefinition and ContinuedSectionSubsection at Definition level
+    // These are siblings to Paragraph, not nested inside them
+    const continuedDefTermsEn = extractTermsFromParagraphs(
+      defEl.ContinuedDefinition,
+      "DefinedTermEn"
+    );
+    const continuedDefTermsFr = extractTermsFromParagraphs(
+      defEl.ContinuedDefinition,
+      "DefinedTermFr"
+    );
+    const continuedSubsectionTermsEn = extractTermsFromParagraphs(
+      defEl.ContinuedSectionSubsection,
+      "DefinedTermEn"
+    );
+    const continuedSubsectionTermsFr = extractTermsFromParagraphs(
+      defEl.ContinuedSectionSubsection,
+      "DefinedTermFr"
+    );
+
+    // Combine all found terms
+    const allNestedTermsEn = [
+      ...paragraphTermsEn,
+      ...continuedDefTermsEn,
+      ...continuedSubsectionTermsEn,
+    ];
+    const allNestedTermsFr = [
+      ...paragraphTermsFr,
+      ...continuedDefTermsFr,
+      ...continuedSubsectionTermsFr,
+    ];
+
+    if (termsEn.length === 0 && allNestedTermsEn.length > 0) {
+      termsEn = [...new Set(allNestedTermsEn)];
+    }
+    if (termsFr.length === 0 && allNestedTermsFr.length > 0) {
+      termsFr = [...new Set(allNestedTermsFr)];
+    }
+  }
+
+  // Fallback: Some older XML uses <Emphasis style="italic"> for paired terms
+  // instead of proper <DefinedTermFr/En> tags. Extract from Emphasis as fallback.
+  // Only use this fallback for the PAIRED term (the other language), not primary.
+  if (termsEn.length > 0 && termsFr.length === 0 && language === "en") {
+    // EN document has EN terms but missing FR paired term - check Emphasis
+    const emphasisTerms = extractPairedTermFromEmphasis(textObj.Emphasis);
+    if (emphasisTerms.length > 0) {
+      termsFr = emphasisTerms;
+    }
+  }
+  if (termsFr.length > 0 && termsEn.length === 0 && language === "fr") {
+    // FR document has FR terms but missing EN paired term - check Emphasis
+    const emphasisTerms = extractPairedTermFromEmphasis(textObj.Emphasis);
+    if (emphasisTerms.length > 0) {
+      termsEn = emphasisTerms;
+    }
+  }
 
   // Determine which terms to use based on document language
   // The document's language determines the primary terms; the other language provides paired terms

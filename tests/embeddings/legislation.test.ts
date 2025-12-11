@@ -57,7 +57,10 @@ import {
   buildRelatedProvisionContent,
   buildTreatyContent,
 } from "@/scripts/embeddings/legislation/additional-content";
-import { buildTermContent } from "@/scripts/embeddings/legislation/defined-terms";
+import {
+  buildTermChunk,
+  buildTermContent,
+} from "@/scripts/embeddings/legislation/defined-terms";
 import { buildRegulationMetadataText } from "@/scripts/embeddings/legislation/regulations";
 import {
   buildPairedResourceKey,
@@ -215,14 +218,31 @@ test.describe("normalizeTermForMatching", () => {
     expect(normalizeTermForMatching("Tax Shelter")).toBe("tax shelter");
   });
 
-  test("removes accented characters (French)", () => {
-    // JavaScript's \w only matches ASCII, so accents are stripped entirely
-    expect(normalizeTermForMatching("barrière")).toBe("barrire");
-    expect(normalizeTermForMatching("définition")).toBe("dfinition");
-    expect(normalizeTermForMatching("réglement")).toBe("rglement");
-    // Note: collapsed whitespace from removed apostrophe
+  test("normalizes accented characters preserving base letters (French)", () => {
+    // NFD decomposition + combining mark removal preserves base letters
+    expect(normalizeTermForMatching("barrière")).toBe("barriere");
+    expect(normalizeTermForMatching("définition")).toBe("definition");
+    expect(normalizeTermForMatching("réglement")).toBe("reglement");
+    expect(normalizeTermForMatching("café")).toBe("cafe");
+    expect(normalizeTermForMatching("boîte")).toBe("boite");
+    // Apostrophe removed, but base letters preserved
     expect(normalizeTermForMatching("commissaire à l'accessibilité")).toBe(
-      "commissaire laccessibilit"
+      "commissaire a laccessibilite"
+    );
+  });
+
+  test("expands ligatures to ASCII equivalents", () => {
+    // œ ligature expands to oe
+    expect(normalizeTermForMatching("œuf")).toBe("oeuf");
+    expect(normalizeTermForMatching("œufs")).toBe("oeufs");
+    expect(normalizeTermForMatching("bœuf")).toBe("boeuf");
+    expect(normalizeTermForMatching("produit d'œufs")).toBe("produit doeufs");
+    expect(normalizeTermForMatching("boîte à œufs")).toBe("boite a oeufs");
+    // æ ligature expands to ae
+    expect(normalizeTermForMatching("Cæsar")).toBe("caesar");
+    // Ensures EN "oeufs" matches FR "œufs"
+    expect(normalizeTermForMatching("oeufs")).toBe(
+      normalizeTermForMatching("œufs")
     );
   });
 
@@ -270,12 +290,12 @@ test.describe("normalizeTermForMatching", () => {
         fr: "in vitro embryo",
         expected: "in vitro embryo",
       },
-      // French accents are stripped for cross-lingual matching
+      // French accents are normalized, preserving base letters
       {
         en: "barrier",
         fr: "barrière",
         enExpected: "barrier",
-        frExpected: "barrire",
+        frExpected: "barriere",
       },
     ];
 
@@ -1987,6 +2007,122 @@ test.describe("buildTermContent", () => {
   });
 });
 
+test.describe("buildTermChunk paired resource key generation", () => {
+  const createMockTerm = (
+    overrides: Partial<DefinedTerm> = {}
+  ): DefinedTerm => ({
+    id: "term-123",
+    language: "en",
+    term: "barrier",
+    termNormalized: "barrier",
+    pairedTerm: "obstacle",
+    pairedTermId: null,
+    definition: "means any obstacle.",
+    actId: "C-81",
+    regulationId: null,
+    sectionLabel: "2",
+    scopeType: "act",
+    scopeSections: null,
+    scopeRawText: null,
+    limsMetadata: null,
+    createdAt: new Date(),
+    ...overrides,
+  });
+
+  test("generates pairedResourceKey when pairedTermId is set (EN term)", () => {
+    const term = createMockTerm({
+      id: "term-en-456",
+      language: "en",
+      pairedTermId: "term-fr-789",
+    });
+    const chunk = buildTermChunk(term, "Test Act");
+
+    expect(chunk).not.toBeNull();
+    expect(chunk?.resourceKey).toBe("defined_term:term-en-456:en:0");
+    // pairedResourceKey should use the actual paired term's ID with opposite language
+    expect(chunk?.metadata.pairedResourceKey).toBe(
+      "defined_term:term-fr-789:fr:0"
+    );
+  });
+
+  test("generates pairedResourceKey when pairedTermId is set (FR term)", () => {
+    const term = createMockTerm({
+      id: "term-fr-789",
+      language: "fr",
+      term: "obstacle",
+      pairedTerm: "barrier",
+      pairedTermId: "term-en-456",
+    });
+    const chunk = buildTermChunk(term, "Loi test");
+
+    expect(chunk).not.toBeNull();
+    expect(chunk?.resourceKey).toBe("defined_term:term-fr-789:fr:0");
+    // pairedResourceKey should point to English paired term
+    expect(chunk?.metadata.pairedResourceKey).toBe(
+      "defined_term:term-en-456:en:0"
+    );
+  });
+
+  test("pairedResourceKey is undefined when pairedTermId is null", () => {
+    const term = createMockTerm({
+      id: "term-123",
+      pairedTerm: "obstacle", // has text but no ID link
+      pairedTermId: null,
+    });
+    const chunk = buildTermChunk(term, "Test Act");
+
+    expect(chunk).not.toBeNull();
+    expect(chunk?.resourceKey).toBe("defined_term:term-123:en:0");
+    expect(chunk?.metadata.pairedResourceKey).toBeUndefined();
+  });
+
+  test("pairedResourceKey is undefined when no paired term at all", () => {
+    const term = createMockTerm({
+      id: "term-solo",
+      pairedTerm: null,
+      pairedTermId: null,
+    });
+    const chunk = buildTermChunk(term, "Test Act");
+
+    expect(chunk).not.toBeNull();
+    expect(chunk?.metadata.pairedResourceKey).toBeUndefined();
+  });
+
+  test("returns null for invalid language", () => {
+    const term = createMockTerm({
+      language: "invalid" as "en" | "fr",
+    });
+    const chunk = buildTermChunk(term, "Test Act");
+
+    expect(chunk).toBeNull();
+  });
+
+  test("includes correct metadata fields", () => {
+    const term = createMockTerm({
+      id: "term-meta-test",
+      pairedTermId: "term-fr-pair",
+      scopeType: "section",
+      scopeSections: ["5", "6"],
+      scopeRawText: "In this section",
+    });
+    const chunk = buildTermChunk(term, "Criminal Code");
+
+    expect(chunk).not.toBeNull();
+    expect(chunk?.metadata.sourceType).toBe("defined_term");
+    expect(chunk?.metadata.language).toBe("en");
+    expect(chunk?.metadata.termId).toBe("term-meta-test");
+    expect(chunk?.metadata.term).toBe("barrier");
+    expect(chunk?.metadata.termPaired).toBe("obstacle");
+    expect(chunk?.metadata.actId).toBe("C-81");
+    expect(chunk?.metadata.documentTitle).toBe("Criminal Code");
+    expect(chunk?.metadata.scopeType).toBe("section");
+    expect(chunk?.metadata.scopeSections).toEqual(["5", "6"]);
+    expect(chunk?.metadata.pairedResourceKey).toBe(
+      "defined_term:term-fr-pair:fr:0"
+    );
+  });
+});
+
 test.describe("countTokens", () => {
   test("counts tokens for simple text", () => {
     const text = "Hello, world!";
@@ -2410,7 +2546,8 @@ test.describe("buildCrossRefContentEn", () => {
     expect(content).toContain("Target type: Act");
     expect(content).toContain("Reference: A-2");
     expect(content).toContain("Target section: 12");
-    expect(content).toContain("Text: See the Access to Information Act");
+    // Text field now prefers resolved title over raw referenceText
+    expect(content).toContain("Text: Access to Information Act");
     expect(content).toContain("Target document: Access to Information Act");
     expect(content).toContain("Target heading: Right of access");
     expect(content).toContain(
@@ -2444,7 +2581,8 @@ test.describe("buildCrossRefContentEn", () => {
       "Target document: Employment Insurance Regulations"
     );
     expect(content).not.toContain("Target section:");
-    expect(content).not.toContain("Text:");
+    // Text field now shows resolved title even when referenceText is null
+    expect(content).toContain("Text: Employment Insurance Regulations");
   });
 
   test("handles missing optional fields", () => {
@@ -2502,7 +2640,8 @@ test.describe("buildCrossRefContentFr", () => {
     expect(content).toContain("Type de cible: Loi");
     expect(content).toContain("Référence: A-2");
     expect(content).toContain("Article cible: 12");
-    expect(content).toContain("Texte: Voir la Loi sur l'accès à l'information");
+    // Texte field now prefers resolved title over raw referenceText
+    expect(content).toContain("Texte: Loi sur l'accès à l'information");
     expect(content).toContain(
       "Document cible: Loi sur l'accès à l'information"
     );
@@ -2538,7 +2677,8 @@ test.describe("buildCrossRefContentFr", () => {
       "Document cible: Règlement sur l'assurance-emploi"
     );
     expect(content).not.toContain("Article cible:");
-    expect(content).not.toContain("Texte:");
+    // Texte field now shows resolved title even when referenceText is null
+    expect(content).toContain("Texte: Règlement sur l'assurance-emploi");
   });
 
   test("handles missing optional fields in French", () => {
@@ -4868,7 +5008,8 @@ test.describe("parseRegulationXml Order/Provision parsing", () => {
       (s) => s.sectionType === "provision"
     );
     expect(orderSection).toBeDefined();
-    expect(orderSection?.sectionLabel).toBe("order");
+    // sectionOrder is 2 because Body section is processed first (order=1)
+    expect(orderSection?.sectionLabel).toBe("order-2");
     expect(orderSection?.content).toContain("Treasury Board");
     expect(orderSection?.content).toContain("recommendation");
   });
@@ -4933,12 +5074,12 @@ test.describe("parseRegulationXml Order/Provision parsing", () => {
     );
     expect(provisionSections.length).toBe(2);
 
-    // First provision should have label "order"
-    expect(provisionSections[0].sectionLabel).toBe("order");
+    // First provision has order-2 (Body section is order=1)
+    expect(provisionSections[0].sectionLabel).toBe("order-2");
     expect(provisionSections[0].content).toContain("First provision");
 
-    // Second provision should have label "order-provision-2"
-    expect(provisionSections[1].sectionLabel).toBe("order-provision-2");
+    // Second provision has order-3
+    expect(provisionSections[1].sectionLabel).toBe("order-3");
     expect(provisionSections[1].content).toContain("Second provision");
   });
 
@@ -4964,7 +5105,7 @@ test.describe("parseRegulationXml Order/Provision parsing", () => {
     // Should extract cross-references from the Order/Provision
     const p36Ref = result.crossReferences.find((r) => r.targetRef === "P-36");
     expect(p36Ref).toBeDefined();
-    expect(p36Ref?.sourceSectionLabel).toBe("order");
+    expect(p36Ref?.sourceSectionLabel).toBe("order-2");
 
     const f11Ref = result.crossReferences.find((r) => r.targetRef === "F-11");
     expect(f11Ref).toBeDefined();
@@ -5021,7 +5162,9 @@ test.describe("parseRegulationXml Order/Provision parsing", () => {
       (s) => s.sectionType === "provision"
     );
     expect(orderSection).toBeDefined();
-    expect(orderSection?.canonicalSectionId).toBe("SOR-2000-6/en/order");
+    expect(orderSection?.canonicalSectionId).toBe(
+      "SOR-2000-6/en/provision/2/order-2"
+    );
   });
 
   test("French regulation Order/Provision parsing", () => {
@@ -5049,7 +5192,9 @@ test.describe("parseRegulationXml Order/Provision parsing", () => {
     expect(orderSection).toBeDefined();
     expect(orderSection?.language).toBe("fr");
     expect(orderSection?.content).toContain("recommandation");
-    expect(orderSection?.canonicalSectionId).toBe("DORS-2000-1/fr/order");
+    expect(orderSection?.canonicalSectionId).toBe(
+      "DORS-2000-1/fr/provision/2/order-2"
+    );
   });
 });
 

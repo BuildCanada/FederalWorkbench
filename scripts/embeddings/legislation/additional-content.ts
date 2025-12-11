@@ -139,7 +139,7 @@ export async function processPreambles(
       const preambleItems = act.preamble ?? [];
       for (let i = 0; i < preambleItems.length; i++) {
         const preamble = preambleItems[i];
-        logProgress(offset + totalItems + 1, totalCount, "Preambles");
+        logProgress(totalItems + 1, totalCount, "Preambles");
 
         const resourceKey = buildResourceKey(
           "preamble",
@@ -599,8 +599,10 @@ export function buildCrossRefContentEn(
     parts.push(`Target heading: ${ref.targetMarginalNoteEn}`);
   }
 
-  if (ref.referenceText) {
-    parts.push(`Text: ${ref.referenceText}`);
+  // Prefer resolved English title over raw reference text (which may be French)
+  const displayText = ref.targetDocumentTitleEn ?? ref.referenceText;
+  if (displayText) {
+    parts.push(`Text: ${displayText}`);
   }
 
   // Include target content snippet for semantic search
@@ -645,8 +647,10 @@ export function buildCrossRefContentFr(
     parts.push(`Rubrique cible: ${ref.targetMarginalNoteFr}`);
   }
 
-  if (ref.referenceText) {
-    parts.push(`Texte: ${ref.referenceText}`);
+  // Prefer resolved French title over raw reference text (which may be English)
+  const displayText = ref.targetDocumentTitleFr ?? ref.referenceText;
+  if (displayText) {
+    parts.push(`Texte: ${displayText}`);
   }
 
   // Include target content snippet for semantic search
@@ -831,7 +835,7 @@ export async function processCrossReferences(
 
     // Process each cross-reference, creating EN and FR chunks with enhanced data
     for (const ref of batchRefs) {
-      logProgress(offset + totalItems + 1, totalCount, "Cross-refs");
+      logProgress(totalItems + 1, totalCount, "Cross-refs");
 
       const sourceTitleEn = ref.sourceTitleEn ?? "Unknown Document";
       const sourceTitleFr = ref.sourceTitleFr ?? "Document inconnu";
@@ -1875,9 +1879,12 @@ export async function processFootnotes(
         language: sections.language,
         footnotes: sections.footnotes,
         // Get document title via COALESCE subquery
+        // Prioritize regulation title when regulationId is set, since actId may contain the enabling act
         documentTitle: sql<string>`COALESCE(
+          CASE WHEN ${sections.regulationId} IS NOT NULL THEN
+            (SELECT title FROM legislation.regulations WHERE regulation_id = ${sections.regulationId} AND language = ${sections.language} LIMIT 1)
+          ELSE NULL END,
           (SELECT title FROM legislation.acts WHERE act_id = ${sections.actId} AND language = ${sections.language} LIMIT 1),
-          (SELECT title FROM legislation.regulations WHERE regulation_id = ${sections.regulationId} AND language = ${sections.language} LIMIT 1),
           'Unknown Document'
         )`.as("document_title"),
       })
@@ -1906,7 +1913,7 @@ export async function processFootnotes(
       const footnoteList = section.footnotes ?? [];
       for (let fnIdx = 0; fnIdx < footnoteList.length; fnIdx++) {
         const footnote = footnoteList[fnIdx];
-        logProgress(offset + totalItems + 1, totalCount, "Footnotes");
+        logProgress(totalItems + 1, totalCount, "Footnotes");
 
         // Include array index in key to handle sections with duplicate footnote IDs
         const resourceKey = buildResourceKey(
@@ -2075,9 +2082,12 @@ export async function processMarginalNotes(
         hierarchyPath: sections.hierarchyPath,
         status: sections.status,
         // Get document title via COALESCE subquery
+        // Prioritize regulation title when regulationId is set, since actId may contain the enabling act
         documentTitle: sql<string>`COALESCE(
+          CASE WHEN ${sections.regulationId} IS NOT NULL THEN
+            (SELECT title FROM legislation.regulations WHERE regulation_id = ${sections.regulationId} AND language = ${sections.language} LIMIT 1)
+          ELSE NULL END,
           (SELECT title FROM legislation.acts WHERE act_id = ${sections.actId} AND language = ${sections.language} LIMIT 1),
-          (SELECT title FROM legislation.regulations WHERE regulation_id = ${sections.regulationId} AND language = ${sections.language} LIMIT 1),
           'Unknown Document'
         )`.as("document_title"),
       })
@@ -2108,7 +2118,7 @@ export async function processMarginalNotes(
         continue;
       }
 
-      logProgress(offset + totalItems + 1, totalCount, "Marginal notes");
+      logProgress(totalItems + 1, totalCount, "Marginal notes");
 
       const resourceKey = buildResourceKey(
         "marginal_note",
@@ -2303,7 +2313,7 @@ export async function processPublicationItems(
       const recommendations = reg.recommendations ?? [];
       for (let i = 0; i < recommendations.length; i++) {
         const item = recommendations[i];
-        logProgress(offset + totalItems + 1, recLimit, "Recommendations");
+        logProgress(totalItems + 1, recLimit, "Recommendations");
 
         const resourceKey = buildResourceKey(
           "publication_item",
@@ -2401,7 +2411,7 @@ export async function processPublicationItems(
       const notices = reg.notices ?? [];
       for (let i = 0; i < notices.length; i++) {
         const item = notices[i];
-        logProgress(offset + totalItems + 1, noticeLimit, "Notices");
+        logProgress(totalItems + 1, noticeLimit, "Notices");
 
         const resourceKey = buildResourceKey(
           "publication_item",

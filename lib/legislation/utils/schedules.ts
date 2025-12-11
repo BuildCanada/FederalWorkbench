@@ -122,7 +122,9 @@ export function extractScheduleListContent(
   let sectionOrder = startingOrder || 0;
 
   const idBase = actId || regulationId || "unknown";
-  const scheduleLabel = scheduleContext.scheduleLabel || "Schedule";
+  // Use scheduleLabel if available, otherwise fall back to scheduleId (e.g., "NifProvs")
+  const scheduleLabel =
+    scheduleContext.scheduleLabel || scheduleContext.scheduleId || "Schedule";
 
   // Helper to process List elements recursively
   const processListContent = (
@@ -156,7 +158,11 @@ export function extractScheduleListContent(
           ? `${scheduleLabel} Item ${itemLabel}`
           : `${scheduleLabel} Item ${sectionOrder}`;
 
-        const canonicalSectionId = `${idBase}/${language}/sch-${scheduleLabel.replace(/\s+/g, "-").toLowerCase()}${itemLabel ? `-${itemLabel}` : `-item-${sectionOrder}`}`;
+        // Determine sectionType first for use in canonicalSectionId
+        const sectionType = getSectionTypeForSchedule(scheduleContext);
+
+        // Include sectionType and sectionOrder in ID for uniqueness
+        const canonicalSectionId = `${idBase}/${language}/${sectionType}/${sectionOrder}/sch-${scheduleLabel.replace(/\s+/g, "-").toLowerCase()}${itemLabel ? `-${itemLabel}` : "-item"}`;
 
         // Extract metadata
         const inForceStartDate = parseDate(
@@ -185,7 +191,7 @@ export function extractScheduleListContent(
           sectionLabel,
           sectionOrder,
           language,
-          sectionType: getSectionTypeForSchedule(scheduleContext),
+          sectionType,
           hierarchyPath: [...hierarchyPath],
           marginalNote: undefined,
           content: itemText,
@@ -259,14 +265,17 @@ export function extractScheduleListContent(
         const internalReferences = extractInternalReferences(fgObj);
         if (fgContent && fgContent.trim().length > 0) {
           sectionOrder++;
-          const canonicalSectionId = `${idBase}/${language}/sch-${scheduleLabel.replace(/\s+/g, "-").toLowerCase()}-fg-${sectionOrder}`;
+          // Determine sectionType first for use in canonicalSectionId
+          const sectionType = getSectionTypeForSchedule(scheduleContext);
+          // Include sectionType and sectionOrder in ID for uniqueness
+          const canonicalSectionId = `${idBase}/${language}/${sectionType}/${sectionOrder}/sch-${scheduleLabel.replace(/\s+/g, "-").toLowerCase()}-fg`;
 
           sections.push({
             canonicalSectionId,
             sectionLabel: `${scheduleLabel} Form`,
             sectionOrder,
             language,
-            sectionType: getSectionTypeForSchedule(scheduleContext),
+            sectionType,
             hierarchyPath: [scheduleLabel],
             content: fgContent,
             contentHtml: extractHtmlContent(fgObj) || undefined,
@@ -298,7 +307,10 @@ export function extractScheduleListContent(
         const tgContent = extractTextContent(tgObj);
         if (tgContent && tgContent.trim().length > 0) {
           sectionOrder++;
-          const canonicalSectionId = `${idBase}/${language}/sch-${scheduleLabel.replace(/\s+/g, "-").toLowerCase()}-tbl-${sectionOrder}`;
+          // Determine sectionType first for use in canonicalSectionId
+          const sectionType = getSectionTypeForSchedule(scheduleContext);
+          // Include sectionType and sectionOrder in ID for uniqueness
+          const canonicalSectionId = `${idBase}/${language}/${sectionType}/${sectionOrder}/sch-${scheduleLabel.replace(/\s+/g, "-").toLowerCase()}-tbl`;
 
           // Extract table metadata for enhanced search/display
           const tableAttrs = extractTableAttributes(tgObj);
@@ -327,7 +339,7 @@ export function extractScheduleListContent(
             sectionLabel: `${scheduleLabel} Table`,
             sectionOrder,
             language,
-            sectionType: getSectionTypeForSchedule(scheduleContext),
+            sectionType,
             hierarchyPath: [scheduleLabel],
             content: tgContent,
             contentHtml: extractHtmlContent(tgObj) || undefined,
@@ -408,7 +420,10 @@ export function extractScheduleListContent(
                 ? `${scheduleLabel} ${groupPath.join(" ")} ${provLabel}`.trim()
                 : `${scheduleLabel} ${groupPath.join(" ")} Provision ${sectionOrder}`.trim();
 
-              const canonicalSectionId = `${idBase}/${language}/sch-${scheduleLabel.replace(/\s+/g, "-").toLowerCase()}-prov-${sectionOrder}`;
+              // Determine sectionType first for use in canonicalSectionId
+              const sectionType = getSectionTypeForSchedule(scheduleContext);
+              // Include sectionType and sectionOrder in ID for uniqueness
+              const canonicalSectionId = `${idBase}/${language}/${sectionType}/${sectionOrder}/sch-${scheduleLabel.replace(/\s+/g, "-").toLowerCase()}-prov`;
 
               // Extract metadata
               const inForceStartDate = parseDate(
@@ -442,7 +457,7 @@ export function extractScheduleListContent(
                 sectionLabel,
                 sectionOrder,
                 language,
-                sectionType: getSectionTypeForSchedule(scheduleContext),
+                sectionType,
                 hierarchyPath: [scheduleLabel, ...groupPath],
                 content: provContent,
                 contentHtml: contentHtml || undefined,

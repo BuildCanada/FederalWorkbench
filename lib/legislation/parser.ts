@@ -223,7 +223,7 @@ export function parseActXml(
   const allSections = [...sections];
   if (enactingClause) {
     const enactsSection = {
-      canonicalSectionId: `${actId}/${language}/enacts`,
+      canonicalSectionId: `${actId}/${language}/enacts/0/clause`,
       sectionLabel: "Enacting Clause",
       sectionOrder: 0, // Before all body sections
       language,

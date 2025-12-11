@@ -176,7 +176,7 @@ test.describe("Enacting clause section creation in parser", () => {
     const enactsSection = result.sections.find(
       (s) => s.sectionType === "enacts"
     );
-    expect(enactsSection?.canonicalSectionId).toBe("T-1/en/enacts");
+    expect(enactsSection?.canonicalSectionId).toBe("T-1/en/enacts/0/clause");
   });
 
   test("enacts section has sectionOrder 0 (before body sections)", () => {
@@ -288,7 +288,7 @@ test.describe("Enacting clause section creation in parser", () => {
       (s) => s.sectionType === "enacts"
     );
     expect(enactsSection).toBeDefined();
-    expect(enactsSection?.canonicalSectionId).toBe("T-1/fr/enacts");
+    expect(enactsSection?.canonicalSectionId).toBe("T-1/fr/enacts/0/clause");
     expect(enactsSection?.content).toContain("Sa Majesté");
     expect(enactsSection?.content).toContain("édicte");
     expect(enactsSection?.language).toBe("fr");

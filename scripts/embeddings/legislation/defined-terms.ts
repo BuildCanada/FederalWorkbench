@@ -15,7 +15,6 @@ import {
 } from "@/lib/db/legislation/schema";
 
 import {
-  buildPairedResourceKey,
   buildResourceKey,
   type ChunkData,
   DB_FETCH_BATCH_SIZE,
@@ -136,7 +135,7 @@ export function buildTermContent(
 /**
  * Build chunk for a single defined term.
  */
-function buildTermChunk(
+export function buildTermChunk(
   term: DefinedTerm,
   documentTitle: string
 ): ChunkData | null {
@@ -146,12 +145,13 @@ function buildTermChunk(
   }
 
   const termKey = buildResourceKey("defined_term", term.id, lang, 0);
-  const termPairedKey = buildPairedResourceKey(
-    "defined_term",
-    term.id,
-    lang,
-    0
-  );
+
+  // Build paired resource key using the actual paired term's ID (if linked)
+  // The paired term is in the opposite language, so we swap en<->fr
+  const pairedLang = lang === "en" ? "fr" : "en";
+  const termPairedKey = term.pairedTermId
+    ? buildResourceKey("defined_term", term.pairedTermId, pairedLang, 0)
+    : null;
 
   return {
     content: buildTermContent(term, documentTitle),
@@ -172,7 +172,7 @@ function buildTermChunk(
       scopeSections: term.scopeSections ?? undefined,
       scopeRawText: term.scopeRawText ?? undefined,
       chunkIndex: 0,
-      pairedResourceKey: termPairedKey,
+      pairedResourceKey: termPairedKey ?? undefined,
     },
   };
 }

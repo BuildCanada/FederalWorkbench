@@ -190,6 +190,13 @@
       "when": 1765227051085,
       "tag": "0026_lucky_living_tribunal",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1765322426021,
+      "tag": "0027_overjoyed_owl",
+      "breakpoints": true
     }
   ]
 }

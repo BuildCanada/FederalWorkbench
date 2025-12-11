@@ -2,9 +2,20 @@ import type { ChangeType, LimsMetadata, Status } from "../types";
 import { parseDate } from "./dates";
 
 /**
- * Determine status from XML attributes
+ * Determine status from XML attributes and content
+ *
+ * Checks for:
+ * 1. Root-level <Repealed> element - indicates entire document is repealed
+ * 2. @in-force="no" attribute - indicates not yet in force
+ * 3. Default: in-force
  */
 export function determineStatus(el: Record<string, unknown>): Status {
+  // Check for root-level Repealed element (direct child of Statute/Regulation)
+  // This indicates the entire document has been repealed, even if in-force="yes"
+  if (el.Repealed !== undefined) {
+    return "repealed";
+  }
+
   if (el["@_in-force"] === "no") {
     return "not-in-force";
   }

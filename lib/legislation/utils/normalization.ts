@@ -2,33 +2,49 @@
  * Normalize a term for matching, using enhanced logic for cross-lingual pairing.
  *
  * Steps:
- * 1. Replace dashes (en-dash, em-dash, hyphen) with spaces for consistent word separation
- * 2. Lowercase
- * 3. Remove non-word characters (except spaces)
- * 4. Collapse multiple spaces to single space
- * 5. Trim
+ * 1. Expand ligatures to ASCII equivalents (œ→oe, æ→ae) - must be before NFD
+ * 2. NFD normalize to decompose accented characters (é → e + combining accent)
+ * 3. Remove combining diacritical marks (the accent parts)
+ * 4. Lowercase
+ * 5. Replace dashes with spaces for consistent word separation
+ * 6. Remove remaining non-alphanumeric characters (except spaces)
+ * 7. Collapse multiple spaces to single space
+ * 8. Trim
  *
- * Note: JavaScript's \w only matches ASCII word characters [a-zA-Z0-9_],
- * so accented characters like é, à, ç are stripped entirely.
- * This is intentional for cross-lingual matching (EN "barrier" matches FR "barrière").
+ * This preserves base letters while removing accents:
+ * - "café" → "cafe" (é→e, base letter preserved)
+ * - "bœuf" → "boeuf" (œ expanded, then preserved)
+ * - "définition" → "definition"
  *
  * Examples:
  * - "Canada–Colombia" → "canada colombia" (en-dash becomes space)
- * - "Canada Colombia" → "canada colombia" (already has space)
- * - "in vitro embryo" → "in vitro embryo"
- * - "l'accès" → "laccs"
+ * - "œuf" → "oeuf" (ligature expanded)
+ * - "produit d'œufs" → "produit doeufs"
+ * - "boîte à œufs" → "boite a oeufs"
  *
  * Used for:
  * - Creating term_normalized in the parser
  * - Matching pairedTerm text to find paired term IDs
  */
 export function normalizeTermForMatching(term: string): string {
-  return term
-    .replace(/[\u2013\u2014\-—–]/g, " ") // Replace dashes with spaces
-    .toLowerCase()
-    .replace(/[^\w\s]/g, "") // Remove non-word chars
-    .replace(/\s+/g, " ") // Collapse whitespace
-    .trim();
+  return (
+    term
+      // Expand ligatures first (NFD doesn't decompose these)
+      .replace(/œ/gi, "oe")
+      .replace(/æ/gi, "ae")
+      // NFD decompose: é → e + combining accent mark
+      .normalize("NFD")
+      // Remove combining diacritical marks (U+0300 to U+036F)
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      // Replace dashes with spaces
+      .replace(/[\u2013\u2014\-—–]/g, " ")
+      // Remove remaining non-alphanumeric (punctuation, etc.)
+      .replace(/[^a-z0-9\s]/g, "")
+      // Collapse whitespace
+      .replace(/\s+/g, " ")
+      .trim()
+  );
 }
 
 /**

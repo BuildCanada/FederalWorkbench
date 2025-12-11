@@ -32,6 +32,49 @@ import {
 import { extractHtmlContent, extractTextContent } from "./text";
 
 /**
+ * Determine if a section element represents a repealed section.
+ *
+ * The Justice Canada XML uses two patterns for repealed sections:
+ *
+ * 1. Direct Repealed child (rare):
+ *    <Section><Repealed>[Repealed, SOR/2023-5]</Repealed></Section>
+ *
+ * 2. Repealed inside Text (common):
+ *    <Section><Label>1</Label><Text><Repealed>[Repealed, SOR/2018-39]</Repealed></Text></Section>
+ *
+ * This function detects BOTH patterns. It only returns true when the section's
+ * PRIMARY content is a Repealed element, not when some nested content (like a
+ * single definition) is repealed while the section remains active.
+ */
+export function isRepealedSection(sectionEl: Record<string, unknown>): boolean {
+  // Pattern 1: Direct <Repealed> child
+  if (sectionEl.Repealed) {
+    return true;
+  }
+
+  // Pattern 2: <Text><Repealed>...</Repealed></Text> where Text contains ONLY Repealed
+  if (sectionEl.Text && typeof sectionEl.Text === "object") {
+    const textEl = sectionEl.Text as Record<string, unknown>;
+
+    // Check if Text has a Repealed property
+    if (!textEl.Repealed) {
+      return false;
+    }
+
+    // Count substantive keys (exclude XML attributes starting with @)
+    // A fully repealed section's Text should only have Repealed (and maybe whitespace #text)
+    const substantiveKeys = Object.keys(textEl).filter(
+      (key) => !key.startsWith("@") && key !== "#text"
+    );
+
+    // If Repealed is the only substantive content, section is repealed
+    return substantiveKeys.length === 1 && substantiveKeys[0] === "Repealed";
+  }
+
+  return false;
+}
+
+/**
  * Options for parsing sections from Body element
  */
 type ParseSectionsOptions = {
@@ -85,7 +128,7 @@ export function parseSections(options: ParseSectionsOptions): {
 
     // Determine status
     let status: Status = "in-force";
-    if (sectionEl.Repealed) {
+    if (isRepealedSection(sectionEl)) {
       status = "repealed";
     } else if (sectionEl["@_in-force"] === "no") {
       status = "not-in-force";
@@ -101,12 +144,9 @@ export function parseSections(options: ParseSectionsOptions): {
 
     // Use schedule context for canonicalSectionId if inside a schedule
     const effectiveScheduleContext = currentScheduleContext || scheduleContext;
-    const canonicalSectionId = effectiveScheduleContext?.scheduleLabel
-      ? `${idBase}/${language}/sch-${effectiveScheduleContext.scheduleLabel.replace(/\s+/g, "-").toLowerCase()}/s${label}`
-      : `${idBase}/${language}/s${label}`;
 
-    // Determine section type
-    // First check for amending type from section's own attributes
+    // Determine section type FIRST (needed for canonicalSectionId)
+    // Check for amending type from section's own attributes
     const xmlType = sectionEl["@_type"] as string | undefined;
     let sectionType: SectionType = "section";
 
@@ -120,6 +160,17 @@ export function parseSections(options: ParseSectionsOptions): {
         effectiveScheduleContext.scheduleType === "amending";
       sectionType = isAmendingSchedule ? "amending" : "schedule";
     }
+
+    // Generate canonicalSectionId including sectionType and sectionOrder for uniqueness
+    // Format: {docId}/{language}/{sectionType}/{order}/s{label}
+    // sectionOrder guarantees uniqueness even when same label appears multiple times
+    // (e.g., multiple "section 16" in different BillPiece blocks within RelatedProvs)
+    const scheduleIdentifier =
+      effectiveScheduleContext?.scheduleLabel ||
+      effectiveScheduleContext?.scheduleId;
+    const canonicalSectionId = scheduleIdentifier
+      ? `${idBase}/${language}/${sectionType}/${sectionOrder}/sch-${scheduleIdentifier.replace(/\s+/g, "-").toLowerCase()}/s${label}`
+      : `${idBase}/${language}/${sectionType}/${sectionOrder}/s${label}`;
 
     // Extract additional metadata
     const xmlTarget = sectionEl["@_target"] as string | undefined;
@@ -228,6 +279,31 @@ export function parseSections(options: ParseSectionsOptions): {
         });
         definedTerms.push(...terms);
       }
+
+      // Extract inline definitions from Subsection/Text (no Definition wrapper)
+      if (subsecDefs.length === 0 && subsecObj.Text) {
+        const textObj =
+          typeof subsecObj.Text === "object"
+            ? (subsecObj.Text as Record<string, unknown>)
+            : {};
+
+        const hasInlineDefinedTerm =
+          textObj.DefinedTermEn !== undefined ||
+          textObj.DefinedTermFr !== undefined;
+
+        if (hasInlineDefinedTerm) {
+          const syntheticDef = { Text: subsecObj.Text };
+          const inlineTerms = extractDefinedTermFromDefinition({
+            defEl: syntheticDef,
+            language,
+            actId,
+            regulationId,
+            sectionLabel: label,
+            scope,
+          });
+          definedTerms.push(...inlineTerms);
+        }
+      }
     }
 
     // Extract defined terms from Definition elements directly in section
@@ -247,6 +323,37 @@ export function parseSections(options: ParseSectionsOptions): {
         scope,
       });
       definedTerms.push(...terms);
+    }
+
+    // Extract inline definitions: DefinedTermEn/Fr directly in Section/Text
+    // without a Definition wrapper. Example:
+    //   <Section><Text>In this Part, <DefinedTermEn>elevating device</DefinedTermEn>
+    //   means... (<Emphasis>appareil de levage</Emphasis>)</Text></Section>
+    // Only check if no Definition elements were found in this section
+    if (definitions.length === 0 && sectionEl.Text) {
+      const textObj =
+        typeof sectionEl.Text === "object"
+          ? (sectionEl.Text as Record<string, unknown>)
+          : {};
+
+      // Check if Text contains DefinedTermEn or DefinedTermFr
+      const hasInlineDefinedTerm =
+        textObj.DefinedTermEn !== undefined ||
+        textObj.DefinedTermFr !== undefined;
+
+      if (hasInlineDefinedTerm) {
+        // Create a synthetic Definition element wrapping the Text
+        const syntheticDef = { Text: sectionEl.Text };
+        const inlineTerms = extractDefinedTermFromDefinition({
+          defEl: syntheticDef,
+          language,
+          actId,
+          regulationId,
+          sectionLabel: label,
+          scope,
+        });
+        definedTerms.push(...inlineTerms);
+      }
     }
 
     // Extract cross references
@@ -311,19 +418,14 @@ export function parseSections(options: ParseSectionsOptions): {
       const provisions = Array.isArray(obj.Provision)
         ? obj.Provision
         : [obj.Provision];
-      let provisionIndex = 0;
       for (const provision of provisions) {
         if (provision && typeof provision === "object") {
-          provisionIndex++;
+          sectionOrder++;
           const provObj = provision as Record<string, unknown>;
 
-          // Generate a label for the provision (they don't have native labels)
-          const label =
-            provisionIndex === 1
-              ? "order"
-              : `order-provision-${provisionIndex}`;
-
-          sectionOrder++;
+          // Generate a label for the provision using document-level sectionOrder for uniqueness
+          // (provisionIndex would reset for each Order block, causing duplicates)
+          const label = `order-${sectionOrder}`;
 
           // Extract content
           const content = extractTextContent(provObj);
@@ -358,7 +460,8 @@ export function parseSections(options: ParseSectionsOptions): {
           const formattingAttributes = extractFormattingAttributes(provObj);
           const provisionHeading = extractProvisionHeading(provObj);
 
-          const canonicalSectionId = `${idBase}/${language}/${label}`;
+          // Include sectionType and sectionOrder in ID for uniqueness
+          const canonicalSectionId = `${idBase}/${language}/provision/${sectionOrder}/${label}`;
 
           sections.push({
             canonicalSectionId,

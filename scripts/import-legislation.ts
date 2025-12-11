@@ -10,12 +10,14 @@
  *   --type=act|regulation  Process only acts or regulations
  *   --lang=en|fr    Process only English or French files
  *   --skip-existing Skip files that have already been imported
- *   --truncate      Truncate all legislation tables before importing
+ *   --truncate      Truncate all legislation tables before importing (prompts for confirmation)
+ *   --force         Skip confirmation prompt for --truncate
  *   --verbose       Show detailed output
  *   --ids=ID1,ID2   Import specific document IDs (comma-separated)
  *                   For acts: A-1,A-0.6,C-11
  *                   For regulations: SOR-2000-1,SI-2000-100,C.R.C.,_c._10
- *   --sample        Import a sample of different regulation types (CRC, SI, SOR)
+ *   --subset         Import strategic subset (25 acts + related regulations)
+ *   --subset=NAME    Import named subset (strategic, smoke)
  */
 
 import { config } from "dotenv";
@@ -23,6 +25,7 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 
 import { existsSync, mkdirSync } from "node:fs";
+import { createInterface } from "node:readline";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -45,6 +48,11 @@ import {
   normalizeRegulationId,
   parseLegislationXml,
 } from "@/lib/legislation/parser";
+import {
+  parseSubsetArg,
+  type ResolvedSubset,
+  resolveSubset,
+} from "@/lib/legislation/subsets";
 import type {
   Language,
   LegislationType,
@@ -75,94 +83,17 @@ const langArg = args.find((a) => a.startsWith("--lang="))?.split("=")[1] as
   | "fr"
   | undefined;
 const idsArg = args.find((a) => a.startsWith("--ids="))?.split("=")[1];
-const sampleMode = args.includes("--sample");
 const truncateMode = args.includes("--truncate");
+const forceMode = args.includes("--force");
 
-// Sample document IDs for comprehensive testing (mix of CRC, SI, SOR regulations)
-const SAMPLE_ACTS = [
-  "A-0.6",
-  "A-1",
-  "A-1.3",
-  "A-1.5",
-  "A-10.1",
-  "A-10.4",
-  "A-10.5",
-  "A-10.6",
-  "A-10.7",
-  "A-11.2",
-  "A-11.3",
-  "A-11.31",
-  "A-11.4",
-  "A-11.44",
-  "A-11.5",
-  "A-11.7",
-  "A-11.9",
-  "A-12",
-  "A-12.8",
-  "A-13.4",
-];
-
-const SAMPLE_REGULATIONS = {
-  // CRC regulations (Consolidated Regulations of Canada)
-  CRC: [
-    "C.R.C.,_c._10",
-    "C.R.C.,_c._100",
-    "C.R.C.,_c._101",
-    "C.R.C.,_c._102",
-    "C.R.C.,_c._103",
-    "C.R.C.,_c._104",
-    "C.R.C.,_c._1013",
-  ],
-  // SI regulations (Statutory Instruments)
-  SI: [
-    "SI-2000-100",
-    "SI-2000-101",
-    "SI-2000-102",
-    "SI-2000-103",
-    "SI-2000-104",
-    "SI-2000-111",
-    "SI-2000-16",
-  ],
-  // SOR regulations (Statutory Orders and Regulations)
-  SOR: [
-    "SOR-2000-1",
-    "SOR-2000-100",
-    "SOR-2000-107",
-    "SOR-2000-108",
-    "SOR-2000-111",
-    "SOR-2000-112",
-  ],
-};
-
-// French equivalents for sample regulations
-const SAMPLE_REGULATIONS_FR = {
-  CRC: [
-    "C.R.C.,_ch._10",
-    "C.R.C.,_ch._100",
-    "C.R.C.,_ch._101",
-    "C.R.C.,_ch._102",
-    "C.R.C.,_ch._103",
-    "C.R.C.,_ch._104",
-    "C.R.C.,_ch._1013",
-  ],
-  SI: [
-    "TR-2000-100",
-    "TR-2000-101",
-    "TR-2000-102",
-    "TR-2000-103",
-    "TR-2000-104",
-    "TR-2000-111",
-    "TR-2000-16",
-  ],
-  SOR: [
-    "DORS-2000-1",
-    "DORS-2000-100",
-    "DORS-2000-107",
-    "DORS-2000-108",
-    "DORS-2000-111",
-    "DORS-2000-112",
-  ],
-};
+// Parse --subset flag
+let subsetName: string | null = null;
+try {
+  subsetName = parseSubsetArg(args);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
 
 // Parse specific IDs if provided
 const specificIds = idsArg ? idsArg.split(",").map((id) => id.trim()) : null;
@@ -403,6 +334,42 @@ function logVerbose(message: string) {
 }
 
 /**
+ * Prompt user to confirm truncate operation
+ */
+function confirmTruncate(): Promise<boolean> {
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise((resolve) => {
+    console.log("");
+    console.log("⚠️  WARNING: --truncate will perform the following actions:");
+    console.log("   • DELETE all data from legislation.acts");
+    console.log("   • DELETE all data from legislation.regulations");
+    console.log("   • DELETE all data from legislation.sections");
+    console.log("   • DELETE all data from legislation.defined_terms");
+    console.log("   • DELETE all data from legislation.cross_references");
+    console.log("   • Clear the SQLite progress cache");
+    console.log("");
+    console.log(
+      "   This will also invalidate any existing embeddings for legislation."
+    );
+    console.log("");
+
+    rl.question("Are you sure you want to continue? (y/n): ", (answer) => {
+      rl.close();
+      const normalized = answer.toLowerCase().trim();
+      const confirmed = normalized === "y" || normalized === "yes";
+      if (!confirmed) {
+        console.log("Truncate cancelled.");
+      }
+      resolve(confirmed);
+    });
+  });
+}
+
+/**
  * Insert a parsed document into the database
  * Each document is a single language version - no bilingual merging needed
  * Uses a transaction for atomicity and better performance
@@ -592,77 +559,6 @@ function shouldSkipFile(file: {
 }
 
 /**
- * Get sample files for comprehensive testing
- */
-function getSampleFiles(): {
-  path: string;
-  type: LegislationType;
-  language: Language;
-  id: string;
-}[] {
-  const files: {
-    path: string;
-    type: LegislationType;
-    language: Language;
-    id: string;
-  }[] = [];
-
-  // Add acts (same IDs for EN and FR)
-  if (!typeArg || typeArg === "act") {
-    if (!langArg || langArg === "en") {
-      for (const actId of SAMPLE_ACTS) {
-        files.push({
-          path: `${BASE_PATH}/eng/acts/${actId}.xml`,
-          type: "act",
-          language: "en",
-          id: actId,
-        });
-      }
-    }
-    if (!langArg || langArg === "fr") {
-      for (const actId of SAMPLE_ACTS) {
-        files.push({
-          path: `${BASE_PATH}/fra/lois/${actId}.xml`,
-          type: "act",
-          language: "fr",
-          id: actId,
-        });
-      }
-    }
-  }
-
-  // Add regulations (different IDs for EN and FR)
-  if (!typeArg || typeArg === "regulation") {
-    if (!langArg || langArg === "en") {
-      for (const regs of Object.values(SAMPLE_REGULATIONS)) {
-        for (const regId of regs) {
-          files.push({
-            path: `${BASE_PATH}/eng/regulations/${regId}.xml`,
-            type: "regulation",
-            language: "en",
-            id: regId,
-          });
-        }
-      }
-    }
-    if (!langArg || langArg === "fr") {
-      for (const regs of Object.values(SAMPLE_REGULATIONS_FR)) {
-        for (const regId of regs) {
-          files.push({
-            path: `${BASE_PATH}/fra/reglements/${regId}.xml`,
-            type: "regulation",
-            language: "fr",
-            id: regId,
-          });
-        }
-      }
-    }
-  }
-
-  return files;
-}
-
-/**
  * Filter files by specific IDs
  */
 function filterByIds(
@@ -707,11 +603,17 @@ async function truncateLegislationTables() {
 async function main() {
   log("Starting legislation import");
   log(
-    `Options: limit=${limit || "none"}, dry-run=${dryRun}, skip-existing=${skipExisting}, truncate=${truncateMode}, type=${typeArg || "all"}, lang=${langArg || "all"}, sample=${sampleMode}, ids=${specificIds ? specificIds.length : "none"}`
+    `Options: limit=${limit || "none"}, dry-run=${dryRun}, skip-existing=${skipExisting}, truncate=${truncateMode}, type=${typeArg || "all"}, lang=${langArg || "all"}, subset=${subsetName || "none"}, ids=${specificIds ? specificIds.length : "none"}`
   );
 
-  // Truncate tables if requested
+  // Truncate tables if requested (with confirmation unless --force)
   if (truncateMode && !dryRun) {
+    if (!forceMode) {
+      const confirmed = await confirmTruncate();
+      if (!confirmed) {
+        process.exit(0);
+      }
+    }
     await truncateLegislationTables();
     // Also clear SQLite progress tracker to stay in sync
     getProgressTracker().clearAll();
@@ -721,6 +623,31 @@ async function main() {
   // Load lookup.xml metadata for enrichment
   lookupData = loadLookupData();
 
+  // Resolve subset if specified (requires lookup.xml)
+  let resolvedSubset: ResolvedSubset | null = null;
+
+  if (subsetName) {
+    if (!lookupData) {
+      log("ERROR: --subset requires lookup.xml but it could not be loaded");
+      log(`Expected location: ${LOOKUP_PATH}`);
+      process.exit(1);
+    }
+
+    try {
+      resolvedSubset = resolveSubset(
+        subsetName as "strategic" | "smoke",
+        lookupData
+      );
+      log("");
+      log(`=== Subset: ${resolvedSubset.name} ===`);
+      log(`Acts: ${resolvedSubset.actIds.size}`);
+      log(`Regulations: ${resolvedSubset.regulationFilenames.size}`);
+    } catch (error) {
+      log(`ERROR: ${error instanceof Error ? error.message : String(error)}`);
+      process.exit(1);
+    }
+  }
+
   // Get list of files to process
   let files: {
     path: string;
@@ -729,12 +656,8 @@ async function main() {
     id: string;
   }[];
 
-  if (sampleMode) {
-    // Use sample set for comprehensive testing
-    files = getSampleFiles();
-    log(`Using sample set: ${files.length} files`);
-  } else if (specificIds) {
-    // Get all files and filter by specific IDs
+  if (specificIds) {
+    // Filter by specific IDs (existing functionality)
     const allFiles = getLegislationFiles(
       BASE_PATH,
       typeArg,
@@ -751,6 +674,46 @@ async function main() {
       limit ? Number.parseInt(limit, 10) : undefined,
       langArg
     );
+  }
+
+  // Apply subset filter
+  if (resolvedSubset) {
+    const beforeCount = files.length;
+
+    files = files.filter((file) => {
+      if (file.type === "act") {
+        return resolvedSubset.actIds.has(file.id);
+      }
+      // For regulations, file.id is already in filename format
+      return resolvedSubset.regulationFilenames.has(file.id);
+    });
+
+    log(`Filtered: ${beforeCount} → ${files.length} files`);
+
+    // In dry-run mode, show detailed breakdown
+    if (dryRun) {
+      const actFiles = files.filter((f) => f.type === "act");
+      const regFiles = files.filter((f) => f.type === "regulation");
+
+      log("");
+      log("=== Subset Dry Run ===");
+      log(`Total files: ${files.length}`);
+      log(
+        `  Acts: ${actFiles.length} (${actFiles.filter((f) => f.language === "en").length} EN, ${actFiles.filter((f) => f.language === "fr").length} FR)`
+      );
+      log(
+        `  Regulations: ${regFiles.length} (${regFiles.filter((f) => f.language === "en").length} EN, ${regFiles.filter((f) => f.language === "fr").length} FR)`
+      );
+      log("");
+      log("Act IDs:");
+      for (const actId of resolvedSubset.actIds) {
+        log(`  ${actId}`);
+      }
+      log("");
+      log(
+        `Regulation files: ${resolvedSubset.regulationFilenames.size} unique`
+      );
+    }
   }
 
   log(`Found ${files.length} files to process`);
