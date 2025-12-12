@@ -9,12 +9,12 @@
 import crypto from "node:crypto";
 import { CohereClient } from "cohere-ai";
 import { cacheGet, cacheSet } from "@/lib/cache/redis";
+import { ragDebug } from "@/lib/rag/parliament/debug";
 import {
   CACHE_TTL,
   isRagCacheDisabled,
   RERANKER_CONFIG,
-} from "@/lib/rag/parliament/constants";
-import { ragDebug } from "@/lib/rag/parliament/debug";
+} from "@/lib/rag/shared/constants";
 import type { LegislationSearchResult } from "./search";
 
 const dbg = ragDebug("leg:rerank");
@@ -138,20 +138,37 @@ export async function rerankLegislationResults(
 }
 
 /**
- * Build cache key for reranking results
+ * Build a unique identifier for a search result.
+ * Uses the minimal set of fields needed to distinguish any source type.
+ */
+function getResultIdentifier(
+  meta: LegislationSearchResult["metadata"]
+): string {
+  const docId = meta.actId ?? meta.regulationId ?? "";
+  const itemId =
+    meta.sectionId ??
+    meta.termId ??
+    meta.crossRefId ??
+    meta.footnoteId ??
+    meta.sectionLabel ??
+    "";
+  const idx = meta.chunkIndex ?? meta.preambleIndex ?? 0;
+
+  return `${meta.sourceType}:${meta.language}:${docId}:${itemId}:${idx}`;
+}
+
+/**
+ * Build cache key for reranking results.
+ * Uses minimal identifying fields to avoid collisions while keeping keys compact.
  */
 function buildRerankCacheKey(
   query: string,
   results: LegislationSearchResult[],
   topN: number
 ): string {
-  // Include result metadata to ensure cache invalidation when results change
   const resultIds = results
-    .map((r) => {
-      const meta = r.metadata;
-      return `${meta.sourceType}:${meta.actId ?? meta.regulationId ?? meta.termId ?? ""}:${meta.chunkIndex ?? 0}`;
-    })
-    .join(",");
+    .map((r) => getResultIdentifier(r.metadata))
+    .join("|");
   const hash = crypto
     .createHash("sha1")
     .update(`${query}|${resultIds}`)

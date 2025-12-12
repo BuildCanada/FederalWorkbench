@@ -10,8 +10,8 @@ import {
   billsBilltext,
   coreSession,
 } from "@/lib/db/parliament/schema";
-import { isRagCacheDisabled } from "@/lib/rag/parliament/constants";
 import { formatDate, type Lang } from "@/lib/rag/parliament/types";
+import { isRagCacheDisabled } from "@/lib/rag/shared/constants";
 
 // Regex constants for bill markdown formatting (top-level for performance)
 const REGEX_PART_HEADING = /^PART\s+(\d+)(?:\s+(.+))?$/;

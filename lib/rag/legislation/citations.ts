@@ -49,6 +49,9 @@ function buildRegulationUrl(regulationId: string, lang: "en" | "fr"): string {
 /**
  * Build URL for a specific section within an act or regulation
  * Adds anchor to section label
+ *
+ * Preserves periods in section labels to distinguish decimal sections
+ * (e.g., 3.1 vs 31). Periods are valid URL fragment characters per RFC 3986.
  */
 function buildSectionUrl(
   baseUrl: string,
@@ -57,9 +60,9 @@ function buildSectionUrl(
   if (!sectionLabel) {
     return baseUrl;
   }
-  // Sections are typically anchored by their label
-  // e.g., #sec91 for section 91
-  const anchor = sectionLabel.replace(/[^a-zA-Z0-9]/g, "");
+  // Preserve alphanumerics and periods (for decimal sections like 3.1, 17.01)
+  // e.g., #sec91 for section 91, #sec3.1 for section 3.1
+  const anchor = sectionLabel.replace(/[^a-zA-Z0-9.]/g, "");
   return `${baseUrl}#sec${anchor}`;
 }
 

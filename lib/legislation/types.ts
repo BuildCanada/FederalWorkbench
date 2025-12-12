@@ -502,7 +502,6 @@ export type ParsedCrossReference = {
   sourceSectionLabel?: string;
   targetType: "act" | "regulation";
   targetRef: string; // raw link value (e.g., "C-46", "SOR-2000-1")
-  targetSectionRef?: string;
   referenceText?: string;
 };
 

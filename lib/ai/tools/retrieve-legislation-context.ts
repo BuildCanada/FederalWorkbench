@@ -13,16 +13,16 @@ import {
   buildLegislationContext,
   type LegislationContext,
 } from "@/lib/rag/legislation/context-builder";
-import { hydrateTopAct } from "@/lib/rag/legislation/hydrate";
+import { hydrateTopSource } from "@/lib/rag/legislation/hydrate";
 import { searchLegislation } from "@/lib/rag/legislation/search";
+import { ragDebug } from "@/lib/rag/parliament/debug";
+import { detectLanguage } from "@/lib/rag/parliament/query-analysis";
 import {
   CACHE_TTL,
   isRagCacheDisabled,
   RERANKER_CONFIG,
   SEARCH_LIMITS,
-} from "@/lib/rag/parliament/constants";
-import { ragDebug } from "@/lib/rag/parliament/debug";
-import { detectLanguage } from "@/lib/rag/parliament/query-analysis";
+} from "@/lib/rag/shared/constants";
 
 const dbg = ragDebug("leg:retrieve");
 
@@ -91,8 +91,13 @@ export async function getLegislationContext(
     topN: boundedLimit,
   });
 
-  // Hydrate top act for artifact display
-  const hydratedSources = await hydrateTopAct(results, preferLang);
+  // Hydrate the most relevant source using RERANKED results (not original vector-ranked)
+  // This ensures the artifact panel shows the document that the cross-encoder
+  // determined is most relevant, not just the highest vector similarity match.
+  const hydratedSources = await hydrateTopSource(
+    context.rerankedResults,
+    preferLang
+  );
   context.hydratedSources = hydratedSources;
 
   const t1 = Date.now();

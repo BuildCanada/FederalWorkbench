@@ -10,7 +10,7 @@ import {
   HYBRID_SEARCH_CONFIG,
   isRagCacheDisabled,
   SEARCH_LIMITS,
-} from "./constants";
+} from "@/lib/rag/shared/constants";
 import { ragDebug } from "./debug";
 
 const dbg = ragDebug("parl:search-utils");

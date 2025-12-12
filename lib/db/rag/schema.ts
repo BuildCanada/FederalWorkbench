@@ -316,19 +316,17 @@ export type LegResourceMetadata = {
   // Treaty-specific fields
   treatyTitle?: string; // Title of the treaty/convention
   treatyDefinitionCount?: number; // Number of defined terms in the treaty (for term discoverability)
+  treatyIndex?: number; // Position in treaties array (for bilingual pairing key reconstruction)
 
   // Cross-reference fields
   crossRefId?: string; // FK to legislation.cross_references.id
   targetType?: string; // "act" or "regulation"
   targetRef?: string; // Reference to target document
-  targetSectionRef?: string; // Optional section reference
   referenceText?: string; // Display text for the reference
   // Enhanced cross-reference fields (Task 2.1)
   targetActId?: string; // Resolved act ID from targetRef
   targetRegulationId?: string; // Resolved regulation ID from targetRef
-  targetSectionId?: string; // Resolved section ID from targetSectionRef
   targetDocumentTitle?: string; // Title of the target document
-  targetSnippet?: string; // Snippet of target section content for search
 
   // Table of provisions fields (batched per document)
   provisionCount?: number; // Number of ToP entries batched in this embedding
@@ -337,17 +335,20 @@ export type LegResourceMetadata = {
   signatureName?: string; // Name of signatory
   signatureTitle?: string; // Title of signatory
   signatureDate?: string; // Date of signature
+  signatureBlockIndex?: number; // Position in signatureBlocks array (for bilingual pairing key reconstruction)
 
   // Related provisions fields
   relatedProvisionLabel?: string; // Label from related provision (e.g., "Transitional Provisions")
   relatedProvisionSource?: string; // Source reference
   relatedProvisionSections?: string[]; // Referenced section numbers
+  relatedProvisionIndex?: number; // Position in relatedProvisions array (for bilingual pairing key reconstruction)
 
   // Footnote fields
   footnoteId?: string; // ID within section (e.g., "fn1", "fn2")
   footnoteLabel?: string; // Display label (e.g., "*", "†", "1")
   footnotePlacement?: string; // "section" or "page"
   footnoteStatus?: string; // "editorial" or "official"
+  footnoteIndex?: number; // Position in section's footnotes array (for bilingual pairing key reconstruction)
 
   // Publication item fields (recommendations/notices in regulations)
   publicationType?: "recommendation" | "notice"; // Type of publication item

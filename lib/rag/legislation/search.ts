@@ -15,13 +15,13 @@ import {
   legEmbeddings,
   legResources,
 } from "@/lib/db/rag/schema";
+import { ragDebug } from "@/lib/rag/parliament/debug";
 import {
   CACHE_TTL,
   HYBRID_SEARCH_CONFIG,
   isRagCacheDisabled,
   SEARCH_LIMITS,
-} from "@/lib/rag/parliament/constants";
-import { ragDebug } from "@/lib/rag/parliament/debug";
+} from "@/lib/rag/shared/constants";
 import { buildCitation, type LegislationCitation } from "./citations";
 
 const dbg = ragDebug("leg:search");
@@ -60,6 +60,12 @@ export type LegislationSearchOptions = {
    * - scopeSections array contains this section label
    */
   sectionScope?: string;
+  /**
+   * Pre-computed query embedding to avoid redundant API calls.
+   * When provided, searchLegislation will skip calling generateEmbedding.
+   * Use this when running multiple searches with the same query (e.g., searchActs).
+   */
+  queryEmbedding?: number[];
 };
 
 /**
@@ -178,6 +184,7 @@ export async function searchLegislation(
     regulationId,
     scopeType,
     sectionScope,
+    queryEmbedding: providedEmbedding,
   } = options;
 
   // Enforce limit bounds
@@ -199,8 +206,8 @@ export async function searchLegislation(
     }
   }
 
-  // Generate embedding for query
-  const queryEmbedding = await generateEmbedding(query);
+  // Use provided embedding or generate new one
+  const queryEmbedding = providedEmbedding ?? (await generateEmbedding(query));
   const embeddingVector = `[${queryEmbedding.join(",")}]`;
 
   // Hybrid search weights
@@ -306,6 +313,11 @@ export async function searchLegislation(
 /**
  * Act-related source types to search
  * Includes all content types that can be associated with an act
+ *
+ * Note: publication_item is NOT included because publication items
+ * (Gazette recommendations/notices) are regulation-specific content.
+ * The recommendations/notices fields only exist on the regulations table,
+ * not on acts. See lib/db/legislation/schema.ts lines 335-337.
  */
 const ACT_SOURCE_TYPES: LegResourceMetadata["sourceType"][] = [
   "act",
@@ -320,7 +332,6 @@ const ACT_SOURCE_TYPES: LegResourceMetadata["sourceType"][] = [
   "related_provisions",
   "footnote",
   "marginal_note",
-  "publication_item",
 ];
 
 /**
@@ -351,9 +362,12 @@ export async function searchActs(
   query: string,
   options: Omit<LegislationSearchOptions, "sourceType" | "regulationId"> = {}
 ): Promise<LegislationSearchResult[]> {
-  // Search all act-related source types in parallel
+  // Generate embedding once to avoid redundant API calls across parallel searches
+  const queryEmbedding = await generateEmbedding(query);
+
+  // Search all act-related source types in parallel with shared embedding
   const searchPromises = ACT_SOURCE_TYPES.map((sourceType) =>
-    searchLegislation(query, { ...options, sourceType })
+    searchLegislation(query, { ...options, sourceType, queryEmbedding })
   );
 
   const results = await Promise.all(searchPromises);
@@ -376,9 +390,12 @@ export async function searchRegulations(
   query: string,
   options: Omit<LegislationSearchOptions, "sourceType" | "actId"> = {}
 ): Promise<LegislationSearchResult[]> {
-  // Search all regulation-related source types in parallel
+  // Generate embedding once to avoid redundant API calls across parallel searches
+  const queryEmbedding = await generateEmbedding(query);
+
+  // Search all regulation-related source types in parallel with shared embedding
   const searchPromises = REGULATION_SOURCE_TYPES.map((sourceType) =>
-    searchLegislation(query, { ...options, sourceType })
+    searchLegislation(query, { ...options, sourceType, queryEmbedding })
   );
 
   const results = await Promise.all(searchPromises);
@@ -558,26 +575,36 @@ function buildResourceKeyFromMetadata(
       }
       break;
     case "treaty":
-      if (meta.actId && meta.treatyTitle) {
-        // Treaties use act:actId:index or reg:regId:index format
-        // We can't fully reconstruct without the index, so use treatyTitle
-        sourceId = meta.actId
-          ? `act:${meta.actId}`
-          : `reg:${meta.regulationId}`;
+      // Treaties use act:actId:index or reg:regId:index format
+      if (meta.actId && meta.treatyIndex != null) {
+        sourceId = `act:${meta.actId}:${meta.treatyIndex}`;
+      } else if (meta.regulationId && meta.treatyIndex != null) {
+        sourceId = `reg:${meta.regulationId}:${meta.treatyIndex}`;
       }
       break;
     case "table_of_provisions":
       sourceId = meta.actId ? `act:${meta.actId}` : `reg:${meta.regulationId}`;
       break;
     case "signature_block":
-      sourceId = meta.actId ? `act:${meta.actId}` : `reg:${meta.regulationId}`;
+      // Include index to match ingestion key format: signature_block:act:{actId}:{i}:{lang}:0
+      if (meta.actId && meta.signatureBlockIndex != null) {
+        sourceId = `act:${meta.actId}:${meta.signatureBlockIndex}`;
+      } else if (meta.regulationId && meta.signatureBlockIndex != null) {
+        sourceId = `reg:${meta.regulationId}:${meta.signatureBlockIndex}`;
+      }
       break;
     case "related_provisions":
-      sourceId = meta.actId ? `act:${meta.actId}` : `reg:${meta.regulationId}`;
+      // Include index to match ingestion key format: related_provisions:act:{actId}:{i}:{lang}:0
+      if (meta.actId && meta.relatedProvisionIndex != null) {
+        sourceId = `act:${meta.actId}:${meta.relatedProvisionIndex}`;
+      } else if (meta.regulationId && meta.relatedProvisionIndex != null) {
+        sourceId = `reg:${meta.regulationId}:${meta.relatedProvisionIndex}`;
+      }
       break;
     case "footnote":
-      if (meta.sectionId && meta.footnoteId) {
-        sourceId = `${meta.sectionId}:${meta.footnoteId}`;
+      // Include index to match ingestion key format: footnote:{sectionId}:{footnoteId}:{fnIdx}:{lang}:0
+      if (meta.sectionId && meta.footnoteId && meta.footnoteIndex != null) {
+        sourceId = `${meta.sectionId}:${meta.footnoteId}:${meta.footnoteIndex}`;
       }
       break;
     case "publication_item":
@@ -1085,6 +1112,10 @@ export async function listDistinctMetadataValues(
 /**
  * Deduplicate results by building a unique key from metadata
  * Prefers higher similarity scores when duplicates are found
+ *
+ * Important: Include all index fields to prevent collapsing multiple items
+ * of the same type from the same document (e.g., multiple treaties, signature
+ * blocks, or publication items). These indices mirror buildResourceKeyFromMetadata.
  */
 function deduplicateByResourceKey(
   results: LegislationSearchResult[]
@@ -1105,11 +1136,20 @@ function deduplicateByResourceKey(
       meta.preambleIndex ?? "",
       meta.chunkIndex ?? 0,
       meta.language ?? "",
-      // Related provisions: distinguish by label/source
+      // Related provisions: distinguish by index (label/source may not be unique)
+      meta.relatedProvisionIndex ?? "",
       meta.relatedProvisionLabel ?? "",
       meta.relatedProvisionSource ?? "",
-      // Footnotes: distinguish by footnote ID within section
+      // Footnotes: distinguish by footnote ID and index within section
       meta.footnoteId ?? "",
+      meta.footnoteIndex ?? "",
+      // Treaties: distinguish by index (multiple treaties per document)
+      meta.treatyIndex ?? "",
+      // Signature blocks: distinguish by index (multiple signatories)
+      meta.signatureBlockIndex ?? "",
+      // Publication items: distinguish by type and index
+      meta.publicationType ?? "",
+      meta.publicationIndex ?? "",
     ].join(":");
 
     const existing = seen.get(key);

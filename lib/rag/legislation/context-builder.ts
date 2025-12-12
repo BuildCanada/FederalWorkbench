@@ -5,8 +5,8 @@
  * Includes deduplication, reranking, and citation formatting.
  */
 
-import { RERANKER_CONFIG } from "@/lib/rag/parliament/constants";
 import { ragDebug } from "@/lib/rag/parliament/debug";
+import { RERANKER_CONFIG } from "@/lib/rag/shared/constants";
 import type { LegislationCitation } from "./citations";
 import type { HydratedLegislationSource } from "./hydrate";
 import {
@@ -33,6 +33,12 @@ export type LegislationContext = {
   prompt: string;
   citations: LegislationCitation[];
   hydratedSources: HydratedLegislationSource[];
+  /**
+   * Reranked search results in relevance order.
+   * Used for hydration to ensure artifact panel shows the most relevant document
+   * as determined by the Cohere cross-encoder, not just vector similarity.
+   */
+  rerankedResults: LegislationSearchResult[];
 };
 
 /**
@@ -101,7 +107,9 @@ function deduplicateResults(
         key = `toc:${meta.actId ?? meta.regulationId ?? ""}:${meta.language ?? ""}`;
         break;
       case "signature_block":
-        key = `sig:${meta.actId ?? meta.regulationId ?? ""}:${meta.signatureName ?? ""}`;
+        // Use signatureBlockIndex to distinguish multiple signature blocks in same document
+        // signatureName alone is not unique - multiple blocks could share the first signatory
+        key = `sig:${meta.actId ?? meta.regulationId ?? ""}:${meta.signatureBlockIndex ?? 0}`;
         break;
       case "related_provisions":
         // Unique per document + provision label/source
@@ -189,6 +197,7 @@ export async function buildLegislationContext(
           : "No legislative results found.",
       citations: [],
       hydratedSources: [],
+      rerankedResults: [],
     };
   }
 
@@ -247,7 +256,18 @@ export async function buildLegislationContext(
     const marginalNote = r.metadata.marginalNote
       ? ` (${r.metadata.marginalNote})`
       : "";
-    const label = `${title}${sectionPart}${marginalNote}`;
+
+    // Annotate when content language differs from requested language
+    // This happens when fallback search returns results in the other language
+    const contentLang = r.metadata.language;
+    const langMismatch =
+      contentLang && contentLang !== language
+        ? language === "fr"
+          ? " [contenu en anglais]"
+          : " [content in French]"
+        : "";
+
+    const label = `${title}${sectionPart}${marginalNote}${langMismatch}`;
     const suffix = raw.length > cut.length ? "…" : "";
 
     lines.push(
@@ -279,5 +299,6 @@ export async function buildLegislationContext(
     prompt,
     citations,
     hydratedSources: [], // Populated by getLegislationContext after context building
+    rerankedResults: sorted, // Expose reranked results for hydration
   };
 }

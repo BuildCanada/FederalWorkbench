@@ -89,12 +89,30 @@ function createSimpleHydrator<
 
 type Lang = "en" | "fr";
 
-// Constants for hydration limits
+// ---------------------------------------------------------------------------
+// Hydration Limits (for LLM context, NOT the artifact panel)
+//
+// These limits apply to getHydratedActMarkdown/getHydratedRegulationMarkdown
+// which provide markdown context to the LLM via retrieve-legislation-context.
+//
+// The artifact panel (LegislationViewer) uses lazy loading with NO limits:
+// - /api/legislation/sections fetches complete TOC for any act
+// - /api/legislation/section-content lazy loads content as user scrolls
+//
+// For LLM context, limits are appropriate since:
+// - LLM context windows are limited (~200K tokens for Claude)
+// - Large acts (Criminal Code: 2.3MB, Income Tax Act: 7.2MB) would overwhelm
+// - Users search for specific provisions; LLM needs relevant snippets, not full text
+//
+// Coverage at these limits (based on 1,912 acts):
+//   - 150 sections: 87% of acts fully represented
+//   - 100KB content: 87% of acts fully represented
+// ---------------------------------------------------------------------------
 const TOC_SECTION_THRESHOLD = 10;
 const TOC_MAX_ENTRIES = 30;
-// Max sections to hydrate for display (prevents 2MB+ payloads for Criminal Code)
+// Max sections for LLM context (prevents 2MB+ payloads for Criminal Code)
 const MAX_SECTIONS_TO_HYDRATE = 150;
-// Max markdown size in characters (~100KB)
+// Max markdown size for LLM context (~100KB)
 const MAX_MARKDOWN_SIZE = 100_000;
 
 type SectionData = {
@@ -422,7 +440,7 @@ export async function getHydratedActMarkdown(args: {
     result.note =
       language === "fr"
         ? "Texte français non disponible; utilisation du texte anglais."
-        : "French text not available; using English source text.";
+        : "English text not available; using French source text.";
   }
 
   return result;
@@ -517,7 +535,7 @@ export async function getHydratedRegulationMarkdown(args: {
     result.note =
       language === "fr"
         ? "Texte français non disponible; utilisation du texte anglais."
-        : "French text not available; using English source text.";
+        : "English text not available; using French source text.";
   }
 
   return result;
@@ -821,12 +839,6 @@ function formatCrossReferenceMarkdown(
   if (meta.targetRef) {
     const refLabel = lang === "fr" ? "Référence" : "Reference";
     lines.push(`**${refLabel}:** ${meta.targetRef}`);
-  }
-
-  // Target section
-  if (meta.targetSectionRef) {
-    const sectionLabel = lang === "fr" ? "Article cible" : "Target Section";
-    lines.push(`**${sectionLabel}:** ${meta.targetSectionRef}`);
   }
 
   lines.push("");
@@ -1263,12 +1275,23 @@ export async function hydrateTopDefinedTerm(
 /**
  * Hydrate top source from search results based on source type priority.
  *
- * Priority order:
- * 1. Defined terms (for definition queries)
- * 2. Acts (most common)
- * 3. Regulations
+ * Priority order (for artifact panel compatibility):
+ * 1. Defined terms (if top result is a term)
+ * 2. Acts (find any act in results - artifact panel shows full document)
+ * 3. Regulations (find any regulation in results)
+ * 4. Fallback: hydrate the top result (handles footnotes, schedules, etc.
+ *    when no act/regulation exists in results)
  *
- * Returns array with single hydrated source for the most relevant type.
+ * The artifact panel (message.tsx) expects `sourceType === "act"` or
+ * `sourceType === "regulation"` to show the "Show Act" / "Show Regulation"
+ * buttons. Steps 2-3 preserve this behavior by finding any act/regulation
+ * in the results, even if a footnote or other type ranks higher.
+ *
+ * The fallback (step 4) ensures we return something useful when the search
+ * results contain only non-document source types (e.g., only footnotes),
+ * rather than returning an empty array.
+ *
+ * Returns array with single hydrated source (for consistency with parliament).
  */
 export async function hydrateTopSource(
   results: LegislationSearchResult[],
@@ -1290,13 +1313,13 @@ export async function hydrateTopSource(
     }
   }
 
-  // Otherwise, try acts first, then regulations
+  // Try acts first (artifact panel expects sourceType === "act")
   const actHydrated = await hydrateTopAct(results, language);
   if (actHydrated.length > 0) {
     return actHydrated;
   }
 
-  // Find first regulation result
+  // Try regulations next
   const regResult = results.find(
     (r) =>
       (r.metadata.sourceType === "regulation" ||
@@ -1306,8 +1329,13 @@ export async function hydrateTopSource(
 
   if (regResult) {
     const hydrated = await hydrateSearchResult(regResult, language);
-    return hydrated ? [hydrated] : [];
+    if (hydrated) {
+      return [hydrated];
+    }
   }
 
-  return [];
+  // Fallback: hydrate the top result (handles footnotes, schedules, etc.
+  // when no act/regulation exists in results)
+  const hydrated = await hydrateSearchResult(topResult, language);
+  return hydrated ? [hydrated] : [];
 }

@@ -383,6 +383,7 @@ export async function processTreaties(
             documentTitle: act.title,
             treatyTitle: treaty.title,
             treatyDefinitionCount: treaty.definitions?.length,
+            treatyIndex: i, // Position in treaties array for bilingual pairing key reconstruction
             chunkIndex: 0,
             pairedResourceKey: pairedKey,
           },
@@ -473,6 +474,7 @@ export async function processTreaties(
             documentTitle: reg.title,
             treatyTitle: treaty.title,
             treatyDefinitionCount: treaty.definitions?.length,
+            treatyIndex: i, // Position in treaties array for bilingual pairing key reconstruction
             chunkIndex: 0,
             pairedResourceKey: pairedKey,
           },
@@ -515,59 +517,30 @@ export async function processTreaties(
 
 // ---------- Cross-Reference Processing ----------
 
-/**
- * Maximum length for target section snippets in cross-references.
- * Keeps embeddings focused while providing useful context.
- */
-const TARGET_SNIPPET_MAX_LENGTH = 250;
-
 type CrossRefData = {
   sourceSectionLabel: string | null;
   targetType: string;
   targetRef: string;
-  targetSectionRef: string | null;
   referenceText: string | null;
 };
 
 /**
  * Extended cross-reference data with resolved target information.
- * Includes target document details and content snippets.
+ * Includes target document details for document-level cross-references.
+ * Note: Section-level cross-references are not supported by Justice Canada XML.
  */
 type EnhancedCrossRefData = CrossRefData & {
   // Resolved target identifiers
   targetActId: string | null;
   targetRegulationId: string | null;
-  targetSectionId: string | null;
   // Target document info
   targetDocumentTitleEn: string | null;
   targetDocumentTitleFr: string | null;
-  // Target section snippet (if targetSectionRef resolved)
-  targetSnippetEn: string | null;
-  targetSnippetFr: string | null;
-  // Target section marginal note for additional context
-  targetMarginalNoteEn: string | null;
-  targetMarginalNoteFr: string | null;
 };
 
 /**
- * Truncate text to a maximum length, breaking at word boundaries.
- */
-function truncateSnippet(text: string, maxLength: number): string {
-  if (text.length <= maxLength) {
-    return text;
-  }
-  // Find the last space before maxLength
-  const truncated = text.slice(0, maxLength);
-  const lastSpace = truncated.lastIndexOf(" ");
-  if (lastSpace > maxLength * 0.7) {
-    return `${truncated.slice(0, lastSpace)}...`;
-  }
-  return `${truncated}...`;
-}
-
-/**
  * Build searchable content for a cross-reference in English.
- * Enhanced version includes resolved target document title and content snippet.
+ * Enhanced version includes resolved target document title.
  */
 export function buildCrossRefContentEn(
   ref: EnhancedCrossRefData,
@@ -590,24 +563,10 @@ export function buildCrossRefContentEn(
     parts.push(`Target document: ${ref.targetDocumentTitleEn}`);
   }
 
-  if (ref.targetSectionRef) {
-    parts.push(`Target section: ${ref.targetSectionRef}`);
-  }
-
-  // Include target marginal note for context
-  if (ref.targetMarginalNoteEn) {
-    parts.push(`Target heading: ${ref.targetMarginalNoteEn}`);
-  }
-
   // Prefer resolved English title over raw reference text (which may be French)
   const displayText = ref.targetDocumentTitleEn ?? ref.referenceText;
   if (displayText) {
     parts.push(`Text: ${displayText}`);
-  }
-
-  // Include target content snippet for semantic search
-  if (ref.targetSnippetEn) {
-    parts.push(`\nTarget content: ${ref.targetSnippetEn}`);
   }
 
   return parts.join("\n");
@@ -615,7 +574,7 @@ export function buildCrossRefContentEn(
 
 /**
  * Build searchable content for a cross-reference in French.
- * Enhanced version includes resolved target document title and content snippet.
+ * Enhanced version includes resolved target document title.
  */
 export function buildCrossRefContentFr(
   ref: EnhancedCrossRefData,
@@ -638,24 +597,10 @@ export function buildCrossRefContentFr(
     parts.push(`Document cible: ${ref.targetDocumentTitleFr}`);
   }
 
-  if (ref.targetSectionRef) {
-    parts.push(`Article cible: ${ref.targetSectionRef}`);
-  }
-
-  // Include target marginal note for context
-  if (ref.targetMarginalNoteFr) {
-    parts.push(`Rubrique cible: ${ref.targetMarginalNoteFr}`);
-  }
-
   // Prefer resolved French title over raw reference text (which may be English)
   const displayText = ref.targetDocumentTitleFr ?? ref.referenceText;
   if (displayText) {
     parts.push(`Texte: ${displayText}`);
-  }
-
-  // Include target content snippet for semantic search
-  if (ref.targetSnippetFr) {
-    parts.push(`\nContenu cible: ${ref.targetSnippetFr}`);
   }
 
   return parts.join("\n");
@@ -664,10 +609,12 @@ export function buildCrossRefContentFr(
 /**
  * Process cross-references with enhanced target resolution.
  *
- * This function resolves target references to actual documents and sections,
- * fetching snippets of target content to include in embeddings. This enables:
- * - Searches for "section 91 Criminal Code" to surface cross-references citing s.91
+ * This function resolves target references to actual documents, enabling:
+ * - Searches for "Criminal Code" to surface cross-references citing the Act
  * - Bidirectional discovery (find what cites X, find what X cites)
+ *
+ * Note: Section-level cross-references are not supported by Justice Canada XML.
+ * The XRefExternal element only has document-level attributes (link, reference-type).
  */
 export async function processCrossReferences(
   options: ProcessOptions
@@ -713,8 +660,8 @@ export async function processCrossReferences(
       `   📥 Fetching cross-ref batch ${batchNum}/${totalBatches}...`
     );
 
-    // Enhanced query: fetch cross-references with both source AND target information
-    // Uses subqueries to resolve target documents and sections
+    // Enhanced query: fetch cross-references with both source AND target document information
+    // Note: Section-level resolution removed - Justice Canada XML doesn't support section cross-refs
     const batchRefs = await db
       .select({
         // Cross-reference fields
@@ -724,7 +671,6 @@ export async function processCrossReferences(
         sourceSectionLabel: crossReferences.sourceSectionLabel,
         targetType: crossReferences.targetType,
         targetRef: crossReferences.targetRef,
-        targetSectionRef: crossReferences.targetSectionRef,
         referenceText: crossReferences.referenceText,
 
         // Source document titles (existing logic)
@@ -739,7 +685,7 @@ export async function processCrossReferences(
           'Document inconnu'
         )`.as("source_title_fr"),
 
-        // Target document titles (NEW: resolved from targetRef based on targetType)
+        // Target document titles (resolved from targetRef based on targetType)
         targetDocTitleEn: sql<string>`CASE
           WHEN ${crossReferences.targetType} = 'act' THEN
             (SELECT title FROM legislation.acts WHERE act_id = ${crossReferences.targetRef} AND language = 'en' LIMIT 1)
@@ -754,77 +700,6 @@ export async function processCrossReferences(
             (SELECT title FROM legislation.regulations WHERE regulation_id = ${crossReferences.targetRef} AND language = 'fr' LIMIT 1)
           ELSE NULL
         END`.as("target_doc_title_fr"),
-
-        // Target section content snippets (NEW: if targetSectionRef is provided)
-        targetSnippetEn: sql<string>`CASE
-          WHEN ${crossReferences.targetSectionRef} IS NOT NULL AND ${crossReferences.targetType} = 'act' THEN
-            (SELECT SUBSTRING(content, 1, 500) FROM legislation.sections
-             WHERE act_id = ${crossReferences.targetRef}
-               AND section_label = ${crossReferences.targetSectionRef}
-               AND language = 'en' LIMIT 1)
-          WHEN ${crossReferences.targetSectionRef} IS NOT NULL AND ${crossReferences.targetType} = 'regulation' THEN
-            (SELECT SUBSTRING(content, 1, 500) FROM legislation.sections
-             WHERE regulation_id = ${crossReferences.targetRef}
-               AND section_label = ${crossReferences.targetSectionRef}
-               AND language = 'en' LIMIT 1)
-          ELSE NULL
-        END`.as("target_snippet_en"),
-        targetSnippetFr: sql<string>`CASE
-          WHEN ${crossReferences.targetSectionRef} IS NOT NULL AND ${crossReferences.targetType} = 'act' THEN
-            (SELECT SUBSTRING(content, 1, 500) FROM legislation.sections
-             WHERE act_id = ${crossReferences.targetRef}
-               AND section_label = ${crossReferences.targetSectionRef}
-               AND language = 'fr' LIMIT 1)
-          WHEN ${crossReferences.targetSectionRef} IS NOT NULL AND ${crossReferences.targetType} = 'regulation' THEN
-            (SELECT SUBSTRING(content, 1, 500) FROM legislation.sections
-             WHERE regulation_id = ${crossReferences.targetRef}
-               AND section_label = ${crossReferences.targetSectionRef}
-               AND language = 'fr' LIMIT 1)
-          ELSE NULL
-        END`.as("target_snippet_fr"),
-
-        // Target section marginal notes (NEW: for additional context)
-        targetMarginalNoteEn: sql<string>`CASE
-          WHEN ${crossReferences.targetSectionRef} IS NOT NULL AND ${crossReferences.targetType} = 'act' THEN
-            (SELECT marginal_note FROM legislation.sections
-             WHERE act_id = ${crossReferences.targetRef}
-               AND section_label = ${crossReferences.targetSectionRef}
-               AND language = 'en' LIMIT 1)
-          WHEN ${crossReferences.targetSectionRef} IS NOT NULL AND ${crossReferences.targetType} = 'regulation' THEN
-            (SELECT marginal_note FROM legislation.sections
-             WHERE regulation_id = ${crossReferences.targetRef}
-               AND section_label = ${crossReferences.targetSectionRef}
-               AND language = 'en' LIMIT 1)
-          ELSE NULL
-        END`.as("target_marginal_note_en"),
-        targetMarginalNoteFr: sql<string>`CASE
-          WHEN ${crossReferences.targetSectionRef} IS NOT NULL AND ${crossReferences.targetType} = 'act' THEN
-            (SELECT marginal_note FROM legislation.sections
-             WHERE act_id = ${crossReferences.targetRef}
-               AND section_label = ${crossReferences.targetSectionRef}
-               AND language = 'fr' LIMIT 1)
-          WHEN ${crossReferences.targetSectionRef} IS NOT NULL AND ${crossReferences.targetType} = 'regulation' THEN
-            (SELECT marginal_note FROM legislation.sections
-             WHERE regulation_id = ${crossReferences.targetRef}
-               AND section_label = ${crossReferences.targetSectionRef}
-               AND language = 'fr' LIMIT 1)
-          ELSE NULL
-        END`.as("target_marginal_note_fr"),
-
-        // Target section IDs (NEW: for bidirectional lookup)
-        targetSectionIdEn: sql<string>`CASE
-          WHEN ${crossReferences.targetSectionRef} IS NOT NULL AND ${crossReferences.targetType} = 'act' THEN
-            (SELECT id FROM legislation.sections
-             WHERE act_id = ${crossReferences.targetRef}
-               AND section_label = ${crossReferences.targetSectionRef}
-               AND language = 'en' LIMIT 1)
-          WHEN ${crossReferences.targetSectionRef} IS NOT NULL AND ${crossReferences.targetType} = 'regulation' THEN
-            (SELECT id FROM legislation.sections
-             WHERE regulation_id = ${crossReferences.targetRef}
-               AND section_label = ${crossReferences.targetSectionRef}
-               AND language = 'en' LIMIT 1)
-          ELSE NULL
-        END`.as("target_section_id_en"),
       })
       .from(crossReferences)
       .orderBy(crossReferences.id)
@@ -840,31 +715,19 @@ export async function processCrossReferences(
       const sourceTitleEn = ref.sourceTitleEn ?? "Unknown Document";
       const sourceTitleFr = ref.sourceTitleFr ?? "Document inconnu";
 
-      // Build enhanced cross-reference data with resolved targets
+      // Build enhanced cross-reference data with resolved target document info
       const enhancedRef: EnhancedCrossRefData = {
         sourceSectionLabel: ref.sourceSectionLabel,
         targetType: ref.targetType,
         targetRef: ref.targetRef,
-        targetSectionRef: ref.targetSectionRef,
         referenceText: ref.referenceText,
         // Resolved target identifiers
         targetActId: ref.targetType === "act" ? ref.targetRef : null,
         targetRegulationId:
           ref.targetType === "regulation" ? ref.targetRef : null,
-        targetSectionId: ref.targetSectionIdEn ?? null,
         // Target document info
         targetDocumentTitleEn: ref.targetDocTitleEn ?? null,
         targetDocumentTitleFr: ref.targetDocTitleFr ?? null,
-        // Target section content (truncated for embedding)
-        targetSnippetEn: ref.targetSnippetEn
-          ? truncateSnippet(ref.targetSnippetEn, TARGET_SNIPPET_MAX_LENGTH)
-          : null,
-        targetSnippetFr: ref.targetSnippetFr
-          ? truncateSnippet(ref.targetSnippetFr, TARGET_SNIPPET_MAX_LENGTH)
-          : null,
-        // Target section headings
-        targetMarginalNoteEn: ref.targetMarginalNoteEn ?? null,
-        targetMarginalNoteFr: ref.targetMarginalNoteFr ?? null,
       };
 
       // Create English chunk with enhanced content and metadata
@@ -895,14 +758,11 @@ export async function processCrossReferences(
           sectionLabel: ref.sourceSectionLabel ?? undefined,
           targetType: ref.targetType,
           targetRef: ref.targetRef,
-          targetSectionRef: ref.targetSectionRef ?? undefined,
           referenceText: ref.referenceText ?? undefined,
-          // Enhanced target fields (Task 2.1)
+          // Enhanced target fields (Task 2.1) - document-level only
           targetActId: enhancedRef.targetActId ?? undefined,
           targetRegulationId: enhancedRef.targetRegulationId ?? undefined,
-          targetSectionId: enhancedRef.targetSectionId ?? undefined,
           targetDocumentTitle: enhancedRef.targetDocumentTitleEn ?? undefined,
-          targetSnippet: enhancedRef.targetSnippetEn ?? undefined,
           chunkIndex: 0,
           pairedResourceKey: pairedKeyEn,
         },
@@ -936,14 +796,11 @@ export async function processCrossReferences(
           sectionLabel: ref.sourceSectionLabel ?? undefined,
           targetType: ref.targetType,
           targetRef: ref.targetRef,
-          targetSectionRef: ref.targetSectionRef ?? undefined,
           referenceText: ref.referenceText ?? undefined,
-          // Enhanced target fields (Task 2.1)
+          // Enhanced target fields (Task 2.1) - document-level only
           targetActId: enhancedRef.targetActId ?? undefined,
           targetRegulationId: enhancedRef.targetRegulationId ?? undefined,
-          targetSectionId: enhancedRef.targetSectionId ?? undefined,
           targetDocumentTitle: enhancedRef.targetDocumentTitleFr ?? undefined,
-          targetSnippet: enhancedRef.targetSnippetFr ?? undefined,
           chunkIndex: 0,
           pairedResourceKey: pairedKeyFr,
         },
@@ -1388,6 +1245,7 @@ export async function processSignatureBlocks(
             signatureName: firstLine?.signatureName,
             signatureTitle: firstLine?.signatureTitle,
             signatureDate: firstLine?.signatureDate,
+            signatureBlockIndex: i,
             chunkIndex: 0,
             pairedResourceKey: pairedKey,
           },
@@ -1482,6 +1340,7 @@ export async function processSignatureBlocks(
             signatureName: firstLine?.signatureName,
             signatureTitle: firstLine?.signatureTitle,
             signatureDate: firstLine?.signatureDate,
+            signatureBlockIndex: i,
             chunkIndex: 0,
             pairedResourceKey: pairedKey,
           },
@@ -1652,6 +1511,7 @@ export async function processRelatedProvisions(
             relatedProvisionLabel: provision.label,
             relatedProvisionSource: provision.source,
             relatedProvisionSections: provision.sections,
+            relatedProvisionIndex: i,
             chunkIndex: 0,
             pairedResourceKey: pairedKey,
           },
@@ -1743,6 +1603,7 @@ export async function processRelatedProvisions(
             relatedProvisionLabel: provision.label,
             relatedProvisionSource: provision.source,
             relatedProvisionSections: provision.sections,
+            relatedProvisionIndex: i,
             chunkIndex: 0,
             pairedResourceKey: pairedKey,
           },
@@ -1951,6 +1812,7 @@ export async function processFootnotes(
             footnoteLabel: footnote.label ?? undefined,
             footnotePlacement: footnote.placement ?? undefined,
             footnoteStatus: footnote.status ?? undefined,
+            footnoteIndex: fnIdx,
             chunkIndex: 0,
             pairedResourceKey: pairedKey,
           },

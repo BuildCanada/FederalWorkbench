@@ -3,12 +3,6 @@ import { tool } from "ai";
 import { z } from "zod";
 import { cacheGet, cacheSet } from "@/lib/cache/redis";
 import {
-  CACHE_TTL,
-  isRagCacheDisabled,
-  RERANKER_CONFIG,
-  SEARCH_LIMITS,
-} from "@/lib/rag/parliament/constants";
-import {
   type BuiltCitation,
   buildContext,
 } from "@/lib/rag/parliament/context-builder";
@@ -33,6 +27,12 @@ import {
 import { getHydratedBillMarkdown } from "@/lib/rag/parliament/sources/bills/hydrate";
 import { buildVoteQuestionCitation } from "@/lib/rag/parliament/sources/votes/citations";
 import type { Lang } from "@/lib/rag/parliament/types";
+import {
+  CACHE_TTL,
+  isRagCacheDisabled,
+  RERANKER_CONFIG,
+  SEARCH_LIMITS,
+} from "@/lib/rag/shared/constants";
 
 const dbgRetrieve = ragDebug("parl:retrieve");
 const dbgEnum = ragDebug("parl:retrieve:enum");

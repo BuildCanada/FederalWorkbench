@@ -526,7 +526,6 @@ async function insertDocument(doc: ParsedDocument): Promise<void> {
         sourceSectionLabel: ref.sourceSectionLabel,
         targetType: ref.targetType,
         targetRef: ref.targetRef,
-        targetSectionRef: ref.targetSectionRef,
         referenceText: ref.referenceText,
       }));
 

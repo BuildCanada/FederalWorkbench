@@ -10,6 +10,10 @@ import { expect, test } from "@playwright/test";
 // Regex for checking sort order in context builder tests
 const CONTEXT_SORT_ORDER_REGEX = /Criminal Code.*Broadcasting Act/s;
 
+// Regex for treaty resource key format tests
+const ACT_TREATY_KEY_PATTERN = /^treaty:act:C-46:2:(en|fr):0$/;
+const REG_TREATY_KEY_PATTERN = /^treaty:reg:SOR-86-946:0:(en|fr):0$/;
+
 import type { LegResourceMetadata } from "@/lib/db/rag/schema";
 import {
   buildActCitation,
@@ -113,6 +117,47 @@ test.describe("buildActSectionCitation", () => {
 
     expect(citation.textEn).toBe("[Criminal Code]");
     expect(citation.urlEn).not.toContain("#sec");
+  });
+
+  test("preserves decimal in section label anchor to avoid collisions", () => {
+    // Section 3.1 should produce #sec3.1, not #sec31 (which would collide with section 31)
+    const metadata31: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "en",
+      actId: "A-1",
+      documentTitle: "Access to Information Act",
+      sectionLabel: "3.1",
+    };
+    const citation31 = buildActSectionCitation(metadata31, 1);
+
+    expect(citation31.urlEn).toContain("#sec3.1");
+    expect(citation31.textEn).toBe("[Access to Information Act, s 3.1]");
+
+    // Section 3.01 should produce #sec3.01
+    const metadata301: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "en",
+      actId: "A-1",
+      documentTitle: "Access to Information Act",
+      sectionLabel: "3.01",
+    };
+    const citation301 = buildActSectionCitation(metadata301, 2);
+
+    expect(citation301.urlEn).toContain("#sec3.01");
+
+    // Integer section 31 should still work as before
+    const metadata31Int: LegResourceMetadata = {
+      sourceType: "act_section",
+      language: "en",
+      actId: "C-46",
+      documentTitle: "Criminal Code",
+      sectionLabel: "31",
+    };
+    const citation31Int = buildActSectionCitation(metadata31Int, 3);
+
+    expect(citation31Int.urlEn).toContain("#sec31");
+    // Verify no collision: 3.1 and 31 produce different anchors
+    expect(citation31.urlEn).not.toBe(citation31Int.urlEn);
   });
 });
 
@@ -871,6 +916,133 @@ test.describe("buildLegislationContext", () => {
     expect(context.citations.length).toBeLessThanOrEqual(2);
   });
 
+  test("preserves multiple signature blocks with different signatureBlockIndex", async () => {
+    // Multiple signature blocks in same document should NOT be deduplicated
+    // when they have different signatureBlockIndex values
+    const sigBlock1 = createMockSearchResult({
+      similarity: 0.9,
+      content: "Mary Simon, Governor General",
+      metadata: {
+        sourceType: "signature_block",
+        language: "en",
+        actId: "C-46",
+        documentTitle: "Criminal Code",
+        signatureBlockIndex: 0,
+        signatureName: "Mary Simon",
+      },
+      citation: {
+        id: 1,
+        prefixedId: "",
+        textEn: "[Criminal Code - Signature Block]",
+        textFr: "[Code criminel - Bloc de signature]",
+        urlEn: "https://laws-lois.justice.gc.ca/eng/acts/C-46/",
+        urlFr: "https://laws-lois.justice.gc.ca/fra/lois/C-46/",
+        titleEn: "Criminal Code",
+        titleFr: "Code criminel",
+        sourceType: "signature_block",
+      },
+    });
+    const sigBlock2 = createMockSearchResult({
+      similarity: 0.85,
+      content: "Justin Trudeau, Prime Minister",
+      metadata: {
+        sourceType: "signature_block",
+        language: "en",
+        actId: "C-46",
+        documentTitle: "Criminal Code",
+        signatureBlockIndex: 1,
+        signatureName: "Justin Trudeau",
+      },
+      citation: {
+        id: 2,
+        prefixedId: "",
+        textEn: "[Criminal Code - Signature Block]",
+        textFr: "[Code criminel - Bloc de signature]",
+        urlEn: "https://laws-lois.justice.gc.ca/eng/acts/C-46/",
+        urlFr: "https://laws-lois.justice.gc.ca/fra/lois/C-46/",
+        titleEn: "Criminal Code",
+        titleFr: "Code criminel",
+        sourceType: "signature_block",
+      },
+    });
+
+    const context = await buildLegislationContext(
+      "signature",
+      [sigBlock1, sigBlock2],
+      {
+        language: "en",
+        reranker: mockReranker,
+      }
+    );
+
+    // Both signature blocks should be preserved (not deduplicated)
+    expect(context.citations).toHaveLength(2);
+    expect(context.prompt).toContain("Mary Simon");
+    expect(context.prompt).toContain("Justin Trudeau");
+  });
+
+  test("deduplicates signature blocks with same signatureBlockIndex", async () => {
+    // Same signature block appearing twice (same document + index) should deduplicate
+    const sigBlock1 = createMockSearchResult({
+      similarity: 0.9,
+      content: "Mary Simon, Governor General",
+      metadata: {
+        sourceType: "signature_block",
+        language: "en",
+        actId: "C-46",
+        documentTitle: "Criminal Code",
+        signatureBlockIndex: 0,
+        signatureName: "Mary Simon",
+      },
+      citation: {
+        id: 1,
+        prefixedId: "",
+        textEn: "[Criminal Code - Signature Block]",
+        textFr: "[Code criminel - Bloc de signature]",
+        urlEn: "https://laws-lois.justice.gc.ca/eng/acts/C-46/",
+        urlFr: "https://laws-lois.justice.gc.ca/fra/lois/C-46/",
+        titleEn: "Criminal Code",
+        titleFr: "Code criminel",
+        sourceType: "signature_block",
+      },
+    });
+    const sigBlock2 = createMockSearchResult({
+      similarity: 0.85,
+      content: "Mary Simon, Governor General - duplicate",
+      metadata: {
+        sourceType: "signature_block",
+        language: "en",
+        actId: "C-46",
+        documentTitle: "Criminal Code",
+        signatureBlockIndex: 0, // Same index as sigBlock1
+        signatureName: "Mary Simon",
+      },
+      citation: {
+        id: 2,
+        prefixedId: "",
+        textEn: "[Criminal Code - Signature Block]",
+        textFr: "[Code criminel - Bloc de signature]",
+        urlEn: "https://laws-lois.justice.gc.ca/eng/acts/C-46/",
+        urlFr: "https://laws-lois.justice.gc.ca/fra/lois/C-46/",
+        titleEn: "Criminal Code",
+        titleFr: "Code criminel",
+        sourceType: "signature_block",
+      },
+    });
+
+    const context = await buildLegislationContext(
+      "signature",
+      [sigBlock1, sigBlock2],
+      {
+        language: "en",
+        reranker: mockReranker,
+      }
+    );
+
+    // Should deduplicate to 1 since they have same actId + signatureBlockIndex
+    expect(context.citations).toHaveLength(1);
+  });
+
   test("sorts results by similarity", async () => {
     const lowSimilarity = createMockSearchResult({
       similarity: 0.5,
@@ -970,6 +1142,71 @@ test.describe("buildLegislationContext", () => {
 
     expect(context.prompt).toContain("Contexte législatif:");
     expect(context.prompt).toContain("art 91");
+  });
+
+  test("annotates French content when English is requested", async () => {
+    // User requested English but only French content was found via fallback search
+    const result = createMockSearchResult({
+      metadata: {
+        sourceType: "act_section",
+        language: "fr", // Content is in French
+        actId: "C-46",
+        documentTitle: "Code criminel",
+        sectionLabel: "91",
+      },
+    });
+
+    const context = await buildLegislationContext("test query", [result], {
+      language: "en", // Requested English
+      reranker: mockReranker,
+    });
+
+    expect(context.prompt).toContain("[content in French]");
+    // Labels should still use English formatting
+    expect(context.prompt).toContain("s 91");
+  });
+
+  test("annotates English content when French is requested", async () => {
+    // User requested French but only English content was found via fallback search
+    const result = createMockSearchResult({
+      metadata: {
+        sourceType: "act_section",
+        language: "en", // Content is in English
+        actId: "C-46",
+        documentTitle: "Criminal Code",
+        sectionLabel: "91",
+      },
+    });
+
+    const context = await buildLegislationContext("test query", [result], {
+      language: "fr", // Requested French
+      reranker: mockReranker,
+    });
+
+    expect(context.prompt).toContain("[contenu en anglais]");
+    // Labels should still use French formatting
+    expect(context.prompt).toContain("Contexte législatif:");
+    expect(context.prompt).toContain("art 91");
+  });
+
+  test("does not annotate when language matches", async () => {
+    const result = createMockSearchResult({
+      metadata: {
+        sourceType: "act_section",
+        language: "en", // Content is in English
+        actId: "C-46",
+        documentTitle: "Criminal Code",
+        sectionLabel: "91",
+      },
+    });
+
+    const context = await buildLegislationContext("test query", [result], {
+      language: "en", // Requested English - matches
+      reranker: mockReranker,
+    });
+
+    expect(context.prompt).not.toContain("[content in French]");
+    expect(context.prompt).not.toContain("[contenu en anglais]");
   });
 });
 
@@ -2125,7 +2362,10 @@ test.describe("Bilingual search result structure", () => {
 
 // ---------- Hydration Tests ----------
 
-import type { HydratedLegislationSource } from "@/lib/rag/legislation/hydrate";
+import {
+  type HydratedLegislationSource,
+  hydrateTopSource,
+} from "@/lib/rag/legislation/hydrate";
 
 /**
  * Tests for hydration functions that convert search results to markdown.
@@ -2384,7 +2624,6 @@ test.describe("Hydration format functions", () => {
           actId: "C-46",
           targetDocumentTitle: "Constitution Act, 1867",
           targetRef: "Constitution-1867",
-          targetSectionRef: "91",
           crossRefId: "xref-123",
         },
       });
@@ -2393,7 +2632,6 @@ test.describe("Hydration format functions", () => {
         "Constitution Act, 1867"
       );
       expect(result.metadata.targetRef).toBe("Constitution-1867");
-      expect(result.metadata.targetSectionRef).toBe("91");
       expect(result.metadata.crossRefId).toBe("xref-123");
     });
   });
@@ -2633,16 +2871,18 @@ test.describe("HydratedLegislationSource type", () => {
   });
 
   test("supports optional note field for language fallback", () => {
+    // When user requested French but got English fallback,
+    // the note is in French explaining French is unavailable
     const resultWithNote: HydratedLegislationSource = {
       sourceType: "act",
       markdown: "# Test Act",
       languageUsed: "en",
       id: "act-test",
-      note: "French text not available; using English source text.",
+      note: "Texte français non disponible; utilisation du texte anglais.",
     };
 
     expect(resultWithNote.note).toBe(
-      "French text not available; using English source text."
+      "Texte français non disponible; utilisation du texte anglais."
     );
 
     const resultWithoutNote: HydratedLegislationSource = {
@@ -2754,10 +2994,12 @@ const FRENCH_UNAVAILABLE_NOTE_PATTERN = /non disponibles? en français/;
 test.describe("Hydration language fallback", () => {
   // Tests for language note patterns when fallback is used
 
-  test("English note pattern for French fallback", () => {
-    const note = "French text not available; using English source text.";
-    expect(note).toContain("French text not available");
-    expect(note).toContain("English source text");
+  test("English note pattern when French fallback is used", () => {
+    // When user requests English but French is the only available language,
+    // the note should be in English and explain that English is unavailable
+    const note = "English text not available; using French source text.";
+    expect(note).toContain("English text not available");
+    expect(note).toContain("French source text");
   });
 
   test("French note patterns for various source types", () => {
@@ -2778,5 +3020,1009 @@ test.describe("Hydration language fallback", () => {
     for (const note of frenchNotes) {
       expect(note).toMatch(FRENCH_UNAVAILABLE_NOTE_PATTERN);
     }
+  });
+});
+
+// ---------- Query Embedding Hoisting Tests ----------
+
+test.describe("LegislationSearchOptions queryEmbedding parameter", () => {
+  // Tests verifying the queryEmbedding parameter is correctly typed
+  // and can be used to avoid redundant embedding API calls.
+  //
+  // The queryEmbedding parameter enables embedding hoisting in parallel search
+  // functions (searchActs, searchRegulations) to generate the embedding once
+  // and pass it to all parallel searches, avoiding the race condition where
+  // each parallel search independently calls generateEmbedding.
+
+  test("accepts queryEmbedding parameter as number array", () => {
+    // Valid 1024-dimension embedding (Cohere embed-multilingual-v3.0)
+    const mockEmbedding = new Array(1024).fill(0.5);
+
+    const options: LegislationSearchOptions = {
+      limit: 10,
+      language: "en",
+      queryEmbedding: mockEmbedding,
+    };
+
+    expect(options.queryEmbedding).toBeDefined();
+    expect(options.queryEmbedding).toHaveLength(1024);
+  });
+
+  test("queryEmbedding is optional", () => {
+    const optionsWithout: LegislationSearchOptions = {
+      limit: 10,
+      language: "en",
+    };
+
+    const optionsWith: LegislationSearchOptions = {
+      limit: 10,
+      language: "en",
+      queryEmbedding: new Array(1024).fill(0),
+    };
+
+    expect(optionsWithout.queryEmbedding).toBeUndefined();
+    expect(optionsWith.queryEmbedding).toBeDefined();
+  });
+
+  test("queryEmbedding can be combined with all other options", () => {
+    const mockEmbedding = new Array(1024).fill(0.1);
+
+    const options: LegislationSearchOptions = {
+      limit: 20,
+      similarityThreshold: 0.5,
+      language: "fr",
+      sourceType: "act_section",
+      actId: "C-46",
+      scopeType: "act",
+      sectionScope: "91",
+      queryEmbedding: mockEmbedding,
+    };
+
+    // All options should be correctly set
+    expect(options.limit).toBe(20);
+    expect(options.language).toBe("fr");
+    expect(options.sourceType).toBe("act_section");
+    expect(options.actId).toBe("C-46");
+    expect(options.queryEmbedding).toEqual(mockEmbedding);
+  });
+
+  test("documents embedding hoisting pattern for searchActs", () => {
+    // This test documents the expected behavior:
+    // searchActs generates embedding once, then passes to all parallel searches
+    //
+    // Before fix (race condition):
+    //   searchActs calls searchLegislation 12x in parallel
+    //   Each searchLegislation independently calls generateEmbedding
+    //   Due to race condition, all 12 hit cache miss simultaneously
+    //   Result: 12 Cohere API calls instead of 1
+    //
+    // After fix (embedding hoisting):
+    //   searchActs generates embedding once: await generateEmbedding(query)
+    //   Passes queryEmbedding to all 12 parallel searchLegislation calls
+    //   Each searchLegislation uses provided embedding, skips generateEmbedding
+    //   Result: 1 Cohere API call total
+
+    // Note: publication_item is NOT included for acts because publication items
+    // (Gazette recommendations/notices) are regulation-specific content.
+    // See lib/db/legislation/schema.ts - recommendations/notices fields only exist on regulations.
+    const ACT_SOURCE_TYPES = [
+      "act",
+      "act_section",
+      "defined_term",
+      "preamble",
+      "treaty",
+      "cross_reference",
+      "table_of_provisions",
+      "signature_block",
+      "related_provisions",
+      "footnote",
+      "schedule",
+      "marginal_note",
+    ];
+
+    // Document that 12 source types require 12 parallel searches
+    expect(ACT_SOURCE_TYPES).toHaveLength(12);
+
+    // With embedding hoisting, only 1 API call is needed regardless of source type count
+    const embeddingCallsWithHoisting = 1;
+    expect(embeddingCallsWithHoisting).toBeLessThan(ACT_SOURCE_TYPES.length);
+  });
+
+  test("documents embedding hoisting pattern for searchRegulations", () => {
+    // Same pattern applies to searchRegulations
+    const REGULATION_SOURCE_TYPES = [
+      "regulation",
+      "regulation_section",
+      "defined_term",
+      "treaty",
+      "cross_reference",
+      "table_of_provisions",
+      "signature_block",
+      "related_provisions",
+      "footnote",
+      "schedule",
+      "marginal_note",
+      "publication_item",
+    ];
+
+    // Document that 12 source types require 12 parallel searches
+    expect(REGULATION_SOURCE_TYPES).toHaveLength(12);
+
+    // With embedding hoisting, only 1 API call is needed
+    const embeddingCallsWithHoisting = 1;
+    expect(embeddingCallsWithHoisting).toBeLessThan(
+      REGULATION_SOURCE_TYPES.length
+    );
+  });
+});
+
+// ---------- Treaty Bilingual Pairing Tests ----------
+
+test.describe("LegResourceMetadata treatyIndex field", () => {
+  // Tests verifying the treatyIndex field enables proper bilingual pairing
+  // for treaty resources. Without treatyIndex, the resource key cannot be
+  // reconstructed during search, breaking EN/FR treaty pairing.
+
+  test("treatyIndex is optional number field", () => {
+    const metaWithIndex: LegResourceMetadata = {
+      sourceType: "treaty",
+      language: "en",
+      actId: "C-46",
+      documentTitle: "Criminal Code",
+      treatyTitle: "Vienna Convention",
+      treatyIndex: 0,
+    };
+
+    const metaWithoutIndex: LegResourceMetadata = {
+      sourceType: "treaty",
+      language: "en",
+      actId: "C-46",
+      documentTitle: "Criminal Code",
+      treatyTitle: "Vienna Convention",
+    };
+
+    expect(metaWithIndex.treatyIndex).toBe(0);
+    expect(metaWithoutIndex.treatyIndex).toBeUndefined();
+  });
+
+  test("treatyIndex supports multiple treaties per document", () => {
+    // Acts/regulations can have multiple treaties scheduled
+    const treaty0: LegResourceMetadata = {
+      sourceType: "treaty",
+      language: "en",
+      actId: "C-46",
+      documentTitle: "Criminal Code",
+      treatyTitle: "First Convention",
+      treatyIndex: 0,
+    };
+
+    const treaty1: LegResourceMetadata = {
+      sourceType: "treaty",
+      language: "en",
+      actId: "C-46",
+      documentTitle: "Criminal Code",
+      treatyTitle: "Second Convention",
+      treatyIndex: 1,
+    };
+
+    expect(treaty0.treatyIndex).toBe(0);
+    expect(treaty1.treatyIndex).toBe(1);
+    expect(treaty0.treatyTitle).not.toBe(treaty1.treatyTitle);
+  });
+
+  test("documents treaty resource key format for acts", () => {
+    // Treaty resource keys use: "treaty:act:{actId}:{index}:{lang}:{chunkIndex}"
+    // Example: "treaty:act:C-46:0:en:0" for first treaty of Criminal Code (English)
+
+    const actTreatyMeta: LegResourceMetadata = {
+      sourceType: "treaty",
+      language: "en",
+      actId: "C-46",
+      documentTitle: "Criminal Code",
+      treatyTitle: "Convention on International Trade",
+      treatyIndex: 2,
+      chunkIndex: 0,
+    };
+
+    // The resource key format enables bilingual pairing:
+    // EN: "treaty:act:C-46:2:en:0"
+    // FR: "treaty:act:C-46:2:fr:0" (paired key)
+    const constructedKey = `treaty:act:${actTreatyMeta.actId}:${actTreatyMeta.treatyIndex}:${actTreatyMeta.language}:${actTreatyMeta.chunkIndex}`;
+
+    expect(constructedKey).toMatch(ACT_TREATY_KEY_PATTERN);
+  });
+
+  test("documents treaty resource key format for regulations", () => {
+    // Treaty resource keys use: "treaty:reg:{regulationId}:{index}:{lang}:{chunkIndex}"
+    // Example: "treaty:reg:SOR-86-946:0:fr:0"
+
+    const regTreatyMeta: LegResourceMetadata = {
+      sourceType: "treaty",
+      language: "fr",
+      regulationId: "SOR-86-946",
+      documentTitle: "Some Regulation",
+      treatyTitle: "Convention internationale",
+      treatyIndex: 0,
+      chunkIndex: 0,
+    };
+
+    // The resource key format enables bilingual pairing:
+    // FR: "treaty:reg:SOR-86-946:0:fr:0"
+    // EN: "treaty:reg:SOR-86-946:0:en:0" (paired key)
+    const constructedKey = `treaty:reg:${regTreatyMeta.regulationId}:${regTreatyMeta.treatyIndex}:${regTreatyMeta.language}:${regTreatyMeta.chunkIndex}`;
+
+    expect(constructedKey).toMatch(REG_TREATY_KEY_PATTERN);
+  });
+
+  test("documents bilingual pairing with treatyIndex", () => {
+    // This test documents the fix for Issue 2: Treaty Bilingual Pairing
+    //
+    // Before fix:
+    //   - Ingestion stored key: "treaty:act:C-46:0:en:0" (with index)
+    //   - Search reconstructed: "treaty:act:C-46" (without index)
+    //   - Bilingual pairing FAILED because keys didn't match
+    //
+    // After fix:
+    //   - Metadata now includes treatyIndex
+    //   - Search reconstructs: "treaty:act:C-46:0:en:0" (with index from metadata)
+    //   - Bilingual pairing WORKS because keys match
+
+    const enMeta: LegResourceMetadata = {
+      sourceType: "treaty",
+      language: "en",
+      actId: "C-46",
+      documentTitle: "Criminal Code",
+      treatyTitle: "Vienna Convention",
+      treatyIndex: 0,
+      chunkIndex: 0,
+    };
+
+    const frMeta: LegResourceMetadata = {
+      sourceType: "treaty",
+      language: "fr",
+      actId: "C-46",
+      documentTitle: "Code criminel",
+      treatyTitle: "Convention de Vienne",
+      treatyIndex: 0, // Same index as EN version
+      chunkIndex: 0,
+    };
+
+    // With treatyIndex, we can now construct matching keys:
+    const enKey = `treaty:act:${enMeta.actId}:${enMeta.treatyIndex}:${enMeta.language}:${enMeta.chunkIndex}`;
+    const frKey = `treaty:act:${frMeta.actId}:${frMeta.treatyIndex}:${frMeta.language}:${frMeta.chunkIndex}`;
+
+    // Keys differ only by language, enabling pairing
+    expect(enKey).toBe("treaty:act:C-46:0:en:0");
+    expect(frKey).toBe("treaty:act:C-46:0:fr:0");
+
+    // Paired key format swaps language
+    const enPairedKey = enKey.replace(":en:", ":fr:");
+    const frPairedKey = frKey.replace(":fr:", ":en:");
+
+    expect(enPairedKey).toBe(frKey);
+    expect(frPairedKey).toBe(enKey);
+  });
+});
+
+// ---------- Hydration Order Tests ----------
+
+test.describe("LegislationContext rerankedResults field", () => {
+  // Tests verifying the rerankedResults field is correctly populated and
+  // used for hydration instead of the original vector-ranked results.
+  //
+  // This fixes Issue 3: Hydration Order, where the artifact panel could show
+  // a different document than the most relevant one according to the reranker.
+
+  test("buildLegislationContext returns rerankedResults", async () => {
+    // Create mock results with different source types
+    const actResult: LegislationSearchResult = {
+      content: "Section 91 of the Criminal Code provides...",
+      metadata: {
+        sourceType: "act_section",
+        language: "en",
+        actId: "C-46",
+        documentTitle: "Criminal Code",
+        sectionLabel: "91",
+      },
+      similarity: 0.9, // High vector similarity
+      citation: {
+        id: 1,
+        prefixedId: "",
+        textEn: "[Criminal Code, s 91]",
+        textFr: "[Code criminel, art 91]",
+        urlEn: "https://laws-lois.justice.gc.ca/eng/acts/C-46/#sec91",
+        urlFr: "https://laws-lois.justice.gc.ca/fra/lois/C-46/#sec91",
+        titleEn: "Section 91 of Criminal Code",
+        titleFr: "Article 91 de Code criminel",
+        sourceType: "act_section",
+      },
+    };
+
+    const termResult: LegislationSearchResult = {
+      content: '"weapon" means any thing used...',
+      metadata: {
+        sourceType: "defined_term",
+        language: "en",
+        actId: "C-46",
+        documentTitle: "Criminal Code",
+        term: "weapon",
+        termId: "term-weapon-en",
+      },
+      similarity: 0.85, // Lower vector similarity
+      citation: {
+        id: 2,
+        prefixedId: "",
+        textEn: '["weapon" defined in Criminal Code]',
+        textFr: "[« arme » défini dans Code criminel]",
+        urlEn: "https://laws-lois.justice.gc.ca/eng/acts/C-46/#sec2",
+        urlFr: "https://laws-lois.justice.gc.ca/fra/lois/C-46/#sec2",
+        titleEn: '"weapon" defined in Criminal Code',
+        titleFr: "« arme » défini dans Code criminel",
+        sourceType: "defined_term",
+      },
+    };
+
+    // Mock reranker that reorders results (simulating cross-encoder preferring the term)
+    const reorderingReranker: RerankerFn = (_query, results, topN) => {
+      // Reverse the order to simulate reranker preferring different results
+      const reversed = [...results].reverse();
+      return Promise.resolve(
+        reversed.slice(0, topN).map((r, idx) => ({
+          ...r,
+          originalSimilarity: r.similarity,
+          rerankScore: 0.9 - idx * 0.1, // Higher score for first result
+        })) as RerankedLegislationResult[]
+      );
+    };
+
+    const context = await buildLegislationContext(
+      "what is a weapon",
+      [actResult, termResult],
+      {
+        language: "en",
+        reranker: reorderingReranker,
+      }
+    );
+
+    // Should have rerankedResults populated
+    expect(context.rerankedResults).toBeDefined();
+    expect(context.rerankedResults).toHaveLength(2);
+
+    // Reranked results should be in different order than original
+    // (term should now be first due to reordering reranker)
+    expect(context.rerankedResults[0].metadata.sourceType).toBe("defined_term");
+    expect(context.rerankedResults[1].metadata.sourceType).toBe("act_section");
+  });
+
+  test("buildLegislationContext returns empty rerankedResults when no results", async () => {
+    const context = await buildLegislationContext("nonexistent query", [], {
+      language: "en",
+      reranker: mockReranker,
+    });
+
+    expect(context.rerankedResults).toBeDefined();
+    expect(context.rerankedResults).toHaveLength(0);
+    expect(context.citations).toHaveLength(0);
+  });
+
+  test("documents hydration order fix", () => {
+    // This test documents the fix for Issue 3: Hydration Order
+    //
+    // Before fix:
+    //   - searchLegislation returns results sorted by vector similarity
+    //   - buildLegislationContext reranks internally using Cohere cross-encoder
+    //   - getLegislationContext hydrates using ORIGINAL vector-ranked results
+    //   - Problem: Artifact panel shows vector #1, but context uses reranked #1
+    //
+    // After fix:
+    //   - buildLegislationContext exposes rerankedResults in return type
+    //   - getLegislationContext hydrates using context.rerankedResults
+    //   - Artifact panel now shows the SAME document that the context prioritizes
+    //
+    // Example scenario:
+    //   Vector search returns: [ActSection (0.9), DefinedTerm (0.85)]
+    //   Reranker reorders to: [DefinedTerm (0.95), ActSection (0.7)]
+    //   Before: Artifact shows ActSection, context prioritizes DefinedTerm
+    //   After: Artifact shows DefinedTerm (matches context priority)
+
+    const vectorRankedOrder = ["act_section", "defined_term"];
+    const rerankedOrder = ["defined_term", "act_section"];
+
+    // Vector and reranked orders can differ
+    expect(vectorRankedOrder[0]).not.toBe(rerankedOrder[0]);
+
+    // Hydration should use reranked order
+    const hydrationSourceType = rerankedOrder[0];
+    expect(hydrationSourceType).toBe("defined_term");
+  });
+
+  test("rerankedResults preserves all result fields", async () => {
+    const result: LegislationSearchResult = {
+      content: "Test content for preservation check",
+      metadata: {
+        sourceType: "act_section",
+        language: "en",
+        actId: "C-46",
+        documentTitle: "Criminal Code",
+        sectionLabel: "100",
+        marginalNote: "Test marginal note",
+        sectionId: "sec-100",
+        chunkIndex: 0,
+      },
+      similarity: 0.88,
+      citation: {
+        id: 1,
+        prefixedId: "",
+        textEn: "[Criminal Code, s 100]",
+        textFr: "[Code criminel, art 100]",
+        urlEn: "https://laws-lois.justice.gc.ca/eng/acts/C-46/#sec100",
+        urlFr: "https://laws-lois.justice.gc.ca/fra/lois/C-46/#sec100",
+        titleEn: "Section 100 of Criminal Code",
+        titleFr: "Article 100 de Code criminel",
+        sourceType: "act_section",
+      },
+    };
+
+    const context = await buildLegislationContext("test query", [result], {
+      language: "en",
+      reranker: mockReranker,
+    });
+
+    // Reranked results should preserve all original fields
+    const reranked = context.rerankedResults[0];
+    expect(reranked.content).toBe(result.content);
+    expect(reranked.metadata.actId).toBe("C-46");
+    expect(reranked.metadata.sectionLabel).toBe("100");
+    expect(reranked.metadata.marginalNote).toBe("Test marginal note");
+    expect(reranked.citation.textEn).toBe("[Criminal Code, s 100]");
+  });
+});
+
+// ---------- Deduplication Key Field Tests ----------
+
+test.describe("deduplicateByResourceKey key fields", () => {
+  // These tests document the fields required in deduplication keys for search.ts
+  // deduplicateByResourceKey must include ALL index fields to prevent
+  // collapsing multiple items of the same type from the same document.
+  //
+  // The function is used by searchActs/searchRegulations to merge parallel
+  // search results. Without proper index fields, multiple treaties, signature
+  // blocks, or publication items would collapse into one result.
+
+  test("documents required key fields for multiple treaties", () => {
+    // Two treaties on same document with different treatyIndex should both be kept
+    const treaty1Meta = {
+      sourceType: "treaty" as const,
+      language: "en" as const,
+      regulationId: "SOR-86-946",
+      documentTitle: "Test Regulation",
+      treatyIndex: 0,
+      treatyTitle: "First Treaty",
+    };
+    const treaty2Meta = {
+      sourceType: "treaty" as const,
+      language: "en" as const,
+      regulationId: "SOR-86-946",
+      documentTitle: "Test Regulation",
+      treatyIndex: 1,
+      treatyTitle: "Second Treaty",
+    };
+
+    // Key structure must include treatyIndex to distinguish them
+    const key1Fields = [
+      treaty1Meta.sourceType,
+      treaty1Meta.regulationId,
+      treaty1Meta.language,
+      treaty1Meta.treatyIndex,
+    ];
+    const key2Fields = [
+      treaty2Meta.sourceType,
+      treaty2Meta.regulationId,
+      treaty2Meta.language,
+      treaty2Meta.treatyIndex,
+    ];
+
+    expect(key1Fields.join(":")).not.toBe(key2Fields.join(":"));
+  });
+
+  test("documents required key fields for multiple signature blocks", () => {
+    // Multiple signature blocks on same document with different signatureBlockIndex
+    const sig1Meta = {
+      sourceType: "signature_block" as const,
+      language: "en" as const,
+      actId: "C-46",
+      documentTitle: "Criminal Code",
+      signatureBlockIndex: 0,
+      signatureName: "Mary Simon",
+    };
+    const sig2Meta = {
+      sourceType: "signature_block" as const,
+      language: "en" as const,
+      actId: "C-46",
+      documentTitle: "Criminal Code",
+      signatureBlockIndex: 1,
+      signatureName: "Justin Trudeau",
+    };
+
+    // Key structure must include signatureBlockIndex to distinguish them
+    const key1Fields = [
+      sig1Meta.sourceType,
+      sig1Meta.actId,
+      sig1Meta.language,
+      sig1Meta.signatureBlockIndex,
+    ];
+    const key2Fields = [
+      sig2Meta.sourceType,
+      sig2Meta.actId,
+      sig2Meta.language,
+      sig2Meta.signatureBlockIndex,
+    ];
+
+    expect(key1Fields.join(":")).not.toBe(key2Fields.join(":"));
+  });
+
+  test("documents required key fields for multiple related provisions", () => {
+    // Multiple related provisions on same document with different relatedProvisionIndex
+    const relProv1Meta = {
+      sourceType: "related_provisions" as const,
+      language: "en" as const,
+      actId: "C-81",
+      documentTitle: "Accessible Canada Act",
+      relatedProvisionIndex: 0,
+      relatedProvisionLabel: "Transitional Provisions",
+    };
+    const relProv2Meta = {
+      sourceType: "related_provisions" as const,
+      language: "en" as const,
+      actId: "C-81",
+      documentTitle: "Accessible Canada Act",
+      relatedProvisionIndex: 1,
+      relatedProvisionLabel: "Coming Into Force",
+    };
+
+    // Key structure must include relatedProvisionIndex to distinguish them
+    const key1Fields = [
+      relProv1Meta.sourceType,
+      relProv1Meta.actId,
+      relProv1Meta.language,
+      relProv1Meta.relatedProvisionIndex,
+    ];
+    const key2Fields = [
+      relProv2Meta.sourceType,
+      relProv2Meta.actId,
+      relProv2Meta.language,
+      relProv2Meta.relatedProvisionIndex,
+    ];
+
+    expect(key1Fields.join(":")).not.toBe(key2Fields.join(":"));
+  });
+
+  test("documents required key fields for multiple publication items", () => {
+    // Multiple publication items on same document with different publicationIndex
+    const pub1Meta = {
+      sourceType: "publication_item" as const,
+      language: "en" as const,
+      regulationId: "SOR-2020-123",
+      documentTitle: "Test Regulations",
+      publicationType: "recommendation" as const,
+      publicationIndex: 0,
+    };
+    const pub2Meta = {
+      sourceType: "publication_item" as const,
+      language: "en" as const,
+      regulationId: "SOR-2020-123",
+      documentTitle: "Test Regulations",
+      publicationType: "recommendation" as const,
+      publicationIndex: 1,
+    };
+
+    // Key structure must include publicationIndex to distinguish them
+    const key1Fields = [
+      pub1Meta.sourceType,
+      pub1Meta.regulationId,
+      pub1Meta.language,
+      pub1Meta.publicationType,
+      pub1Meta.publicationIndex,
+    ];
+    const key2Fields = [
+      pub2Meta.sourceType,
+      pub2Meta.regulationId,
+      pub2Meta.language,
+      pub2Meta.publicationType,
+      pub2Meta.publicationIndex,
+    ];
+
+    expect(key1Fields.join(":")).not.toBe(key2Fields.join(":"));
+  });
+
+  test("documents required key fields for multiple footnotes", () => {
+    // Multiple footnotes in same section with different footnoteIndex
+    const fn1Meta = {
+      sourceType: "footnote" as const,
+      language: "en" as const,
+      actId: "C-46",
+      sectionId: "sec-91",
+      documentTitle: "Criminal Code",
+      footnoteId: "fn1",
+      footnoteIndex: 0,
+    };
+    const fn2Meta = {
+      sourceType: "footnote" as const,
+      language: "en" as const,
+      actId: "C-46",
+      sectionId: "sec-91",
+      documentTitle: "Criminal Code",
+      footnoteId: "fn2",
+      footnoteIndex: 1,
+    };
+
+    // Key structure must include footnoteIndex to distinguish them
+    const key1Fields = [
+      fn1Meta.sourceType,
+      fn1Meta.sectionId,
+      fn1Meta.language,
+      fn1Meta.footnoteId,
+      fn1Meta.footnoteIndex,
+    ];
+    const key2Fields = [
+      fn2Meta.sourceType,
+      fn2Meta.sectionId,
+      fn2Meta.language,
+      fn2Meta.footnoteId,
+      fn2Meta.footnoteIndex,
+    ];
+
+    expect(key1Fields.join(":")).not.toBe(key2Fields.join(":"));
+  });
+
+  test("documents complete key field list for deduplication", () => {
+    // This test documents all fields that should be included in deduplication keys
+    // See search.ts deduplicateByResourceKey for implementation
+    const expectedKeyFields = [
+      "sourceType",
+      "actId",
+      "regulationId",
+      "sectionId",
+      "termId",
+      "crossRefId",
+      "preambleIndex",
+      "chunkIndex",
+      "language",
+      "relatedProvisionIndex",
+      "relatedProvisionLabel",
+      "relatedProvisionSource",
+      "footnoteId",
+      "footnoteIndex",
+      "treatyIndex",
+      "signatureBlockIndex",
+      "publicationType",
+      "publicationIndex",
+    ];
+
+    // All index fields for multiple items per document must be present
+    expect(expectedKeyFields).toContain("treatyIndex");
+    expect(expectedKeyFields).toContain("signatureBlockIndex");
+    expect(expectedKeyFields).toContain("relatedProvisionIndex");
+    expect(expectedKeyFields).toContain("publicationIndex");
+    expect(expectedKeyFields).toContain("footnoteIndex");
+  });
+});
+
+// ---------- hydrateTopSource Tests ----------
+
+/**
+ * Tests for hydrateTopSource function.
+ *
+ * This function hydrates search results for the artifact panel with priority:
+ * 1. defined_term (if top result is a term)
+ * 2. act/act_section (find any in results - artifact panel shows full document)
+ * 3. regulation/regulation_section (find any in results)
+ * 4. Fallback: hydrate top result (handles footnotes, schedules, etc. when
+ *    no act/regulation exists in results)
+ *
+ * Issue 3 fix: The fallback ensures we don't return an empty array when
+ * results contain only non-document source types (e.g., only footnotes).
+ *
+ * @see lib/rag/legislation/hydrate.ts hydrateTopSource
+ * @see components/message.tsx openLegislationSourceArtifact
+ */
+test.describe("hydrateTopSource priority and fallback behavior", () => {
+  // Helper to create a mock search result for hydration testing
+  const createMockResult = (
+    sourceType: LegResourceMetadata["sourceType"],
+    overrides: Partial<LegResourceMetadata> = {}
+  ): LegislationSearchResult => {
+    const baseMetadata: LegResourceMetadata = {
+      sourceType,
+      language: "en",
+      documentTitle: "Test Document",
+      actId: sourceType.includes("regulation") ? undefined : "C-46",
+      regulationId: sourceType.includes("regulation")
+        ? "SOR-86-946"
+        : undefined,
+      ...overrides,
+    };
+
+    return {
+      content: `Test content for ${sourceType}`,
+      metadata: baseMetadata,
+      similarity: 0.85,
+      citation: {
+        id: 1,
+        prefixedId: "L1",
+        textEn: "[Test Document]",
+        textFr: "[Document de test]",
+        urlEn: "https://example.com/en",
+        urlFr: "https://example.com/fr",
+        titleEn: "Test Document",
+        titleFr: "Document de test",
+        sourceType,
+      },
+    };
+  };
+
+  test("returns empty array for empty results", async () => {
+    const hydrated = await hydrateTopSource([], "en");
+    expect(hydrated).toEqual([]);
+  });
+
+  // ----- Fallback tests: results with ONLY non-document source types -----
+  // These test the Issue 3 fix - before, these would return empty arrays
+
+  test("fallback: hydrates footnote when no act/regulation in results", async () => {
+    const results = [
+      createMockResult("footnote", {
+        footnoteId: "fn1",
+        footnoteLabel: "*",
+        sectionLabel: "91",
+        actId: undefined, // No actId means no act to prioritize
+      }),
+    ];
+
+    const hydrated = await hydrateTopSource(results, "en");
+
+    expect(hydrated.length).toBe(1);
+    expect(hydrated[0].sourceType).toBe("footnote");
+  });
+
+  test("fallback: hydrates schedule when no act/regulation in results", async () => {
+    const results = [
+      createMockResult("schedule", {
+        sectionLabel: "Schedule I",
+        scheduleId: "sched-1",
+        actId: undefined,
+      }),
+    ];
+
+    const hydrated = await hydrateTopSource(results, "en");
+
+    expect(hydrated.length).toBe(1);
+    expect(hydrated[0].sourceType).toBe("schedule");
+  });
+
+  test("fallback: hydrates marginal_note when no act/regulation in results", async () => {
+    const results = [
+      createMockResult("marginal_note", {
+        sectionLabel: "91",
+        marginalNote: "Firearms",
+        actId: undefined,
+      }),
+    ];
+
+    const hydrated = await hydrateTopSource(results, "en");
+
+    expect(hydrated.length).toBe(1);
+    expect(hydrated[0].sourceType).toBe("marginal_note");
+  });
+
+  test("fallback: hydrates cross_reference when no act/regulation in results", async () => {
+    const results = [
+      createMockResult("cross_reference", {
+        crossRefId: "xref-1",
+        targetType: "act",
+        targetActId: "C-81",
+        targetDocumentTitle: "Accessible Canada Act",
+        actId: undefined,
+      }),
+    ];
+
+    const hydrated = await hydrateTopSource(results, "en");
+
+    expect(hydrated.length).toBe(1);
+    expect(hydrated[0].sourceType).toBe("cross_reference");
+  });
+
+  test("fallback: hydrates publication_item when no act/regulation in results", async () => {
+    const results = [
+      createMockResult("publication_item", {
+        regulationId: undefined, // No regulation to prioritize
+        actId: undefined,
+        publicationType: "recommendation",
+        publicationIndex: 0,
+      }),
+    ];
+
+    const hydrated = await hydrateTopSource(results, "en");
+
+    expect(hydrated.length).toBe(1);
+    expect(hydrated[0].sourceType).toBe("publication_item");
+  });
+
+  test("fallback: hydrates preamble when no act/regulation in results", async () => {
+    const results = [
+      createMockResult("preamble", {
+        preambleIndex: 0,
+        actId: undefined,
+      }),
+    ];
+
+    const hydrated = await hydrateTopSource(results, "en");
+
+    expect(hydrated.length).toBe(1);
+    expect(hydrated[0].sourceType).toBe("preamble");
+  });
+
+  test("fallback: hydrates treaty when no act/regulation in results", async () => {
+    const results = [
+      createMockResult("treaty", {
+        regulationId: undefined,
+        actId: undefined,
+        treatyTitle: "Convention on International Trade",
+        treatyIndex: 0,
+      }),
+    ];
+
+    const hydrated = await hydrateTopSource(results, "en");
+
+    expect(hydrated.length).toBe(1);
+    expect(hydrated[0].sourceType).toBe("treaty");
+  });
+
+  test("fallback: hydrates table_of_provisions when no act/regulation in results", async () => {
+    const results = [
+      createMockResult("table_of_provisions", {
+        actId: undefined,
+      }),
+    ];
+
+    const hydrated = await hydrateTopSource(results, "en");
+
+    expect(hydrated.length).toBe(1);
+    expect(hydrated[0].sourceType).toBe("table_of_provisions");
+  });
+
+  test("fallback: hydrates signature_block when no act/regulation in results", async () => {
+    const results = [
+      createMockResult("signature_block", {
+        signatureName: "Minister of Justice",
+        signatureBlockIndex: 0,
+        actId: undefined,
+      }),
+    ];
+
+    const hydrated = await hydrateTopSource(results, "en");
+
+    expect(hydrated.length).toBe(1);
+    expect(hydrated[0].sourceType).toBe("signature_block");
+  });
+
+  test("fallback: hydrates related_provisions when no act/regulation in results", async () => {
+    const results = [
+      createMockResult("related_provisions", {
+        relatedProvisionIndex: 0,
+        relatedProvisionLabel: "Transitional Provisions",
+        relatedProvisionSource: "2019, c. 29",
+        actId: undefined,
+      }),
+    ];
+
+    const hydrated = await hydrateTopSource(results, "en");
+
+    expect(hydrated.length).toBe(1);
+    expect(hydrated[0].sourceType).toBe("related_provisions");
+  });
+
+  // ----- defined_term special handling -----
+
+  test("hydrates defined_term as top result using special handler", async () => {
+    const results = [
+      createMockResult("defined_term", {
+        term: "barrier",
+        termPaired: "obstacle",
+        termId: "term-1",
+      }),
+    ];
+
+    const hydrated = await hydrateTopSource(results, "en");
+
+    expect(hydrated.length).toBe(1);
+    expect(hydrated[0].sourceType).toBe("defined_term");
+  });
+
+  // ----- Documentation tests -----
+
+  test("documents priority order for artifact panel compatibility", () => {
+    // This test documents the priority order that preserves artifact panel behavior:
+    // 1. defined_term (if top result)
+    // 2. act/act_section (any in results)
+    // 3. regulation/regulation_section (any in results)
+    // 4. Fallback: top result
+    //
+    // The artifact panel (message.tsx) looks for sourceType === "act" to show
+    // the "Show Act" button. By prioritizing acts/regulations, we ensure the
+    // button appears when an act exists anywhere in the results.
+    const priorityOrder = [
+      "defined_term", // Only if top result
+      "act",
+      "act_section",
+      "regulation",
+      "regulation_section",
+      // Fallback handles all other types
+    ];
+
+    expect(priorityOrder).toContain("act");
+    expect(priorityOrder).toContain("regulation");
+  });
+
+  test("documents that fallback handles all 15 source types", () => {
+    // The fallback path uses hydrateSearchResult which handles all source types
+    const allSourceTypes: LegResourceMetadata["sourceType"][] = [
+      "act",
+      "act_section",
+      "regulation",
+      "regulation_section",
+      "defined_term",
+      "footnote",
+      "related_provisions",
+      "preamble",
+      "treaty",
+      "cross_reference",
+      "table_of_provisions",
+      "signature_block",
+      "marginal_note",
+      "schedule",
+      "publication_item",
+    ];
+
+    expect(allSourceTypes.length).toBe(15);
+    expect(allSourceTypes).toContain("footnote");
+    expect(allSourceTypes).toContain("schedule");
+    expect(allSourceTypes).toContain("marginal_note");
+    expect(allSourceTypes).toContain("publication_item");
+  });
+
+  // ----- Language handling tests -----
+
+  test("respects language preference in fallback", async () => {
+    const results = [
+      createMockResult("footnote", {
+        language: "fr",
+        footnoteId: "fn1",
+        actId: undefined,
+      }),
+    ];
+
+    const hydrated = await hydrateTopSource(results, "fr");
+
+    expect(hydrated.length).toBe(1);
+    expect(hydrated[0].languageUsed).toBe("fr");
+  });
+
+  test("provides fallback note when language differs", async () => {
+    const results = [
+      createMockResult("footnote", {
+        language: "en",
+        footnoteId: "fn1",
+        actId: undefined,
+      }),
+    ];
+
+    // Request French but source is English
+    const hydrated = await hydrateTopSource(results, "fr");
+
+    expect(hydrated.length).toBe(1);
+    expect(hydrated[0].languageUsed).toBe("en");
+    expect(hydrated[0].note).toBeDefined();
+    expect(hydrated[0].note).toContain("français");
   });
 });

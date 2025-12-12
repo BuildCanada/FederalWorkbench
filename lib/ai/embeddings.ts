@@ -2,8 +2,8 @@ import crypto from "node:crypto";
 import { cohere } from "@ai-sdk/cohere";
 import { embed, embedMany } from "ai";
 import { cacheGet, cacheSet } from "@/lib/cache/redis";
-import { CACHE_TTL, isRagCacheDisabled } from "@/lib/rag/parliament/constants";
 import { ragDebug } from "@/lib/rag/parliament/debug";
+import { CACHE_TTL, isRagCacheDisabled } from "@/lib/rag/shared/constants";
 
 /**
  * Cohere Embedding Model Configuration

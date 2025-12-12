@@ -12,7 +12,11 @@
 import crypto from "node:crypto";
 import { CohereClient } from "cohere-ai";
 import { cacheGet, cacheSet } from "@/lib/cache/redis";
-import { CACHE_TTL, isRagCacheDisabled, RERANKER_CONFIG } from "./constants";
+import {
+  CACHE_TTL,
+  isRagCacheDisabled,
+  RERANKER_CONFIG,
+} from "@/lib/rag/shared/constants";
 import { ragDebug } from "./debug";
 import type { SearchResult } from "./search-utils";
 

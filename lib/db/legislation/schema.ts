@@ -731,7 +731,6 @@ export const crossReferences = legislationSchema.table(
     // Target (what is being referenced) - raw from XML
     targetType: varchar("target_type", { length: 20 }).notNull(), // "act" or "regulation"
     targetRef: varchar("target_ref", { length: 100 }).notNull(), // Raw link (e.g., "C-46", "SOR-2000-1")
-    targetSectionRef: varchar("target_section_ref", { length: 50 }),
     // Display text for the reference
     referenceText: text("reference_text"),
     // Timestamp

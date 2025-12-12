@@ -1,5 +1,5 @@
+import { RERANKER_CONFIG } from "@/lib/rag/shared/constants";
 import { adaptiveFilter } from "./adaptive-filter";
-import { RERANKER_CONFIG } from "./constants";
 import { ragDebug } from "./debug";
 import type { PriorityIntent } from "./query-analysis";
 import {

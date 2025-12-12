@@ -2525,18 +2525,12 @@ test.describe("buildCrossRefContentEn", () => {
       sourceSectionLabel: "91",
       targetType: "act",
       targetRef: "A-2",
-      targetSectionRef: "12",
       referenceText: "See the Access to Information Act",
-      // Enhanced fields (Task 2.1)
+      // Enhanced fields (Task 2.1) - document-level only
       targetActId: "A-2",
       targetRegulationId: null,
-      targetSectionId: "section-123",
       targetDocumentTitleEn: "Access to Information Act",
       targetDocumentTitleFr: "Loi sur l'accès à l'information",
-      targetSnippetEn: "Every Canadian citizen has the right...",
-      targetSnippetFr: "Tout citoyen canadien a le droit...",
-      targetMarginalNoteEn: "Right of access",
-      targetMarginalNoteFr: "Droit d'accès",
     };
     const content = buildCrossRefContentEn(ref, "Income Tax Act");
 
@@ -2545,14 +2539,9 @@ test.describe("buildCrossRefContentEn", () => {
     expect(content).toContain("Source section: 91");
     expect(content).toContain("Target type: Act");
     expect(content).toContain("Reference: A-2");
-    expect(content).toContain("Target section: 12");
     // Text field now prefers resolved title over raw referenceText
     expect(content).toContain("Text: Access to Information Act");
     expect(content).toContain("Target document: Access to Information Act");
-    expect(content).toContain("Target heading: Right of access");
-    expect(content).toContain(
-      "Target content: Every Canadian citizen has the right..."
-    );
   });
 
   test("handles regulation target type", () => {
@@ -2560,18 +2549,12 @@ test.describe("buildCrossRefContentEn", () => {
       sourceSectionLabel: "5",
       targetType: "regulation",
       targetRef: "SOR/86-946",
-      targetSectionRef: null,
       referenceText: null,
-      // Enhanced fields (Task 2.1)
+      // Enhanced fields (Task 2.1) - document-level only
       targetActId: null,
       targetRegulationId: "SOR/86-946",
-      targetSectionId: null,
       targetDocumentTitleEn: "Employment Insurance Regulations",
       targetDocumentTitleFr: "Règlement sur l'assurance-emploi",
-      targetSnippetEn: null,
-      targetSnippetFr: null,
-      targetMarginalNoteEn: null,
-      targetMarginalNoteFr: null,
     };
     const content = buildCrossRefContentEn(ref, "Employment Insurance Act");
 
@@ -2580,7 +2563,6 @@ test.describe("buildCrossRefContentEn", () => {
     expect(content).toContain(
       "Target document: Employment Insurance Regulations"
     );
-    expect(content).not.toContain("Target section:");
     // Text field now shows resolved title even when referenceText is null
     expect(content).toContain("Text: Employment Insurance Regulations");
   });
@@ -2590,18 +2572,12 @@ test.describe("buildCrossRefContentEn", () => {
       sourceSectionLabel: null,
       targetType: "act",
       targetRef: "C-46",
-      targetSectionRef: null,
       referenceText: null,
       // Enhanced fields (Task 2.1) - all null when target not resolved
       targetActId: "C-46",
       targetRegulationId: null,
-      targetSectionId: null,
       targetDocumentTitleEn: null,
       targetDocumentTitleFr: null,
-      targetSnippetEn: null,
-      targetSnippetFr: null,
-      targetMarginalNoteEn: null,
-      targetMarginalNoteFr: null,
     };
     const content = buildCrossRefContentEn(ref, "Test Act");
 
@@ -2619,18 +2595,12 @@ test.describe("buildCrossRefContentFr", () => {
       sourceSectionLabel: "91",
       targetType: "act",
       targetRef: "A-2",
-      targetSectionRef: "12",
       referenceText: "Voir la Loi sur l'accès à l'information",
-      // Enhanced fields (Task 2.1)
+      // Enhanced fields (Task 2.1) - document-level only
       targetActId: "A-2",
       targetRegulationId: null,
-      targetSectionId: "section-123",
       targetDocumentTitleEn: "Access to Information Act",
       targetDocumentTitleFr: "Loi sur l'accès à l'information",
-      targetSnippetEn: "Every Canadian citizen has the right...",
-      targetSnippetFr: "Tout citoyen canadien a le droit...",
-      targetMarginalNoteEn: "Right of access",
-      targetMarginalNoteFr: "Droit d'accès",
     };
     const content = buildCrossRefContentFr(ref, "Loi de l'impôt sur le revenu");
 
@@ -2639,15 +2609,10 @@ test.describe("buildCrossRefContentFr", () => {
     expect(content).toContain("Article source: 91");
     expect(content).toContain("Type de cible: Loi");
     expect(content).toContain("Référence: A-2");
-    expect(content).toContain("Article cible: 12");
     // Texte field now prefers resolved title over raw referenceText
     expect(content).toContain("Texte: Loi sur l'accès à l'information");
     expect(content).toContain(
       "Document cible: Loi sur l'accès à l'information"
-    );
-    expect(content).toContain("Rubrique cible: Droit d'accès");
-    expect(content).toContain(
-      "Contenu cible: Tout citoyen canadien a le droit..."
     );
   });
 
@@ -2656,18 +2621,12 @@ test.describe("buildCrossRefContentFr", () => {
       sourceSectionLabel: "5",
       targetType: "regulation",
       targetRef: "SOR/86-946",
-      targetSectionRef: null,
       referenceText: null,
-      // Enhanced fields (Task 2.1)
+      // Enhanced fields (Task 2.1) - document-level only
       targetActId: null,
       targetRegulationId: "SOR/86-946",
-      targetSectionId: null,
       targetDocumentTitleEn: "Employment Insurance Regulations",
       targetDocumentTitleFr: "Règlement sur l'assurance-emploi",
-      targetSnippetEn: null,
-      targetSnippetFr: null,
-      targetMarginalNoteEn: null,
-      targetMarginalNoteFr: null,
     };
     const content = buildCrossRefContentFr(ref, "Loi sur l'assurance-emploi");
 
@@ -2676,7 +2635,6 @@ test.describe("buildCrossRefContentFr", () => {
     expect(content).toContain(
       "Document cible: Règlement sur l'assurance-emploi"
     );
-    expect(content).not.toContain("Article cible:");
     // Texte field now shows resolved title even when referenceText is null
     expect(content).toContain("Texte: Règlement sur l'assurance-emploi");
   });
@@ -2686,18 +2644,12 @@ test.describe("buildCrossRefContentFr", () => {
       sourceSectionLabel: null,
       targetType: "act",
       targetRef: "C-46",
-      targetSectionRef: null,
       referenceText: null,
       // Enhanced fields (Task 2.1) - all null when target not resolved
       targetActId: "C-46",
       targetRegulationId: null,
-      targetSectionId: null,
       targetDocumentTitleEn: null,
       targetDocumentTitleFr: null,
-      targetSnippetEn: null,
-      targetSnippetFr: null,
-      targetMarginalNoteEn: null,
-      targetMarginalNoteFr: null,
     };
     const content = buildCrossRefContentFr(ref, "Loi test");
 
@@ -2719,18 +2671,12 @@ test.describe("Cross-reference dual-language embedding generation", () => {
       sourceSectionLabel: "91",
       targetType: "act",
       targetRef: "A-2",
-      targetSectionRef: "12",
       referenceText: "See the Access to Information Act",
-      // Enhanced fields (Task 2.1)
+      // Enhanced fields (Task 2.1) - document-level only
       targetActId: "A-2",
       targetRegulationId: null,
-      targetSectionId: "section-456",
       targetDocumentTitleEn: "Access to Information Act",
       targetDocumentTitleFr: "Loi sur l'accès à l'information",
-      targetSnippetEn: "Every Canadian citizen has the right...",
-      targetSnippetFr: "Tout citoyen canadien a le droit...",
-      targetMarginalNoteEn: "Right of access",
-      targetMarginalNoteFr: "Droit d'accès",
     };
     const sourceTitleEn = "Criminal Code";
     const sourceTitleFr = "Code criminel";
@@ -2748,9 +2694,6 @@ test.describe("Cross-reference dual-language embedding generation", () => {
     expect(contentEn).toContain("Source: Criminal Code");
     expect(contentEn).toContain("Target type: Act");
     expect(contentEn).toContain("Target document: Access to Information Act");
-    expect(contentEn).toContain(
-      "Target content: Every Canadian citizen has the right..."
-    );
     expect(contentEn).not.toContain("Référence croisée");
 
     // Verify FR chunk has French content
@@ -2759,9 +2702,6 @@ test.describe("Cross-reference dual-language embedding generation", () => {
     expect(contentFr).toContain("Type de cible: Loi");
     expect(contentFr).toContain(
       "Document cible: Loi sur l'accès à l'information"
-    );
-    expect(contentFr).toContain(
-      "Contenu cible: Tout citoyen canadien a le droit..."
     );
     expect(contentFr).not.toContain("Cross-reference");
 
