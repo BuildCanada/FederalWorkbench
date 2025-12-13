@@ -2,13 +2,21 @@
  * Legislation Context Builder
  *
  * Builds context prompts from search results for LLM consumption.
- * Includes deduplication and citation formatting.
+ * Includes deduplication, reranking, and citation formatting.
  */
 
-import { RERANKER_CONFIG } from "@/lib/rag/parliament/constants";
+import { ragDebug } from "@/lib/rag/parliament/debug";
+import { RERANKER_CONFIG } from "@/lib/rag/shared/constants";
 import type { LegislationCitation } from "./citations";
 import type { HydratedLegislationSource } from "./hydrate";
+import {
+  filterByRerankScore,
+  type RerankedLegislationResult,
+  rerankLegislationResults,
+} from "./reranker";
 import type { LegislationSearchResult } from "./search";
+
+const dbg = ragDebug("leg:context");
 
 /**
  * Citation ID prefix for legislation context.
@@ -25,16 +33,38 @@ export type LegislationContext = {
   prompt: string;
   citations: LegislationCitation[];
   hydratedSources: HydratedLegislationSource[];
+  /**
+   * Reranked search results in relevance order.
+   * Used for hydration to ensure artifact panel shows the most relevant document
+   * as determined by the Cohere cross-encoder, not just vector similarity.
+   */
+  rerankedResults: LegislationSearchResult[];
 };
+
+/**
+ * Reranker function type for dependency injection
+ * Takes query, results, topN and returns reranked results
+ */
+export type RerankerFn = (
+  query: string,
+  results: LegislationSearchResult[],
+  topN: number
+) => Promise<RerankedLegislationResult[]>;
 
 type BuildContextOptions = {
   language: "en" | "fr" | "unknown";
   topN?: number;
+  /** Optional reranker function for testing. Defaults to Cohere cross-encoder. */
+  reranker?: RerankerFn;
 };
 
 /**
  * Deduplicate results by unique identifier
- * Prefers higher similarity scores when duplicates are found
+ * Prefers higher similarity scores when duplicates are found.
+ * Handles all source types: act, act_section, regulation, regulation_section,
+ * defined_term, preamble, treaty, cross_reference, table_of_provisions,
+ * signature_block, related_provisions, footnote, marginal_note, schedule,
+ * publication_item
  */
 function deduplicateResults(
   results: LegislationSearchResult[]
@@ -42,11 +72,69 @@ function deduplicateResults(
   const seen = new Map<string, LegislationSearchResult>();
 
   for (const r of results) {
-    // Build unique key from metadata
-    const key =
-      r.metadata.sourceType === "act" || r.metadata.sourceType === "act_section"
-        ? `act:${r.metadata.actId}:${r.metadata.sectionId ?? "meta"}:${r.metadata.chunkIndex ?? 0}`
-        : `reg:${r.metadata.regulationId}:${r.metadata.sectionId ?? "meta"}:${r.metadata.chunkIndex ?? 0}`;
+    const meta = r.metadata;
+    let key: string;
+
+    // Build unique key based on source type and identifying fields
+    switch (meta.sourceType) {
+      case "act":
+        key = `act:${meta.actId}:meta:${meta.chunkIndex ?? 0}`;
+        break;
+      case "act_section":
+        key = `act_section:${meta.actId}:${meta.sectionId ?? ""}:${meta.chunkIndex ?? 0}`;
+        break;
+      case "regulation":
+        key = `reg:${meta.regulationId}:meta:${meta.chunkIndex ?? 0}`;
+        break;
+      case "regulation_section":
+        key = `reg_section:${meta.regulationId}:${meta.sectionId ?? ""}:${meta.chunkIndex ?? 0}`;
+        break;
+      case "defined_term":
+        key = `term:${meta.termId ?? ""}:${meta.actId ?? meta.regulationId ?? ""}`;
+        break;
+      case "preamble":
+        key = `preamble:${meta.actId ?? ""}:${meta.preambleIndex ?? 0}`;
+        break;
+      case "treaty":
+        key = `treaty:${meta.actId ?? meta.regulationId ?? ""}:${meta.treatyTitle ?? ""}`;
+        break;
+      case "cross_reference":
+        // Include language to distinguish EN/FR versions
+        key = `xref:${meta.crossRefId ?? ""}:${meta.language ?? ""}`;
+        break;
+      case "table_of_provisions":
+        // Batched per document - one ToP embedding per document+language
+        key = `toc:${meta.actId ?? meta.regulationId ?? ""}:${meta.language ?? ""}`;
+        break;
+      case "signature_block":
+        // Use signatureBlockIndex to distinguish multiple signature blocks in same document
+        // signatureName alone is not unique - multiple blocks could share the first signatory
+        key = `sig:${meta.actId ?? meta.regulationId ?? ""}:${meta.signatureBlockIndex ?? 0}`;
+        break;
+      case "related_provisions":
+        // Unique per document + provision label/source
+        key = `relprov:${meta.actId ?? meta.regulationId ?? ""}:${meta.relatedProvisionLabel ?? meta.relatedProvisionSource ?? ""}:${meta.language ?? ""}`;
+        break;
+      case "footnote":
+        // Unique per document + section + footnote ID
+        key = `footnote:${meta.actId ?? meta.regulationId ?? ""}:${meta.sectionId ?? meta.sectionLabel ?? ""}:${meta.footnoteId ?? ""}:${meta.language ?? ""}`;
+        break;
+      case "marginal_note":
+        // Unique per section + language
+        key = `marginal:${meta.actId ?? meta.regulationId ?? ""}:${meta.sectionId ?? ""}:${meta.language ?? ""}`;
+        break;
+      case "schedule":
+        // Unique per schedule section (uses sectionId like act_section/regulation_section)
+        key = `schedule:${meta.actId ?? meta.regulationId ?? ""}:${meta.sectionId ?? ""}:${meta.chunkIndex ?? 0}`;
+        break;
+      case "publication_item":
+        // Unique per publication item (recommendation/notice) in a regulation
+        key = `pub:${meta.actId ?? meta.regulationId ?? ""}:${meta.publicationType ?? ""}:${meta.publicationIndex ?? 0}:${meta.language ?? ""}`;
+        break;
+      default:
+        // Fallback for any future types
+        key = `${meta.sourceType}:${meta.actId ?? meta.regulationId ?? "unknown"}:${meta.chunkIndex ?? 0}`;
+    }
 
     const existing = seen.get(key);
     if (!existing || r.similarity > existing.similarity) {
@@ -58,19 +146,31 @@ function deduplicateResults(
 }
 
 /**
- * Sort and limit results by similarity score
- * TODO: Add Cohere cross-encoder reranking for better accuracy
+ * Rerank and limit results using Cohere cross-encoder
+ *
+ * Uses cross-encoder reranking for more accurate relevance scoring,
+ * then filters by minimum rerank score and limits to topN.
  */
-function sortAndLimitResults(
+async function rerankAndLimitResults(
+  query: string,
   results: LegislationSearchResult[],
   topN: number
-): LegislationSearchResult[] {
+): Promise<RerankedLegislationResult[]> {
   if (results.length === 0) {
     return [];
   }
 
-  // Sort by similarity descending and take top N
-  return results.sort((a, b) => b.similarity - a.similarity).slice(0, topN);
+  dbg("reranking %d results for query: %s", results.length, query);
+
+  // Rerank using Cohere cross-encoder
+  const reranked = await rerankLegislationResults(query, results, topN);
+
+  // Filter by minimum rerank score
+  const filtered = filterByRerankScore(reranked);
+
+  dbg("after rerank: %d results (filtered from %d)", filtered.length, topN);
+
+  return filtered;
 }
 
 /**
@@ -78,15 +178,15 @@ function sortAndLimitResults(
  *
  * Steps:
  * 1. Deduplicate by section/chunk
- * 2. Rerank using cross-encoder
+ * 2. Rerank using Cohere cross-encoder for better accuracy
  * 3. Format for LLM with citations
  */
-export function buildLegislationContext(
-  _query: string,
+export async function buildLegislationContext(
+  query: string,
   results: LegislationSearchResult[],
   opts: BuildContextOptions
-): LegislationContext {
-  const { language, topN = RERANKER_CONFIG.DEFAULT_TOP_N } = opts;
+): Promise<LegislationContext> {
+  const { language, topN = RERANKER_CONFIG.DEFAULT_TOP_N, reranker } = opts;
 
   if (results.length === 0) {
     return {
@@ -97,12 +197,17 @@ export function buildLegislationContext(
           : "No legislative results found.",
       citations: [],
       hydratedSources: [],
+      rerankedResults: [],
     };
   }
 
-  // Deduplicate and sort by similarity
+  // Deduplicate first to reduce reranking cost
   const unique = deduplicateResults(results);
-  const sorted = sortAndLimitResults(unique, topN);
+
+  // Rerank using injected reranker or default Cohere cross-encoder
+  const sorted = reranker
+    ? await reranker(query, unique, topN)
+    : await rerankAndLimitResults(query, unique, topN);
 
   // Build context lines and citations
   const citations: LegislationCitation[] = [];
@@ -151,7 +256,18 @@ export function buildLegislationContext(
     const marginalNote = r.metadata.marginalNote
       ? ` (${r.metadata.marginalNote})`
       : "";
-    const label = `${title}${sectionPart}${marginalNote}`;
+
+    // Annotate when content language differs from requested language
+    // This happens when fallback search returns results in the other language
+    const contentLang = r.metadata.language;
+    const langMismatch =
+      contentLang && contentLang !== language
+        ? language === "fr"
+          ? " [contenu en anglais]"
+          : " [content in French]"
+        : "";
+
+    const label = `${title}${sectionPart}${marginalNote}${langMismatch}`;
     const suffix = raw.length > cut.length ? "…" : "";
 
     lines.push(
@@ -183,5 +299,6 @@ export function buildLegislationContext(
     prompt,
     citations,
     hydratedSources: [], // Populated by getLegislationContext after context building
+    rerankedResults: sorted, // Expose reranked results for hydration
   };
 }

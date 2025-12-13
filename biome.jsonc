@@ -5,6 +5,7 @@
     "includes": [
       "**/*",
       "!components/ui",
+      "!lib/db/migrations",
       "!lib/utils.ts",
       "!hooks/use-mobile.ts"
     ]

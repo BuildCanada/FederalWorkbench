@@ -127,6 +127,83 @@
       "when": 1764606413008,
       "tag": "0017_volatile_zaladane",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1765123186326,
+      "tag": "0018_loving_human_fly",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1765146634567,
+      "tag": "0019_boring_drax",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1765152673903,
+      "tag": "0020_mixed_mesmero",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1765167590112,
+      "tag": "0021_famous_exiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1765167843773,
+      "tag": "0022_mature_thunderbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1765169064362,
+      "tag": "0023_classy_hairball",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1765169247591,
+      "tag": "0024_moaning_jackal",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1765169565613,
+      "tag": "0025_normal_wallow",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1765227051085,
+      "tag": "0026_lucky_living_tribunal",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1765322426021,
+      "tag": "0027_overjoyed_owl",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1765474745878,
+      "tag": "0028_mixed_hawkeye",
+      "breakpoints": true
     }
   ]
 }

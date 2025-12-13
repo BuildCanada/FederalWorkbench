@@ -10,19 +10,23 @@
  *   --type=act|regulation  Process only acts or regulations
  *   --lang=en|fr    Process only English or French files
  *   --skip-existing Skip files that have already been imported
- *   --truncate      Truncate all legislation tables before importing
+ *   --truncate      Truncate all legislation tables before importing (prompts for confirmation)
+ *   --force         Skip confirmation prompt for --truncate
  *   --verbose       Show detailed output
  *   --ids=ID1,ID2   Import specific document IDs (comma-separated)
  *                   For acts: A-1,A-0.6,C-11
  *                   For regulations: SOR-2000-1,SI-2000-100,C.R.C.,_c._10
- *   --sample        Import a sample of different regulation types (CRC, SI, SOR)
+ *   --subset         Import strategic subset (25 acts + related regulations)
+ *   --subset=NAME    Import named subset (strategic, smoke)
  */
 
 import { config } from "dotenv";
 
 config({ path: ".env.local" });
 
-import { and, eq } from "drizzle-orm";
+import { existsSync, mkdirSync } from "node:fs";
+import { createInterface } from "node:readline";
+import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import {
@@ -33,15 +37,28 @@ import {
   sections,
 } from "@/lib/db/legislation/schema";
 import {
+  getEnablingActFromRelationships,
+  type LookupData,
+  lookupRegulation,
+  lookupStatute,
+  parseLookupXml,
+} from "@/lib/legislation/lookup-parser";
+import {
   getLegislationFiles,
   normalizeRegulationId,
   parseLegislationXml,
 } from "@/lib/legislation/parser";
+import {
+  parseSubsetArg,
+  type ResolvedSubset,
+  resolveSubset,
+} from "@/lib/legislation/subsets";
 import type {
   Language,
   LegislationType,
   ParsedDocument,
 } from "@/lib/legislation/types";
+import { linkDefinedTermPairs } from "./embeddings/legislation/link-defined-terms";
 
 // Database connection
 const connectionString = process.env.POSTGRES_URL;
@@ -49,7 +66,7 @@ if (!connectionString) {
   throw new Error("POSTGRES_URL environment variable is required");
 }
 
-const client = postgres(connectionString, { max: 10 });
+const client = postgres(connectionString, { max: 10, debug: false });
 const db = drizzle(client);
 
 // Parse command line arguments
@@ -66,99 +83,119 @@ const langArg = args.find((a) => a.startsWith("--lang="))?.split("=")[1] as
   | "fr"
   | undefined;
 const idsArg = args.find((a) => a.startsWith("--ids="))?.split("=")[1];
-const sampleMode = args.includes("--sample");
 const truncateMode = args.includes("--truncate");
+const forceMode = args.includes("--force");
 
-// Sample document IDs for comprehensive testing (mix of CRC, SI, SOR regulations)
-const SAMPLE_ACTS = [
-  "A-0.6",
-  "A-1",
-  "A-1.3",
-  "A-1.5",
-  "A-10.1",
-  "A-10.4",
-  "A-10.5",
-  "A-10.6",
-  "A-10.7",
-  "A-11.2",
-  "A-11.3",
-  "A-11.31",
-  "A-11.4",
-  "A-11.44",
-  "A-11.5",
-  "A-11.7",
-  "A-11.9",
-  "A-12",
-  "A-12.8",
-  "A-13.4",
-];
-
-const SAMPLE_REGULATIONS = {
-  // CRC regulations (Consolidated Regulations of Canada)
-  CRC: [
-    "C.R.C.,_c._10",
-    "C.R.C.,_c._100",
-    "C.R.C.,_c._101",
-    "C.R.C.,_c._102",
-    "C.R.C.,_c._103",
-    "C.R.C.,_c._104",
-    "C.R.C.,_c._1013",
-  ],
-  // SI regulations (Statutory Instruments)
-  SI: [
-    "SI-2000-100",
-    "SI-2000-101",
-    "SI-2000-102",
-    "SI-2000-103",
-    "SI-2000-104",
-    "SI-2000-111",
-    "SI-2000-16",
-  ],
-  // SOR regulations (Statutory Orders and Regulations)
-  SOR: [
-    "SOR-2000-1",
-    "SOR-2000-100",
-    "SOR-2000-107",
-    "SOR-2000-108",
-    "SOR-2000-111",
-    "SOR-2000-112",
-  ],
-};
-
-// French equivalents for sample regulations
-const SAMPLE_REGULATIONS_FR = {
-  CRC: [
-    "C.R.C.,_ch._10",
-    "C.R.C.,_ch._100",
-    "C.R.C.,_ch._101",
-    "C.R.C.,_ch._102",
-    "C.R.C.,_ch._103",
-    "C.R.C.,_ch._104",
-    "C.R.C.,_ch._1013",
-  ],
-  SI: [
-    "TR-2000-100",
-    "TR-2000-101",
-    "TR-2000-102",
-    "TR-2000-103",
-    "TR-2000-104",
-    "TR-2000-111",
-    "TR-2000-16",
-  ],
-  SOR: [
-    "DORS-2000-1",
-    "DORS-2000-100",
-    "DORS-2000-107",
-    "DORS-2000-108",
-    "DORS-2000-111",
-    "DORS-2000-112",
-  ],
-};
+// Parse --subset flag
+let subsetName: string | null = null;
+try {
+  subsetName = parseSubsetArg(args);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
 
 // Parse specific IDs if provided
 const specificIds = idsArg ? idsArg.split(",").map((id) => id.trim()) : null;
 
 const BASE_PATH = "./data/legislation";
+
+// PostgreSQL has a limit of 65535 parameters per query
+// With ~30 columns per section, batch size of 2000 keeps us under the limit (2000 * 30 = 60000)
+const INSERT_BATCH_SIZE = 2000;
+
+// SQLite progress tracker for fast existence checks
+const PROGRESS_DB_PATH = "scripts/.leg-import-progress.db";
+
+/**
+ * SQLite-based progress tracker for fast existence checks.
+ * Avoids slow Postgres queries when checking if files have been imported.
+ */
+class ImportProgressTracker {
+  private readonly sqlite: Database.Database;
+  private readonly checkStmt: Database.Statement;
+  private readonly insertStmt: Database.Statement;
+  private readonly insertManyStmt: Database.Transaction<
+    (keys: string[]) => void
+  >;
+  private readonly clearAllStmt: Database.Statement;
+
+  constructor(dbPath: string = PROGRESS_DB_PATH) {
+    if (dbPath !== ":memory:") {
+      const dir = dbPath.split("/").slice(0, -1).join("/");
+      if (dir && !existsSync(dir)) {
+        mkdirSync(dir, { recursive: true });
+      }
+    }
+
+    this.sqlite = new Database(dbPath);
+    this.sqlite.pragma("journal_mode = WAL");
+    this.sqlite.pragma("synchronous = NORMAL");
+
+    this.sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS imported (
+        key TEXT PRIMARY KEY,
+        created_at INTEGER DEFAULT (unixepoch())
+      ) WITHOUT ROWID;
+    `);
+
+    this.checkStmt = this.sqlite.prepare(
+      "SELECT 1 FROM imported WHERE key = ?"
+    );
+    this.insertStmt = this.sqlite.prepare(
+      "INSERT OR IGNORE INTO imported (key) VALUES (?)"
+    );
+    this.clearAllStmt = this.sqlite.prepare("DELETE FROM imported");
+    this.insertManyStmt = this.sqlite.transaction((keys: string[]) => {
+      for (const key of keys) {
+        this.insertStmt.run(key);
+      }
+    });
+  }
+
+  has(key: string): boolean {
+    return this.checkStmt.get(key) !== undefined;
+  }
+
+  mark(key: string): void {
+    this.insertStmt.run(key);
+  }
+
+  markMany(keys: string[]): void {
+    if (keys.length > 0) {
+      this.insertManyStmt(keys);
+    }
+  }
+
+  clearAll(): void {
+    this.clearAllStmt.run();
+  }
+
+  close(): void {
+    this.sqlite.close();
+  }
+}
+
+// Global progress tracker instance
+let progressTracker: ImportProgressTracker | null = null;
+
+function getProgressTracker(): ImportProgressTracker {
+  if (!progressTracker) {
+    progressTracker = new ImportProgressTracker();
+  }
+  return progressTracker;
+}
+
+/**
+ * Build a unique key for a file (type:id:language)
+ */
+function buildFileKey(
+  type: LegislationType,
+  id: string,
+  language: Language
+): string {
+  return `${type}:${id}:${language}`;
+}
 
 type ImportStats = {
   filesProcessed: number;
@@ -169,6 +206,9 @@ type ImportStats = {
   sectionsInserted: number;
   definedTermsInserted: number;
   crossReferencesInserted: number;
+  // Term linking stats (populated after all files processed)
+  termPairsLinked: number;
+  termPairsNoMatch: number;
 };
 
 const stats: ImportStats = {
@@ -180,38 +220,107 @@ const stats: ImportStats = {
   sectionsInserted: 0,
   definedTermsInserted: 0,
   crossReferencesInserted: 0,
+  termPairsLinked: 0,
+  termPairsNoMatch: 0,
 };
 
+// Load lookup.xml metadata
+const LOOKUP_PATH = `${BASE_PATH}/lookup/lookup.xml`;
+let lookupData: LookupData | null = null;
+
 /**
- * Check if an act already exists in the database for a specific language
+ * Load the lookup.xml data for enrichment
  */
-async function actExists(actId: string, language: Language): Promise<boolean> {
-  const rows = await db
-    .select({ id: acts.id })
-    .from(acts)
-    .where(and(eq(acts.actId, actId), eq(acts.language, language)))
-    .limit(1);
-  return rows.length > 0;
+function loadLookupData(): LookupData | null {
+  try {
+    const data = parseLookupXml(LOOKUP_PATH);
+    log(
+      `Loaded lookup.xml: ${data.statutes.size} statutes, ${data.regulations.size} regulations`
+    );
+    return data;
+  } catch (error) {
+    log(
+      `Warning: Could not load lookup.xml: ${error instanceof Error ? error.message : String(error)}`
+    );
+    return null;
+  }
 }
 
 /**
- * Check if a regulation already exists in the database for a specific language
+ * Enrich a parsed document with lookup.xml metadata
+ * - Adds reversedShortTitle and consolidateFlag
+ * - Validates/populates enablingActId from relationships
  */
-async function regulationExists(
-  regulationId: string,
+function enrichDocumentWithLookup(doc: ParsedDocument): void {
+  if (!lookupData) {
+    return;
+  }
+
+  if (doc.type === "act" && doc.act) {
+    const lookup = lookupStatute(lookupData, doc.act.actId, doc.act.language);
+    if (lookup) {
+      doc.act.reversedShortTitle = lookup.reversedShortTitle;
+      doc.act.consolidateFlag = lookup.consolidateFlag;
+      logVerbose(
+        `  Enriched act ${doc.act.actId} (${doc.act.language}): reversedShortTitle="${lookup.reversedShortTitle}", consolidateFlag=${lookup.consolidateFlag}`
+      );
+    }
+  } else if (doc.type === "regulation" && doc.regulation) {
+    const lookup = lookupRegulation(
+      lookupData,
+      doc.regulation.instrumentNumber,
+      doc.regulation.language
+    );
+    if (lookup) {
+      doc.regulation.reversedShortTitle = lookup.reversedShortTitle;
+      doc.regulation.consolidateFlag = lookup.consolidateFlag;
+      logVerbose(
+        `  Enriched regulation ${doc.regulation.regulationId} (${doc.regulation.language}): reversedShortTitle="${lookup.reversedShortTitle}", consolidateFlag=${lookup.consolidateFlag}`
+      );
+
+      // If enablingActId is not set, try to get it from relationships
+      if (!doc.regulation.enablingActId && lookup.id) {
+        const enablingActId = getEnablingActFromRelationships(
+          lookupData,
+          lookup.id,
+          doc.regulation.language
+        );
+        if (enablingActId) {
+          doc.regulation.enablingActId = enablingActId;
+          logVerbose(
+            `  Set enablingActId from relationships: ${enablingActId}`
+          );
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Check if a file has already been imported using SQLite progress tracker.
+ * Much faster than querying Postgres for each file.
+ */
+function fileAlreadyImported(
+  type: LegislationType,
+  id: string,
   language: Language
-): Promise<boolean> {
-  const rows = await db
-    .select({ id: regulations.id })
-    .from(regulations)
-    .where(
-      and(
-        eq(regulations.regulationId, regulationId),
-        eq(regulations.language, language)
-      )
-    )
-    .limit(1);
-  return rows.length > 0;
+): boolean {
+  const tracker = getProgressTracker();
+  const key = buildFileKey(type, id, language);
+  return tracker.has(key);
+}
+
+/**
+ * Mark a file as imported in SQLite progress tracker.
+ */
+function markFileImported(
+  type: LegislationType,
+  id: string,
+  language: Language
+): void {
+  const tracker = getProgressTracker();
+  const key = buildFileKey(type, id, language);
+  tracker.mark(key);
 }
 
 function log(message: string) {
@@ -222,6 +331,42 @@ function logVerbose(message: string) {
   if (verbose) {
     console.log(`  ${message}`);
   }
+}
+
+/**
+ * Prompt user to confirm truncate operation
+ */
+function confirmTruncate(): Promise<boolean> {
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise((resolve) => {
+    console.log("");
+    console.log("⚠️  WARNING: --truncate will perform the following actions:");
+    console.log("   • DELETE all data from legislation.acts");
+    console.log("   • DELETE all data from legislation.regulations");
+    console.log("   • DELETE all data from legislation.sections");
+    console.log("   • DELETE all data from legislation.defined_terms");
+    console.log("   • DELETE all data from legislation.cross_references");
+    console.log("   • Clear the SQLite progress cache");
+    console.log("");
+    console.log(
+      "   This will also invalidate any existing embeddings for legislation."
+    );
+    console.log("");
+
+    rl.question("Are you sure you want to continue? (y/n): ", (answer) => {
+      rl.close();
+      const normalized = answer.toLowerCase().trim();
+      const confirmed = normalized === "y" || normalized === "yes";
+      if (!confirmed) {
+        console.log("Truncate cancelled.");
+      }
+      resolve(confirmed);
+    });
+  });
 }
 
 /**
@@ -259,8 +404,12 @@ async function insertDocument(doc: ParsedDocument): Promise<void> {
         billType: doc.act.billType,
         hasPreviousVersion: doc.act.hasPreviousVersion,
         consolidatedNumber: doc.act.consolidatedNumber,
+        consolidatedNumberOfficial: doc.act.consolidatedNumberOfficial,
         annualStatuteYear: doc.act.annualStatuteYear,
         annualStatuteChapter: doc.act.annualStatuteChapter,
+        shortTitleStatus: doc.act.shortTitleStatus,
+        reversedShortTitle: doc.act.reversedShortTitle,
+        consolidateFlag: doc.act.consolidateFlag ?? false,
         limsMetadata: doc.act.limsMetadata,
         billHistory: doc.act.billHistory,
         recentAmendments: doc.act.recentAmendments,
@@ -280,6 +429,8 @@ async function insertDocument(doc: ParsedDocument): Promise<void> {
         gazettePart: doc.regulation.gazettePart,
         title: doc.regulation.title,
         longTitle: doc.regulation.longTitle,
+        reversedShortTitle: doc.regulation.reversedShortTitle,
+        consolidateFlag: doc.regulation.consolidateFlag ?? false,
         enablingAuthorities: doc.regulation.enablingAuthorities,
         enablingActId: doc.regulation.enablingActId,
         enablingActTitle: doc.regulation.enablingActTitle,
@@ -293,6 +444,8 @@ async function insertDocument(doc: ParsedDocument): Promise<void> {
         recentAmendments: doc.regulation.recentAmendments,
         relatedProvisions: doc.regulation.relatedProvisions,
         treaties: doc.regulation.treaties,
+        recommendations: doc.regulation.recommendations,
+        notices: doc.regulation.notices,
         signatureBlocks: doc.regulation.signatureBlocks,
         tableOfProvisions: doc.regulation.tableOfProvisions,
       });
@@ -326,14 +479,22 @@ async function insertDocument(doc: ParsedDocument): Promise<void> {
         scheduleId: section.scheduleId,
         scheduleBilingual: section.scheduleBilingual,
         scheduleSpanLanguages: section.scheduleSpanLanguages,
+        scheduleOriginatingRef: section.scheduleOriginatingRef,
         contentFlags: section.contentFlags,
         formattingAttributes: section.formattingAttributes,
+        provisionHeading: section.provisionHeading,
+        internalReferences: section.internalReferences ?? null,
       }));
-      await tx.insert(sections).values(sectionValues);
+
+      // Insert sections in batches to avoid PostgreSQL parameter limit
+      for (let i = 0; i < sectionValues.length; i += INSERT_BATCH_SIZE) {
+        const batch = sectionValues.slice(i, i + INSERT_BATCH_SIZE);
+        await tx.insert(sections).values(batch);
+      }
       stats.sectionsInserted += doc.sections.length;
     }
 
-    // Batch insert defined terms
+    // Batch insert defined terms (usually small, but batch anyway for consistency)
     if (doc.definedTerms.length > 0) {
       const termValues = doc.definedTerms.map((term) => ({
         language: term.language,
@@ -349,7 +510,11 @@ async function insertDocument(doc: ParsedDocument): Promise<void> {
         scopeRawText: term.scopeRawText,
         limsMetadata: term.limsMetadata,
       }));
-      await tx.insert(definedTerms).values(termValues);
+
+      for (let i = 0; i < termValues.length; i += INSERT_BATCH_SIZE) {
+        const batch = termValues.slice(i, i + INSERT_BATCH_SIZE);
+        await tx.insert(definedTerms).values(batch);
+      }
       stats.definedTermsInserted += doc.definedTerms.length;
     }
 
@@ -361,104 +526,35 @@ async function insertDocument(doc: ParsedDocument): Promise<void> {
         sourceSectionLabel: ref.sourceSectionLabel,
         targetType: ref.targetType,
         targetRef: ref.targetRef,
-        targetSectionRef: ref.targetSectionRef,
         referenceText: ref.referenceText,
       }));
-      await tx.insert(crossReferences).values(refValues);
+
+      for (let i = 0; i < refValues.length; i += INSERT_BATCH_SIZE) {
+        const batch = refValues.slice(i, i + INSERT_BATCH_SIZE);
+        await tx.insert(crossReferences).values(batch);
+      }
       stats.crossReferencesInserted += doc.crossReferences.length;
     }
   });
 }
 
 /**
- * Check if a file should be skipped based on existing data
+ * Check if a file should be skipped based on SQLite progress tracker.
+ * Much faster than querying Postgres for each file.
  */
-async function shouldSkipFile(file: {
+function shouldSkipFile(file: {
   type: LegislationType;
   id: string;
   language: Language;
-}): Promise<boolean> {
+}): boolean {
   if (!skipExisting) {
     return false;
   }
 
-  if (file.type === "act") {
-    return await actExists(file.id, file.language);
-  }
-  // For regulations, we need to normalize the ID from the filename
-  const normalizedId = normalizeRegulationId(file.id);
-  return await regulationExists(normalizedId, file.language);
-}
-
-/**
- * Get sample files for comprehensive testing
- */
-function getSampleFiles(): {
-  path: string;
-  type: LegislationType;
-  language: Language;
-  id: string;
-}[] {
-  const files: {
-    path: string;
-    type: LegislationType;
-    language: Language;
-    id: string;
-  }[] = [];
-
-  // Add acts (same IDs for EN and FR)
-  if (!typeArg || typeArg === "act") {
-    if (!langArg || langArg === "en") {
-      for (const actId of SAMPLE_ACTS) {
-        files.push({
-          path: `${BASE_PATH}/eng/acts/${actId}.xml`,
-          type: "act",
-          language: "en",
-          id: actId,
-        });
-      }
-    }
-    if (!langArg || langArg === "fr") {
-      for (const actId of SAMPLE_ACTS) {
-        files.push({
-          path: `${BASE_PATH}/fra/lois/${actId}.xml`,
-          type: "act",
-          language: "fr",
-          id: actId,
-        });
-      }
-    }
-  }
-
-  // Add regulations (different IDs for EN and FR)
-  if (!typeArg || typeArg === "regulation") {
-    if (!langArg || langArg === "en") {
-      for (const regs of Object.values(SAMPLE_REGULATIONS)) {
-        for (const regId of regs) {
-          files.push({
-            path: `${BASE_PATH}/eng/regulations/${regId}.xml`,
-            type: "regulation",
-            language: "en",
-            id: regId,
-          });
-        }
-      }
-    }
-    if (!langArg || langArg === "fr") {
-      for (const regs of Object.values(SAMPLE_REGULATIONS_FR)) {
-        for (const regId of regs) {
-          files.push({
-            path: `${BASE_PATH}/fra/reglements/${regId}.xml`,
-            type: "regulation",
-            language: "fr",
-            id: regId,
-          });
-        }
-      }
-    }
-  }
-
-  return files;
+  // For regulations, normalize the ID from the filename
+  const id =
+    file.type === "regulation" ? normalizeRegulationId(file.id) : file.id;
+  return fileAlreadyImported(file.type, id, file.language);
 }
 
 /**
@@ -492,9 +588,9 @@ function filterByIds(
 async function truncateLegislationTables() {
   log("Truncating all legislation tables...");
   // Use raw SQL for TRUNCATE CASCADE since Drizzle doesn't support it directly
-  await client`TRUNCATE TABLE legislation.cross_references CASCADE`;
-  await client`TRUNCATE TABLE legislation.defined_terms CASCADE`;
   await client`TRUNCATE TABLE legislation.sections CASCADE`;
+  await client`TRUNCATE TABLE legislation.defined_terms CASCADE`;
+  await client`TRUNCATE TABLE legislation.cross_references CASCADE`;
   await client`TRUNCATE TABLE legislation.regulations CASCADE`;
   await client`TRUNCATE TABLE legislation.acts CASCADE`;
   log("All legislation tables truncated");
@@ -506,12 +602,49 @@ async function truncateLegislationTables() {
 async function main() {
   log("Starting legislation import");
   log(
-    `Options: limit=${limit || "none"}, dry-run=${dryRun}, skip-existing=${skipExisting}, truncate=${truncateMode}, type=${typeArg || "all"}, lang=${langArg || "all"}, sample=${sampleMode}, ids=${specificIds ? specificIds.length : "none"}`
+    `Options: limit=${limit || "none"}, dry-run=${dryRun}, skip-existing=${skipExisting}, truncate=${truncateMode}, type=${typeArg || "all"}, lang=${langArg || "all"}, subset=${subsetName || "none"}, ids=${specificIds ? specificIds.length : "none"}`
   );
 
-  // Truncate tables if requested
+  // Truncate tables if requested (with confirmation unless --force)
   if (truncateMode && !dryRun) {
+    if (!forceMode) {
+      const confirmed = await confirmTruncate();
+      if (!confirmed) {
+        process.exit(0);
+      }
+    }
     await truncateLegislationTables();
+    // Also clear SQLite progress tracker to stay in sync
+    getProgressTracker().clearAll();
+    log("SQLite progress cache cleared");
+  }
+
+  // Load lookup.xml metadata for enrichment
+  lookupData = loadLookupData();
+
+  // Resolve subset if specified (requires lookup.xml)
+  let resolvedSubset: ResolvedSubset | null = null;
+
+  if (subsetName) {
+    if (!lookupData) {
+      log("ERROR: --subset requires lookup.xml but it could not be loaded");
+      log(`Expected location: ${LOOKUP_PATH}`);
+      process.exit(1);
+    }
+
+    try {
+      resolvedSubset = resolveSubset(
+        subsetName as "strategic" | "smoke",
+        lookupData
+      );
+      log("");
+      log(`=== Subset: ${resolvedSubset.name} ===`);
+      log(`Acts: ${resolvedSubset.actIds.size}`);
+      log(`Regulations: ${resolvedSubset.regulationFilenames.size}`);
+    } catch (error) {
+      log(`ERROR: ${error instanceof Error ? error.message : String(error)}`);
+      process.exit(1);
+    }
   }
 
   // Get list of files to process
@@ -522,12 +655,8 @@ async function main() {
     id: string;
   }[];
 
-  if (sampleMode) {
-    // Use sample set for comprehensive testing
-    files = getSampleFiles();
-    log(`Using sample set: ${files.length} files`);
-  } else if (specificIds) {
-    // Get all files and filter by specific IDs
+  if (specificIds) {
+    // Filter by specific IDs (existing functionality)
     const allFiles = getLegislationFiles(
       BASE_PATH,
       typeArg,
@@ -546,12 +675,52 @@ async function main() {
     );
   }
 
+  // Apply subset filter
+  if (resolvedSubset) {
+    const beforeCount = files.length;
+
+    files = files.filter((file) => {
+      if (file.type === "act") {
+        return resolvedSubset.actIds.has(file.id);
+      }
+      // For regulations, file.id is already in filename format
+      return resolvedSubset.regulationFilenames.has(file.id);
+    });
+
+    log(`Filtered: ${beforeCount} → ${files.length} files`);
+
+    // In dry-run mode, show detailed breakdown
+    if (dryRun) {
+      const actFiles = files.filter((f) => f.type === "act");
+      const regFiles = files.filter((f) => f.type === "regulation");
+
+      log("");
+      log("=== Subset Dry Run ===");
+      log(`Total files: ${files.length}`);
+      log(
+        `  Acts: ${actFiles.length} (${actFiles.filter((f) => f.language === "en").length} EN, ${actFiles.filter((f) => f.language === "fr").length} FR)`
+      );
+      log(
+        `  Regulations: ${regFiles.length} (${regFiles.filter((f) => f.language === "en").length} EN, ${regFiles.filter((f) => f.language === "fr").length} FR)`
+      );
+      log("");
+      log("Act IDs:");
+      for (const actId of resolvedSubset.actIds) {
+        log(`  ${actId}`);
+      }
+      log("");
+      log(
+        `Regulation files: ${resolvedSubset.regulationFilenames.size} unique`
+      );
+    }
+  }
+
   log(`Found ${files.length} files to process`);
 
   for (const file of files) {
     try {
-      // Check if we should skip this file
-      if (await shouldSkipFile(file)) {
+      // Check if we should skip this file (uses SQLite, no await needed)
+      if (shouldSkipFile(file)) {
         stats.filesSkipped++;
         logVerbose(`Skipping (already exists): ${file.path}`);
         continue;
@@ -560,7 +729,13 @@ async function main() {
       logVerbose(`Processing: ${file.path}`);
 
       const doc = parseLegislationXml(file.path, file.language);
+      enrichDocumentWithLookup(doc);
       await insertDocument(doc);
+
+      // Mark as imported in SQLite progress tracker
+      const id =
+        file.type === "regulation" ? normalizeRegulationId(file.id) : file.id;
+      markFileImported(file.type, id, file.language);
 
       stats.filesProcessed++;
 
@@ -571,8 +746,52 @@ async function main() {
       }
     } catch (error) {
       stats.filesFailed++;
+      const err = error as Error & { cause?: Error };
+      const cause = err.cause as Record<string, unknown> | undefined;
+      if (cause) {
+        // Log the PostgreSQL error details
+        log(`ERROR processing ${file.path}:`);
+        log(`  Cause keys: ${Object.keys(cause).join(", ")}`);
+        if (cause.code) {
+          log(`  Code: ${cause.code}`);
+        }
+        if (cause.severity) {
+          log(`  Severity: ${cause.severity}`);
+        }
+        if (cause.detail) {
+          log(`  Detail: ${String(cause.detail).slice(0, 300)}`);
+        }
+        if (cause.column) {
+          log(`  Column: ${cause.column}`);
+        }
+        if (cause.constraint) {
+          log(`  Constraint: ${cause.constraint}`);
+        }
+        if (cause.hint) {
+          log(`  Hint: ${cause.hint}`);
+        }
+      } else {
+        log(`ERROR processing ${file.path}: (no cause)`);
+      }
+    }
+  }
+
+  // Link bilingual defined term pairs
+  // This must happen after all files are processed so both EN and FR terms exist
+  if (stats.definedTermsInserted > 0 || !dryRun) {
+    log("");
+    log("=== Linking Bilingual Term Pairs ===");
+    try {
+      const linkStats = await linkDefinedTermPairs(db, { dryRun });
+      stats.termPairsLinked = linkStats.pairsLinked;
+      stats.termPairsNoMatch = linkStats.noMatchFound;
+      log(`Term pairs linked: ${stats.termPairsLinked}`);
+      if (stats.termPairsNoMatch > 0) {
+        log(`Terms without match: ${stats.termPairsNoMatch}`);
+      }
+    } catch (error) {
       log(
-        `ERROR processing ${file.path}: ${error instanceof Error ? error.message : String(error)}`
+        `ERROR linking term pairs: ${error instanceof Error ? error.message : String(error)}`
       );
       if (verbose && error instanceof Error) {
         console.error(error.stack);
@@ -591,6 +810,12 @@ async function main() {
     log(`Sections inserted: ${stats.sectionsInserted}`);
     log(`Defined terms inserted: ${stats.definedTermsInserted}`);
     log(`Cross references inserted: ${stats.crossReferencesInserted}`);
+    log(`Term pairs linked: ${stats.termPairsLinked}`);
+  }
+
+  // Clean up SQLite connection
+  if (progressTracker) {
+    progressTracker.close();
   }
 
   process.exit(stats.filesFailed > 0 ? 1 : 0);
@@ -598,5 +823,9 @@ async function main() {
 
 main().catch((error) => {
   console.error("Fatal error:", error);
+  // Clean up SQLite connection on error
+  if (progressTracker) {
+    progressTracker.close();
+  }
   process.exit(1);
 });

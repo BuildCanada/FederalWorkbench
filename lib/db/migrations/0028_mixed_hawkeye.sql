@@ -1,0 +1,1 @@
+ALTER TABLE "legislation"."cross_references" DROP COLUMN "target_section_ref";

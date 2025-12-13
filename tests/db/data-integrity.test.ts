@@ -1,6 +1,9 @@
 /**
  * Data integrity and cross-table consistency tests
  * Tests logical relationships and data consistency across tables
+ *
+ * NOTE: These tests require data to be loaded in the parliament schema.
+ * Tests will be skipped if the required tables are empty.
  */
 
 import { expect, test } from "@playwright/test";
@@ -15,30 +18,45 @@ import {
   hansardsDocument,
   hansardsStatement,
 } from "@/lib/db/parliament/schema";
-import { getSampleRecord, testDb } from "./utils";
+import { getSampleRecord, hasData, testDb } from "./utils";
 
 test.describe("Parliament Schema - Data Integrity", () => {
   test.describe("Session Consistency", () => {
     test("should have all session references point to valid sessions", async () => {
+      // Skip if no session data
+      if (!(await hasData(coreSession))) {
+        test.skip();
+        return;
+      }
+
       const sessions = await getSampleRecord(coreSession, 1000);
       const sessionIds = new Set(sessions.map((s) => s.id));
 
-      // Check billsBill.sessionId
-      const bills = await getSampleRecord(billsBill, 100);
-      for (const bill of bills) {
-        expect(sessionIds.has(bill.sessionId)).toBe(true);
+      // Check billsBill.sessionId if bills exist
+      if (await hasData(billsBill)) {
+        const bills = await getSampleRecord(billsBill, 100);
+        for (const bill of bills) {
+          expect(sessionIds.has(bill.sessionId)).toBe(true);
+        }
       }
 
-      // Check hansardsDocument.sessionId
-      const docs = await getSampleRecord(hansardsDocument, 100);
-      for (const doc of docs) {
-        expect(sessionIds.has(doc.sessionId)).toBe(true);
+      // Check hansardsDocument.sessionId if documents exist
+      if (await hasData(hansardsDocument)) {
+        const docs = await getSampleRecord(hansardsDocument, 100);
+        for (const doc of docs) {
+          expect(sessionIds.has(doc.sessionId)).toBe(true);
+        }
       }
     });
   });
 
   test.describe("Date Consistency", () => {
     test("should have coreElectedmember.startDate <= endDate when endDate exists", async () => {
+      if (!(await hasData(coreElectedmember))) {
+        test.skip();
+        return;
+      }
+
       const samples = await getSampleRecord(coreElectedmember, 100);
       const membersWithEndDate = samples.filter((m) => m.endDate !== null);
 
@@ -52,6 +70,11 @@ test.describe("Parliament Schema - Data Integrity", () => {
     });
 
     test("should have coreSession.start <= end when end exists", async () => {
+      if (!(await hasData(coreSession))) {
+        test.skip();
+        return;
+      }
+
       const samples = await getSampleRecord(coreSession, 100);
       const sessionsWithEnd = samples.filter((s) => s.end !== null);
 
@@ -65,6 +88,11 @@ test.describe("Parliament Schema - Data Integrity", () => {
     });
 
     test("should have billsBill.added date be reasonable (not in future)", async () => {
+      if (!(await hasData(billsBill))) {
+        test.skip();
+        return;
+      }
+
       const samples = await getSampleRecord(billsBill, 100);
       const now = new Date();
 
@@ -81,6 +109,11 @@ test.describe("Parliament Schema - Data Integrity", () => {
 
   test.describe("Vote Totals Consistency", () => {
     test("should have billsVotequestion totals be non-negative", async () => {
+      if (!(await hasData(billsVotequestion))) {
+        test.skip();
+        return;
+      }
+
       const samples = await getSampleRecord(billsVotequestion, 100);
       for (const question of samples) {
         expect(question.yeaTotal).toBeGreaterThanOrEqual(0);
@@ -90,6 +123,11 @@ test.describe("Parliament Schema - Data Integrity", () => {
     });
 
     test("should have billsVotequestion result match vote pattern (Y/N)", async () => {
+      if (!(await hasData(billsVotequestion))) {
+        test.skip();
+        return;
+      }
+
       const samples = await getSampleRecord(billsVotequestion, 100);
       for (const question of samples) {
         expect(["Y", "N", "T"]).toContain(question.result);
@@ -97,7 +135,19 @@ test.describe("Parliament Schema - Data Integrity", () => {
     });
 
     test("should have vote totals match member votes for a sample vote question", async () => {
+      if (
+        !(await hasData(billsVotequestion)) ||
+        !(await hasData(billsMembervote))
+      ) {
+        test.skip();
+        return;
+      }
+
       const [question] = await getSampleRecord(billsVotequestion, 1);
+      if (!question) {
+        test.skip();
+        return;
+      }
 
       const memberVotes = await testDb
         .select()
@@ -117,6 +167,11 @@ test.describe("Parliament Schema - Data Integrity", () => {
 
   test.describe("Hansards Consistency", () => {
     test("should have hansardsStatement sequence numbers be sequential within document", async () => {
+      if (!(await hasData(hansardsStatement))) {
+        test.skip();
+        return;
+      }
+
       const samples = await getSampleRecord(hansardsStatement, 100);
       const statementsByDocument = new Map<number, typeof samples>();
 
@@ -153,6 +208,14 @@ test.describe("Parliament Schema - Data Integrity", () => {
     });
 
     test("should have hansardsStatement time be within document date range", async () => {
+      if (
+        !(await hasData(hansardsStatement)) ||
+        !(await hasData(hansardsDocument))
+      ) {
+        test.skip();
+        return;
+      }
+
       const statements = await getSampleRecord(hansardsStatement, 50);
       const documentIds = Array.from(
         new Set(statements.map((s) => s.documentId))
@@ -188,6 +251,11 @@ test.describe("Parliament Schema - Data Integrity", () => {
     });
 
     test("should have hansardsStatement wordcount be positive for non-procedural statements", async () => {
+      if (!(await hasData(hansardsStatement))) {
+        test.skip();
+        return;
+      }
+
       const samples = await getSampleRecord(hansardsStatement, 20);
       for (const statement of samples) {
         // Note: wordcount is calculated on plain text, not HTML
@@ -204,6 +272,11 @@ test.describe("Parliament Schema - Data Integrity", () => {
 
   test.describe("Elected Member Consistency", () => {
     test("should have coreElectedmember dates be in reasonable range", async () => {
+      if (!(await hasData(coreElectedmember))) {
+        test.skip();
+        return;
+      }
+
       const samples = await getSampleRecord(coreElectedmember, 100);
       const earliestDate = new Date("1867-01-01"); // Confederation
       const futureDate = new Date();

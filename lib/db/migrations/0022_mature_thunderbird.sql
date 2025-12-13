@@ -1,0 +1,1 @@
+ALTER TABLE "legislation"."cross_references" ALTER COLUMN "source_section_label" SET DATA TYPE varchar(255);

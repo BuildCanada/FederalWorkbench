@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { User } from "next-auth";
 import { useState } from "react";
@@ -22,6 +21,7 @@ import {
   SidebarMenu,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { WorkbenchHeader } from "@/components/workbench-header";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -63,17 +63,7 @@ export function AppSidebar({ user }: { user: User | undefined }) {
         <SidebarHeader>
           <SidebarMenu>
             <div className="flex flex-row items-center justify-between">
-              <Link
-                className="flex flex-row items-center gap-3"
-                href="/workbench"
-                onClick={() => {
-                  setOpenMobile(false);
-                }}
-              >
-                <span className="cursor-pointer rounded-md px-2 font-semibold text-lg hover:bg-muted">
-                  🇨🇦 Workbench
-                </span>
-              </Link>
+              <WorkbenchHeader onClick={() => setOpenMobile(false)} />
               <div className="flex flex-row gap-1">
                 {user && (
                   <Tooltip>

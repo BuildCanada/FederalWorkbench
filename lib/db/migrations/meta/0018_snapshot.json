@@ -1,0 +1,5997 @@
+{
+  "id": "b15b714b-5412-4bdd-9a8f-479823a1f529",
+  "prevId": "28748010-e4d2-465b-b4ba-64edb26e01ba",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.Chat": {
+      "name": "Chat",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "userId": {
+          "name": "userId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "visibility": {
+          "name": "visibility",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'private'"
+        },
+        "lastContext": {
+          "name": "lastContext",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "Chat_userId_User_id_fk": {
+          "name": "Chat_userId_User_id_fk",
+          "tableFrom": "Chat",
+          "tableTo": "User",
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.Document": {
+      "name": "Document",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "text": {
+          "name": "text",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'text'"
+        },
+        "userId": {
+          "name": "userId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "Document_userId_User_id_fk": {
+          "name": "Document_userId_User_id_fk",
+          "tableFrom": "Document",
+          "tableTo": "User",
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "Document_id_createdAt_pk": {
+          "name": "Document_id_createdAt_pk",
+          "columns": ["id", "createdAt"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.Message_v2": {
+      "name": "Message_v2",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "chatId": {
+          "name": "chatId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "parts": {
+          "name": "parts",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "attachments": {
+          "name": "attachments",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "context": {
+          "name": "context",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "Message_v2_chatId_Chat_id_fk": {
+          "name": "Message_v2_chatId_Chat_id_fk",
+          "tableFrom": "Message_v2",
+          "tableTo": "Chat",
+          "columnsFrom": ["chatId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.Message": {
+      "name": "Message",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "chatId": {
+          "name": "chatId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content": {
+          "name": "content",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "Message_chatId_Chat_id_fk": {
+          "name": "Message_chatId_Chat_id_fk",
+          "tableFrom": "Message",
+          "tableTo": "Chat",
+          "columnsFrom": ["chatId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.Stream": {
+      "name": "Stream",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "chatId": {
+          "name": "chatId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "Stream_chatId_Chat_id_fk": {
+          "name": "Stream_chatId_Chat_id_fk",
+          "tableFrom": "Stream",
+          "tableTo": "Chat",
+          "columnsFrom": ["chatId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "Stream_id_pk": {
+          "name": "Stream_id_pk",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.Suggestion": {
+      "name": "Suggestion",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "documentId": {
+          "name": "documentId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "documentCreatedAt": {
+          "name": "documentCreatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "originalText": {
+          "name": "originalText",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "suggestedText": {
+          "name": "suggestedText",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "isResolved": {
+          "name": "isResolved",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "userId": {
+          "name": "userId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "Suggestion_userId_User_id_fk": {
+          "name": "Suggestion_userId_User_id_fk",
+          "tableFrom": "Suggestion",
+          "tableTo": "User",
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "Suggestion_documentId_documentCreatedAt_Document_id_createdAt_fk": {
+          "name": "Suggestion_documentId_documentCreatedAt_Document_id_createdAt_fk",
+          "tableFrom": "Suggestion",
+          "tableTo": "Document",
+          "columnsFrom": ["documentId", "documentCreatedAt"],
+          "columnsTo": ["id", "createdAt"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "Suggestion_id_pk": {
+          "name": "Suggestion_id_pk",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.User": {
+      "name": "User",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "password": {
+          "name": "password",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.Vote_v2": {
+      "name": "Vote_v2",
+      "schema": "",
+      "columns": {
+        "chatId": {
+          "name": "chatId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "messageId": {
+          "name": "messageId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "isUpvoted": {
+          "name": "isUpvoted",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "Vote_v2_chatId_Chat_id_fk": {
+          "name": "Vote_v2_chatId_Chat_id_fk",
+          "tableFrom": "Vote_v2",
+          "tableTo": "Chat",
+          "columnsFrom": ["chatId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "Vote_v2_messageId_Message_v2_id_fk": {
+          "name": "Vote_v2_messageId_Message_v2_id_fk",
+          "tableFrom": "Vote_v2",
+          "tableTo": "Message_v2",
+          "columnsFrom": ["messageId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "Vote_v2_chatId_messageId_pk": {
+          "name": "Vote_v2_chatId_messageId_pk",
+          "columns": ["chatId", "messageId"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.Vote": {
+      "name": "Vote",
+      "schema": "",
+      "columns": {
+        "chatId": {
+          "name": "chatId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "messageId": {
+          "name": "messageId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "isUpvoted": {
+          "name": "isUpvoted",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "Vote_chatId_Chat_id_fk": {
+          "name": "Vote_chatId_Chat_id_fk",
+          "tableFrom": "Vote",
+          "tableTo": "Chat",
+          "columnsFrom": ["chatId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "Vote_messageId_Message_id_fk": {
+          "name": "Vote_messageId_Message_id_fk",
+          "tableFrom": "Vote",
+          "tableTo": "Message",
+          "columnsFrom": ["messageId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "Vote_chatId_messageId_pk": {
+          "name": "Vote_chatId_messageId_pk",
+          "columns": ["chatId", "messageId"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "rag.leg_embeddings": {
+      "name": "leg_embeddings",
+      "schema": "rag",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(191)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "resource_id": {
+          "name": "resource_id",
+          "type": "varchar(191)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "embedding": {
+          "name": "embedding",
+          "type": "vector(1024)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tsv": {
+          "name": "tsv",
+          "type": "tsvector",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "chunk_index": {
+          "name": "chunk_index",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "total_chunks": {
+          "name": "total_chunks",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "embedding_model": {
+          "name": "embedding_model",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'cohere-embed-multilingual-v3.0'"
+        }
+      },
+      "indexes": {
+        "leg_embeddings_resource_id_idx": {
+          "name": "leg_embeddings_resource_id_idx",
+          "columns": [
+            {
+              "expression": "resource_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "leg_embeddings_embedding_idx": {
+          "name": "leg_embeddings_embedding_idx",
+          "columns": [
+            {
+              "expression": "embedding",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last",
+              "opclass": "vector_cosine_ops"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "hnsw",
+          "with": {}
+        },
+        "leg_embeddings_tsv_idx": {
+          "name": "leg_embeddings_tsv_idx",
+          "columns": [
+            {
+              "expression": "tsv",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        },
+        "leg_embeddings_model_idx": {
+          "name": "leg_embeddings_model_idx",
+          "columns": [
+            {
+              "expression": "embedding_model",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "leg_embeddings_resource_id_leg_resources_id_fk": {
+          "name": "leg_embeddings_resource_id_leg_resources_id_fk",
+          "tableFrom": "leg_embeddings",
+          "tableTo": "leg_resources",
+          "schemaTo": "rag",
+          "columnsFrom": ["resource_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "rag.leg_resources": {
+      "name": "leg_resources",
+      "schema": "rag",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(191)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "resource_key": {
+          "name": "resource_key",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "language": {
+          "name": "language",
+          "type": "varchar(2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_type": {
+          "name": "source_type",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "paired_resource_key": {
+          "name": "paired_resource_key",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "leg_resources_resource_key_idx": {
+          "name": "leg_resources_resource_key_idx",
+          "columns": [
+            {
+              "expression": "resource_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "leg_resources_lang_source_idx": {
+          "name": "leg_resources_lang_source_idx",
+          "columns": [
+            {
+              "expression": "language",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "source_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "leg_resources_paired_key_idx": {
+          "name": "leg_resources_paired_key_idx",
+          "columns": [
+            {
+              "expression": "paired_resource_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "leg_resources_metadata_gin": {
+          "name": "leg_resources_metadata_gin",
+          "columns": [
+            {
+              "expression": "metadata",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        },
+        "leg_resources_last_amended_date_idx": {
+          "name": "leg_resources_last_amended_date_idx",
+          "columns": [
+            {
+              "expression": "((\"metadata\"->>'lastAmendedDate'))",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "leg_resources_enacted_date_idx": {
+          "name": "leg_resources_enacted_date_idx",
+          "columns": [
+            {
+              "expression": "((\"metadata\"->>'enactedDate'))",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "leg_resources_in_force_date_idx": {
+          "name": "leg_resources_in_force_date_idx",
+          "columns": [
+            {
+              "expression": "((\"metadata\"->>'inForceDate'))",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "leg_resources_consolidation_date_idx": {
+          "name": "leg_resources_consolidation_date_idx",
+          "columns": [
+            {
+              "expression": "((\"metadata\"->>'consolidationDate'))",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "leg_resources_registration_date_idx": {
+          "name": "leg_resources_registration_date_idx",
+          "columns": [
+            {
+              "expression": "((\"metadata\"->>'registrationDate'))",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "leg_resources_status_idx": {
+          "name": "leg_resources_status_idx",
+          "columns": [
+            {
+              "expression": "((\"metadata\"->>'status'))",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "leg_resources_section_status_idx": {
+          "name": "leg_resources_section_status_idx",
+          "columns": [
+            {
+              "expression": "((\"metadata\"->>'sectionStatus'))",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "leg_resources_act_id_idx": {
+          "name": "leg_resources_act_id_idx",
+          "columns": [
+            {
+              "expression": "((\"metadata\"->>'actId'))",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "leg_resources_regulation_id_idx": {
+          "name": "leg_resources_regulation_id_idx",
+          "columns": [
+            {
+              "expression": "((\"metadata\"->>'regulationId'))",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "leg_resources_section_label_idx": {
+          "name": "leg_resources_section_label_idx",
+          "columns": [
+            {
+              "expression": "((\"metadata\"->>'sectionLabel'))",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "leg_resources_status_amended_idx": {
+          "name": "leg_resources_status_amended_idx",
+          "columns": [
+            {
+              "expression": "((\"metadata\"->>'status'))",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "((\"metadata\"->>'lastAmendedDate'))",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "leg_resources_resource_key_unique": {
+          "name": "leg_resources_resource_key_unique",
+          "nullsNotDistinct": false,
+          "columns": ["resource_key"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "leg_resources_source_type_check": {
+          "name": "leg_resources_source_type_check",
+          "value": "\"rag\".\"leg_resources\".\"source_type\" IN ('act', 'act_section', 'regulation', 'regulation_section', 'defined_term', 'preamble', 'treaty', 'cross_reference', 'table_of_provisions', 'signature_block', 'related_provisions', 'footnote', 'schedule', 'appendix', 'marginal_note')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "rag.parl_embeddings": {
+      "name": "parl_embeddings",
+      "schema": "rag",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(191)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "resource_id": {
+          "name": "resource_id",
+          "type": "varchar(191)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "embedding": {
+          "name": "embedding",
+          "type": "vector(1024)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tsv": {
+          "name": "tsv",
+          "type": "tsvector",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "parl_embeddings_embedding_idx": {
+          "name": "parl_embeddings_embedding_idx",
+          "columns": [
+            {
+              "expression": "embedding",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last",
+              "opclass": "vector_cosine_ops"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "hnsw",
+          "with": {}
+        },
+        "parl_embeddings_tsv_idx": {
+          "name": "parl_embeddings_tsv_idx",
+          "columns": [
+            {
+              "expression": "tsv",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "parl_embeddings_resource_id_parl_resources_id_fk": {
+          "name": "parl_embeddings_resource_id_parl_resources_id_fk",
+          "tableFrom": "parl_embeddings",
+          "tableTo": "parl_resources",
+          "schemaTo": "rag",
+          "columnsFrom": ["resource_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "rag.parl_resources": {
+      "name": "parl_resources",
+      "schema": "rag",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(191)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "parl_resources_metadata_gin": {
+          "name": "parl_resources_metadata_gin",
+          "columns": [
+            {
+              "expression": "metadata",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "legislation.acts": {
+      "name": "acts",
+      "schema": "legislation",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(191)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "act_id": {
+          "name": "act_id",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "language": {
+          "name": "language",
+          "type": "varchar(2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "long_title": {
+          "name": "long_title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "running_head": {
+          "name": "running_head",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'in-force'"
+        },
+        "in_force_date": {
+          "name": "in_force_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "consolidation_date": {
+          "name": "consolidation_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_amended_date": {
+          "name": "last_amended_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "enacted_date": {
+          "name": "enacted_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bill_origin": {
+          "name": "bill_origin",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bill_type": {
+          "name": "bill_type",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "has_previous_version": {
+          "name": "has_previous_version",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "consolidated_number": {
+          "name": "consolidated_number",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "annual_statute_year": {
+          "name": "annual_statute_year",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "annual_statute_chapter": {
+          "name": "annual_statute_chapter",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lims_metadata": {
+          "name": "lims_metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bill_history": {
+          "name": "bill_history",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recent_amendments": {
+          "name": "recent_amendments",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "preamble": {
+          "name": "preamble",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "related_provisions": {
+          "name": "related_provisions",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "treaties": {
+          "name": "treaties",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "signature_blocks": {
+          "name": "signature_blocks",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "table_of_provisions": {
+          "name": "table_of_provisions",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "acts_act_id_language_idx": {
+          "name": "acts_act_id_language_idx",
+          "columns": [
+            {
+              "expression": "act_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "language",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "acts_status_idx": {
+          "name": "acts_status_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "acts_language_idx": {
+          "name": "acts_language_idx",
+          "columns": [
+            {
+              "expression": "language",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "acts_act_id_language_unique": {
+          "name": "acts_act_id_language_unique",
+          "nullsNotDistinct": false,
+          "columns": ["act_id", "language"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "legislation.cross_references": {
+      "name": "cross_references",
+      "schema": "legislation",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(191)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "source_act_id": {
+          "name": "source_act_id",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_regulation_id": {
+          "name": "source_regulation_id",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_section_label": {
+          "name": "source_section_label",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "target_type": {
+          "name": "target_type",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_ref": {
+          "name": "target_ref",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_section_ref": {
+          "name": "target_section_ref",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reference_text": {
+          "name": "reference_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "cross_references_source_act_id_idx": {
+          "name": "cross_references_source_act_id_idx",
+          "columns": [
+            {
+              "expression": "source_act_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "cross_references_source_regulation_id_idx": {
+          "name": "cross_references_source_regulation_id_idx",
+          "columns": [
+            {
+              "expression": "source_regulation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "cross_references_target_ref_idx": {
+          "name": "cross_references_target_ref_idx",
+          "columns": [
+            {
+              "expression": "target_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "legislation.defined_terms": {
+      "name": "defined_terms",
+      "schema": "legislation",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(191)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "language": {
+          "name": "language",
+          "type": "varchar(2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "term": {
+          "name": "term",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "term_normalized": {
+          "name": "term_normalized",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "paired_term": {
+          "name": "paired_term",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "paired_term_id": {
+          "name": "paired_term_id",
+          "type": "varchar(191)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "definition": {
+          "name": "definition",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "act_id": {
+          "name": "act_id",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "regulation_id": {
+          "name": "regulation_id",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "section_label": {
+          "name": "section_label",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "scope_type": {
+          "name": "scope_type",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'act'"
+        },
+        "scope_sections": {
+          "name": "scope_sections",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "scope_raw_text": {
+          "name": "scope_raw_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lims_metadata": {
+          "name": "lims_metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "defined_terms_term_normalized_lang_idx": {
+          "name": "defined_terms_term_normalized_lang_idx",
+          "columns": [
+            {
+              "expression": "term_normalized",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "language",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "defined_terms_act_id_lang_idx": {
+          "name": "defined_terms_act_id_lang_idx",
+          "columns": [
+            {
+              "expression": "act_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "language",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "defined_terms_regulation_id_lang_idx": {
+          "name": "defined_terms_regulation_id_lang_idx",
+          "columns": [
+            {
+              "expression": "regulation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "language",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "defined_terms_act_section_lang_idx": {
+          "name": "defined_terms_act_section_lang_idx",
+          "columns": [
+            {
+              "expression": "act_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "section_label",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "language",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "defined_terms_scope_type_idx": {
+          "name": "defined_terms_scope_type_idx",
+          "columns": [
+            {
+              "expression": "scope_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "defined_terms_paired_term_id_idx": {
+          "name": "defined_terms_paired_term_id_idx",
+          "columns": [
+            {
+              "expression": "paired_term_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "legislation.regulations": {
+      "name": "regulations",
+      "schema": "legislation",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(191)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "regulation_id": {
+          "name": "regulation_id",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "language": {
+          "name": "language",
+          "type": "varchar(2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "instrument_number": {
+          "name": "instrument_number",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "regulation_type": {
+          "name": "regulation_type",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gazette_part": {
+          "name": "gazette_part",
+          "type": "varchar(5)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "long_title": {
+          "name": "long_title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "enabling_authorities": {
+          "name": "enabling_authorities",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "enabling_act_id": {
+          "name": "enabling_act_id",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "enabling_act_title": {
+          "name": "enabling_act_title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'in-force'"
+        },
+        "has_previous_version": {
+          "name": "has_previous_version",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "registration_date": {
+          "name": "registration_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "consolidation_date": {
+          "name": "consolidation_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_amended_date": {
+          "name": "last_amended_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lims_metadata": {
+          "name": "lims_metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "regulation_maker_order": {
+          "name": "regulation_maker_order",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recent_amendments": {
+          "name": "recent_amendments",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "related_provisions": {
+          "name": "related_provisions",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "treaties": {
+          "name": "treaties",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "signature_blocks": {
+          "name": "signature_blocks",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "table_of_provisions": {
+          "name": "table_of_provisions",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "regulations_regulation_id_language_idx": {
+          "name": "regulations_regulation_id_language_idx",
+          "columns": [
+            {
+              "expression": "regulation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "language",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "regulations_enabling_act_id_idx": {
+          "name": "regulations_enabling_act_id_idx",
+          "columns": [
+            {
+              "expression": "enabling_act_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "regulations_status_idx": {
+          "name": "regulations_status_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "regulations_language_idx": {
+          "name": "regulations_language_idx",
+          "columns": [
+            {
+              "expression": "language",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "regulations_regulation_id_language_unique": {
+          "name": "regulations_regulation_id_language_unique",
+          "nullsNotDistinct": false,
+          "columns": ["regulation_id", "language"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "legislation.sections": {
+      "name": "sections",
+      "schema": "legislation",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(191)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "act_id": {
+          "name": "act_id",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "regulation_id": {
+          "name": "regulation_id",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "canonical_section_id": {
+          "name": "canonical_section_id",
+          "type": "varchar(200)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "section_label": {
+          "name": "section_label",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "section_order": {
+          "name": "section_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "language": {
+          "name": "language",
+          "type": "varchar(2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "section_type": {
+          "name": "section_type",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'section'"
+        },
+        "hierarchy_path": {
+          "name": "hierarchy_path",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "marginal_note": {
+          "name": "marginal_note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content_html": {
+          "name": "content_html",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'in-force'"
+        },
+        "xml_type": {
+          "name": "xml_type",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "xml_target": {
+          "name": "xml_target",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "change_type": {
+          "name": "change_type",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "in_force_start_date": {
+          "name": "in_force_start_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_amended_date": {
+          "name": "last_amended_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "enacted_date": {
+          "name": "enacted_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lims_metadata": {
+          "name": "lims_metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "historical_notes": {
+          "name": "historical_notes",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "footnotes": {
+          "name": "footnotes",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "schedule_id": {
+          "name": "schedule_id",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "schedule_bilingual": {
+          "name": "schedule_bilingual",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "schedule_span_languages": {
+          "name": "schedule_span_languages",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "content_flags": {
+          "name": "content_flags",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "formatting_attributes": {
+          "name": "formatting_attributes",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "sections_act_id_idx": {
+          "name": "sections_act_id_idx",
+          "columns": [
+            {
+              "expression": "act_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "sections_regulation_id_idx": {
+          "name": "sections_regulation_id_idx",
+          "columns": [
+            {
+              "expression": "regulation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "sections_canonical_section_id_idx": {
+          "name": "sections_canonical_section_id_idx",
+          "columns": [
+            {
+              "expression": "canonical_section_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "sections_language_idx": {
+          "name": "sections_language_idx",
+          "columns": [
+            {
+              "expression": "language",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "sections_section_type_idx": {
+          "name": "sections_section_type_idx",
+          "columns": [
+            {
+              "expression": "section_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "sections_bilingual_toggle_idx": {
+          "name": "sections_bilingual_toggle_idx",
+          "columns": [
+            {
+              "expression": "act_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "section_label",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "language",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "sections_bilingual_reg_toggle_idx": {
+          "name": "sections_bilingual_reg_toggle_idx",
+          "columns": [
+            {
+              "expression": "regulation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "section_label",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "language",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "sections_content_flags_gin_idx": {
+          "name": "sections_content_flags_gin_idx",
+          "columns": [
+            {
+              "expression": "content_flags",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        },
+        "sections_act_language_order_idx": {
+          "name": "sections_act_language_order_idx",
+          "columns": [
+            {
+              "expression": "act_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "language",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "section_order",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "sections_reg_language_order_idx": {
+          "name": "sections_reg_language_order_idx",
+          "columns": [
+            {
+              "expression": "regulation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "language",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "section_order",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "sections_act_id_language_fk": {
+          "name": "sections_act_id_language_fk",
+          "tableFrom": "sections",
+          "tableTo": "acts",
+          "schemaTo": "legislation",
+          "columnsFrom": ["act_id", "language"],
+          "columnsTo": ["act_id", "language"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "sections_regulation_id_language_fk": {
+          "name": "sections_regulation_id_language_fk",
+          "tableFrom": "sections",
+          "tableTo": "regulations",
+          "schemaTo": "legislation",
+          "columnsFrom": ["regulation_id", "language"],
+          "columnsTo": ["regulation_id", "language"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "parliament.bills_bill": {
+      "name": "bills_bill",
+      "schema": "parliament",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name_en": {
+          "name": "name_en",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "number": {
+          "name": "number",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "number_only": {
+          "name": "number_only",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sponsor_member_id": {
+          "name": "sponsor_member_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "privatemember": {
+          "name": "privatemember",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sponsor_politician_id": {
+          "name": "sponsor_politician_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "law": {
+          "name": "law",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "added": {
+          "name": "added",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "institution": {
+          "name": "institution",
+          "type": "varchar(1)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name_fr": {
+          "name": "name_fr",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "short_title_en": {
+          "name": "short_title_en",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "short_title_fr": {
+          "name": "short_title_fr",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "status_date": {
+          "name": "status_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "introduced": {
+          "name": "introduced",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "text_docid": {
+          "name": "text_docid",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status_code": {
+          "name": "status_code",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "billstages_json": {
+          "name": "billstages_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "legisinfo_id": {
+          "name": "legisinfo_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "library_summary_available": {
+          "name": "library_summary_available",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "varchar(4)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "latest_debate_date": {
+          "name": "latest_debate_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "bills_bill_added": {
+          "name": "bills_bill_added",
+          "columns": [
+            {
+              "expression": "added",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bills_bill_institution": {
+          "name": "bills_bill_institution",
+          "columns": [
+            {
+              "expression": "institution",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bills_bill_institution_like": {
+          "name": "bills_bill_institution_like",
+          "columns": [
+            {
+              "expression": "institution",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bills_bill_latest_debate_date_84fda672": {
+          "name": "bills_bill_latest_debate_date_84fda672",
+          "columns": [
+            {
+              "expression": "latest_debate_date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bills_bill_legisinfo_id_c01f6333": {
+          "name": "bills_bill_legisinfo_id_c01f6333",
+          "columns": [
+            {
+              "expression": "legisinfo_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bills_bill_number_ba50c940": {
+          "name": "bills_bill_number_ba50c940",
+          "columns": [
+            {
+              "expression": "number",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bills_bill_number_ba50c940_like": {
+          "name": "bills_bill_number_ba50c940_like",
+          "columns": [
+            {
+              "expression": "number",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bills_bill_session_id_aa62dcb6": {
+          "name": "bills_bill_session_id_aa62dcb6",
+          "columns": [
+            {
+              "expression": "session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bills_bill_session_id_aa62dcb6_like": {
+          "name": "bills_bill_session_id_aa62dcb6_like",
+          "columns": [
+            {
+              "expression": "session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bills_bill_sponsor_member_id": {
+          "name": "bills_bill_sponsor_member_id",
+          "columns": [
+            {
+              "expression": "sponsor_member_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bills_bill_sponsor_politician_id": {
+          "name": "bills_bill_sponsor_politician_id",
+          "columns": [
+            {
+              "expression": "sponsor_politician_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "bills_bill_sponsor_member_id_core_electedmember_id_fk": {
+          "name": "bills_bill_sponsor_member_id_core_electedmember_id_fk",
+          "tableFrom": "bills_bill",
+          "tableTo": "core_electedmember",
+          "schemaTo": "parliament",
+          "columnsFrom": ["sponsor_member_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bills_bill_sponsor_politician_id_core_politician_id_fk": {
+          "name": "bills_bill_sponsor_politician_id_core_politician_id_fk",
+          "tableFrom": "bills_bill",
+          "tableTo": "core_politician",
+          "schemaTo": "parliament",
+          "columnsFrom": ["sponsor_politician_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bills_bill_session_id_core_session_id_fk": {
+          "name": "bills_bill_session_id_core_session_id_fk",
+          "tableFrom": "bills_bill",
+          "tableTo": "core_session",
+          "schemaTo": "parliament",
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "bills_bill_legisinfo_id_check": {
+          "name": "bills_bill_legisinfo_id_check",
+          "value": "(legisinfo_id >= 0)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "parliament.bills_bill_similar_bills": {
+      "name": "bills_bill_similar_bills",
+      "schema": "parliament",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "from_bill_id": {
+          "name": "from_bill_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "to_bill_id": {
+          "name": "to_bill_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "bills_bill_similar_bills_from_bill_id_8c11160d": {
+          "name": "bills_bill_similar_bills_from_bill_id_8c11160d",
+          "columns": [
+            {
+              "expression": "from_bill_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bills_bill_similar_bills_to_bill_id_67b84825": {
+          "name": "bills_bill_similar_bills_to_bill_id_67b84825",
+          "columns": [
+            {
+              "expression": "to_bill_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "bills_bill_similar_bills_from_bill_id_bills_bill_id_fk": {
+          "name": "bills_bill_similar_bills_from_bill_id_bills_bill_id_fk",
+          "tableFrom": "bills_bill_similar_bills",
+          "tableTo": "bills_bill",
+          "schemaTo": "parliament",
+          "columnsFrom": ["from_bill_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bills_bill_similar_bills_to_bill_id_bills_bill_id_fk": {
+          "name": "bills_bill_similar_bills_to_bill_id_bills_bill_id_fk",
+          "tableFrom": "bills_bill_similar_bills",
+          "tableTo": "bills_bill",
+          "schemaTo": "parliament",
+          "columnsFrom": ["to_bill_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "bills_bill_similar_bills_from_bill_id_to_bill_id_87b85e17_uniq": {
+          "name": "bills_bill_similar_bills_from_bill_id_to_bill_id_87b85e17_uniq",
+          "nullsNotDistinct": false,
+          "columns": ["from_bill_id", "to_bill_id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "parliament.bills_billtext": {
+      "name": "bills_billtext",
+      "schema": "parliament",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "bill_id": {
+          "name": "bill_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "docid": {
+          "name": "docid",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created": {
+          "name": "created",
+          "type": "timestamp (6) with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "text_en": {
+          "name": "text_en",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "text_fr": {
+          "name": "text_fr",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "summary_en": {
+          "name": "summary_en",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        }
+      },
+      "indexes": {
+        "bills_billtext_bill_id": {
+          "name": "bills_billtext_bill_id",
+          "columns": [
+            {
+              "expression": "bill_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bills_billtext_docid": {
+          "name": "bills_billtext_docid",
+          "columns": [
+            {
+              "expression": "docid",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "bills_billtext_bill_id_bills_bill_id_fk": {
+          "name": "bills_billtext_bill_id_bills_bill_id_fk",
+          "tableFrom": "bills_billtext",
+          "tableTo": "bills_bill",
+          "schemaTo": "parliament",
+          "columnsFrom": ["bill_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "bills_billtext_docid_unique": {
+          "name": "bills_billtext_docid_unique",
+          "nullsNotDistinct": false,
+          "columns": ["docid"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "bills_billtext_docid_check": {
+          "name": "bills_billtext_docid_check",
+          "value": "(docid >= 0)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "parliament.bills_membervote": {
+      "name": "bills_membervote",
+      "schema": "parliament",
+      "columns": {
+        "member_id": {
+          "name": "member_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "politician_id": {
+          "name": "politician_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "votequestion_id": {
+          "name": "votequestion_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "vote": {
+          "name": "vote",
+          "type": "varchar(1)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dissent": {
+          "name": "dissent",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "bills_membervote_dissent": {
+          "name": "bills_membervote_dissent",
+          "columns": [
+            {
+              "expression": "dissent",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bills_membervote_member_id": {
+          "name": "bills_membervote_member_id",
+          "columns": [
+            {
+              "expression": "member_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bills_membervote_politician_id": {
+          "name": "bills_membervote_politician_id",
+          "columns": [
+            {
+              "expression": "politician_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bills_membervote_votequestion_id": {
+          "name": "bills_membervote_votequestion_id",
+          "columns": [
+            {
+              "expression": "votequestion_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "bills_membervote_member_id_core_electedmember_id_fk": {
+          "name": "bills_membervote_member_id_core_electedmember_id_fk",
+          "tableFrom": "bills_membervote",
+          "tableTo": "core_electedmember",
+          "schemaTo": "parliament",
+          "columnsFrom": ["member_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bills_membervote_politician_id_core_politician_id_fk": {
+          "name": "bills_membervote_politician_id_core_politician_id_fk",
+          "tableFrom": "bills_membervote",
+          "tableTo": "core_politician",
+          "schemaTo": "parliament",
+          "columnsFrom": ["politician_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bills_membervote_votequestion_id_bills_votequestion_id_fk": {
+          "name": "bills_membervote_votequestion_id_bills_votequestion_id_fk",
+          "tableFrom": "bills_membervote",
+          "tableTo": "bills_votequestion",
+          "schemaTo": "parliament",
+          "columnsFrom": ["votequestion_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "parliament.bills_partyvote": {
+      "name": "bills_partyvote",
+      "schema": "parliament",
+      "columns": {
+        "vote": {
+          "name": "vote",
+          "type": "varchar(1)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "party_id": {
+          "name": "party_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "votequestion_id": {
+          "name": "votequestion_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "disagreement": {
+          "name": "disagreement",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "bills_partyvote_party_id": {
+          "name": "bills_partyvote_party_id",
+          "columns": [
+            {
+              "expression": "party_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bills_partyvote_votequestion_id": {
+          "name": "bills_partyvote_votequestion_id",
+          "columns": [
+            {
+              "expression": "votequestion_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "bills_partyvote_party_id_core_party_id_fk": {
+          "name": "bills_partyvote_party_id_core_party_id_fk",
+          "tableFrom": "bills_partyvote",
+          "tableTo": "core_party",
+          "schemaTo": "parliament",
+          "columnsFrom": ["party_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bills_partyvote_votequestion_id_bills_votequestion_id_fk": {
+          "name": "bills_partyvote_votequestion_id_bills_votequestion_id_fk",
+          "tableFrom": "bills_partyvote",
+          "tableTo": "bills_votequestion",
+          "schemaTo": "parliament",
+          "columnsFrom": ["votequestion_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "bills_partyvote_party_id_3db5377c11c3b9f1_uniq": {
+          "name": "bills_partyvote_party_id_3db5377c11c3b9f1_uniq",
+          "nullsNotDistinct": false,
+          "columns": ["party_id", "votequestion_id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "parliament.bills_votequestion": {
+      "name": "bills_votequestion",
+      "schema": "parliament",
+      "columns": {
+        "description_en": {
+          "name": "description_en",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nay_total": {
+          "name": "nay_total",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bill_id": {
+          "name": "bill_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "paired_total": {
+          "name": "paired_total",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "number": {
+          "name": "number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "varchar(4)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "result": {
+          "name": "result",
+          "type": "varchar(1)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "yea_total": {
+          "name": "yea_total",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "context_statement_id": {
+          "name": "context_statement_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "description_fr": {
+          "name": "description_fr",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        }
+      },
+      "indexes": {
+        "bills_votequestion_bill_id": {
+          "name": "bills_votequestion_bill_id",
+          "columns": [
+            {
+              "expression": "bill_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bills_votequestion_context_statement_id": {
+          "name": "bills_votequestion_context_statement_id",
+          "columns": [
+            {
+              "expression": "context_statement_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bills_votequestion_date": {
+          "name": "bills_votequestion_date",
+          "columns": [
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bills_votequestion_session_id": {
+          "name": "bills_votequestion_session_id",
+          "columns": [
+            {
+              "expression": "session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "bills_votequestion_bill_id_bills_bill_id_fk": {
+          "name": "bills_votequestion_bill_id_bills_bill_id_fk",
+          "tableFrom": "bills_votequestion",
+          "tableTo": "bills_bill",
+          "schemaTo": "parliament",
+          "columnsFrom": ["bill_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bills_votequestion_session_id_core_session_id_fk": {
+          "name": "bills_votequestion_session_id_core_session_id_fk",
+          "tableFrom": "bills_votequestion",
+          "tableTo": "core_session",
+          "schemaTo": "parliament",
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bills_votequestion_context_statement_id_hansards_statement_id_fk": {
+          "name": "bills_votequestion_context_statement_id_hansards_statement_id_fk",
+          "tableFrom": "bills_votequestion",
+          "tableTo": "hansards_statement",
+          "schemaTo": "parliament",
+          "columnsFrom": ["context_statement_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "bills_votequestion_number_check": {
+          "name": "bills_votequestion_number_check",
+          "value": "(number >= 0)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "parliament.committees_committee": {
+      "name": "committees_committee",
+      "schema": "parliament",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name_en": {
+          "name": "name_en",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "short_name_en": {
+          "name": "short_name_en",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "slug": {
+          "name": "slug",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "parent_id": {
+          "name": "parent_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "display": {
+          "name": "display",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name_fr": {
+          "name": "name_fr",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "short_name_fr": {
+          "name": "short_name_fr",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "joint": {
+          "name": "joint",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "committees_committee_display": {
+          "name": "committees_committee_display",
+          "columns": [
+            {
+              "expression": "display",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "committees_committee_parent_id": {
+          "name": "committees_committee_parent_id",
+          "columns": [
+            {
+              "expression": "parent_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "parent_id_refs_id_65ecaa5ea7c4a6ed": {
+          "name": "parent_id_refs_id_65ecaa5ea7c4a6ed",
+          "tableFrom": "committees_committee",
+          "tableTo": "committees_committee",
+          "schemaTo": "parliament",
+          "columnsFrom": ["parent_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "committees_committee_slug_unique": {
+          "name": "committees_committee_slug_unique",
+          "nullsNotDistinct": false,
+          "columns": ["slug"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "parliament.committees_committeeactivity": {
+      "name": "committees_committeeactivity",
+      "schema": "parliament",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "committee_id": {
+          "name": "committee_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name_en": {
+          "name": "name_en",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name_fr": {
+          "name": "name_fr",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "study": {
+          "name": "study",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "committees_committeeactivity_committee_id": {
+          "name": "committees_committeeactivity_committee_id",
+          "columns": [
+            {
+              "expression": "committee_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "committees_committeeactivity_committee_id_committees_committee_id_fk": {
+          "name": "committees_committeeactivity_committee_id_committees_committee_id_fk",
+          "tableFrom": "committees_committeeactivity",
+          "tableTo": "committees_committee",
+          "schemaTo": "parliament",
+          "columnsFrom": ["committee_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "parliament.committees_committeeactivityinsession": {
+      "name": "committees_committeeactivityinsession",
+      "schema": "parliament",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "activity_id": {
+          "name": "activity_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "varchar(4)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_id": {
+          "name": "source_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "committees_committeeactivityinsession_activity_id": {
+          "name": "committees_committeeactivityinsession_activity_id",
+          "columns": [
+            {
+              "expression": "activity_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "committees_committeeactivityinsession_session_id": {
+          "name": "committees_committeeactivityinsession_session_id",
+          "columns": [
+            {
+              "expression": "session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "committees_committeeactivityinsession_session_id_like": {
+          "name": "committees_committeeactivityinsession_session_id_like",
+          "columns": [
+            {
+              "expression": "session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "committees_committeeactivityinsession_activity_id_committees_committeeactivity_id_fk": {
+          "name": "committees_committeeactivityinsession_activity_id_committees_committeeactivity_id_fk",
+          "tableFrom": "committees_committeeactivityinsession",
+          "tableTo": "committees_committeeactivity",
+          "schemaTo": "parliament",
+          "columnsFrom": ["activity_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "committees_committeeactivityinsession_session_id_core_session_id_fk": {
+          "name": "committees_committeeactivityinsession_session_id_core_session_id_fk",
+          "tableFrom": "committees_committeeactivityinsession",
+          "tableTo": "core_session",
+          "schemaTo": "parliament",
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "committees_committeeactivityinsession_source_id_unique": {
+          "name": "committees_committeeactivityinsession_source_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["source_id"]
+        },
+        "committees_committeeactivityi_activity_id_7357f535d6955621_uniq": {
+          "name": "committees_committeeactivityi_activity_id_7357f535d6955621_uniq",
+          "nullsNotDistinct": false,
+          "columns": ["activity_id", "session_id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "parliament.committees_committeeinsession": {
+      "name": "committees_committeeinsession",
+      "schema": "parliament",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "varchar(4)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "committee_id": {
+          "name": "committee_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "acronym": {
+          "name": "acronym",
+          "type": "varchar(5)",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "committees_committeeinsession_acronym": {
+          "name": "committees_committeeinsession_acronym",
+          "columns": [
+            {
+              "expression": "acronym",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "committees_committeeinsession_acronym_like": {
+          "name": "committees_committeeinsession_acronym_like",
+          "columns": [
+            {
+              "expression": "acronym",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "committees_committeeinsession_committee_id": {
+          "name": "committees_committeeinsession_committee_id",
+          "columns": [
+            {
+              "expression": "committee_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "committees_committeeinsession_session_id": {
+          "name": "committees_committeeinsession_session_id",
+          "columns": [
+            {
+              "expression": "session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "committees_committeeinsession_session_id_like": {
+          "name": "committees_committeeinsession_session_id_like",
+          "columns": [
+            {
+              "expression": "session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "committees_committeeinsession_session_id_core_session_id_fk": {
+          "name": "committees_committeeinsession_session_id_core_session_id_fk",
+          "tableFrom": "committees_committeeinsession",
+          "tableTo": "core_session",
+          "schemaTo": "parliament",
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "committees_committeeinsession_committee_id_committees_committee_id_fk": {
+          "name": "committees_committeeinsession_committee_id_committees_committee_id_fk",
+          "tableFrom": "committees_committeeinsession",
+          "tableTo": "committees_committee",
+          "schemaTo": "parliament",
+          "columnsFrom": ["committee_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "committees_committeeinsession_acronym_4d7dee190bc1dac4_uniq": {
+          "name": "committees_committeeinsession_acronym_4d7dee190bc1dac4_uniq",
+          "nullsNotDistinct": false,
+          "columns": ["acronym", "session_id"]
+        },
+        "committees_committeeinsession_session_id_7ce4b4057e46edfd_uniq": {
+          "name": "committees_committeeinsession_session_id_7ce4b4057e46edfd_uniq",
+          "nullsNotDistinct": false,
+          "columns": ["session_id", "committee_id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "parliament.committees_committeemeeting": {
+      "name": "committees_committeemeeting",
+      "schema": "parliament",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "start_time": {
+          "name": "start_time",
+          "type": "time(6)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "end_time": {
+          "name": "end_time",
+          "type": "time(6)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "committee_id": {
+          "name": "committee_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "number": {
+          "name": "number",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "varchar(4)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "minutes": {
+          "name": "minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notice": {
+          "name": "notice",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "evidence_id": {
+          "name": "evidence_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "in_camera": {
+          "name": "in_camera",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "travel": {
+          "name": "travel",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "webcast": {
+          "name": "webcast",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "televised": {
+          "name": "televised",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_id": {
+          "name": "source_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "committees_committeemeeting_committee_id": {
+          "name": "committees_committeemeeting_committee_id",
+          "columns": [
+            {
+              "expression": "committee_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "committees_committeemeeting_date": {
+          "name": "committees_committeemeeting_date",
+          "columns": [
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "committees_committeemeeting_session_id": {
+          "name": "committees_committeemeeting_session_id",
+          "columns": [
+            {
+              "expression": "session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "committees_committeemeeting_session_id_like": {
+          "name": "committees_committeemeeting_session_id_like",
+          "columns": [
+            {
+              "expression": "session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "committees_committeemeeting_committee_id_committees_committee_id_fk": {
+          "name": "committees_committeemeeting_committee_id_committees_committee_id_fk",
+          "tableFrom": "committees_committeemeeting",
+          "tableTo": "committees_committee",
+          "schemaTo": "parliament",
+          "columnsFrom": ["committee_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "committees_committeemeeting_session_id_core_session_id_fk": {
+          "name": "committees_committeemeeting_session_id_core_session_id_fk",
+          "tableFrom": "committees_committeemeeting",
+          "tableTo": "core_session",
+          "schemaTo": "parliament",
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "committees_committeemeeting_evidence_id_hansards_document_id_fk": {
+          "name": "committees_committeemeeting_evidence_id_hansards_document_id_fk",
+          "tableFrom": "committees_committeemeeting",
+          "tableTo": "hansards_document",
+          "schemaTo": "parliament",
+          "columnsFrom": ["evidence_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "committees_committeemeeting_evidence_id_unique": {
+          "name": "committees_committeemeeting_evidence_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["evidence_id"]
+        },
+        "committees_committeemeeting_session_id_792939e90cda4ac1_uniq": {
+          "name": "committees_committeemeeting_session_id_792939e90cda4ac1_uniq",
+          "nullsNotDistinct": false,
+          "columns": ["session_id", "number", "committee_id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "parliament.committees_committeemeeting_activities": {
+      "name": "committees_committeemeeting_activities",
+      "schema": "parliament",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "committeemeeting_id": {
+          "name": "committeemeeting_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "committeeactivity_id": {
+          "name": "committeeactivity_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "committees_committeemeeting_activities_committeeactivity_id": {
+          "name": "committees_committeemeeting_activities_committeeactivity_id",
+          "columns": [
+            {
+              "expression": "committeeactivity_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "committees_committeemeeting_activities_committeemeeting_id": {
+          "name": "committees_committeemeeting_activities_committeemeeting_id",
+          "columns": [
+            {
+              "expression": "committeemeeting_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "committees_committeemeeting_activities_committeemeeting_id_committees_committeemeeting_id_fk": {
+          "name": "committees_committeemeeting_activities_committeemeeting_id_committees_committeemeeting_id_fk",
+          "tableFrom": "committees_committeemeeting_activities",
+          "tableTo": "committees_committeemeeting",
+          "schemaTo": "parliament",
+          "columnsFrom": ["committeemeeting_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "committees_committeemeeting_activities_committeeactivity_id_committees_committeeactivity_id_fk": {
+          "name": "committees_committeemeeting_activities_committeeactivity_id_committees_committeeactivity_id_fk",
+          "tableFrom": "committees_committeemeeting_activities",
+          "tableTo": "committees_committeeactivity",
+          "schemaTo": "parliament",
+          "columnsFrom": ["committeeactivity_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "committees_committeem_committeemeeting_id_36a83bbd36111342_uniq": {
+          "name": "committees_committeem_committeemeeting_id_36a83bbd36111342_uniq",
+          "nullsNotDistinct": false,
+          "columns": ["committeemeeting_id", "committeeactivity_id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "parliament.committees_committeereport": {
+      "name": "committees_committeereport",
+      "schema": "parliament",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "committee_id": {
+          "name": "committee_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "varchar(4)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "number": {
+          "name": "number",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "name_en": {
+          "name": "name_en",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_id": {
+          "name": "source_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "adopted_date": {
+          "name": "adopted_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "presented_date": {
+          "name": "presented_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "government_response": {
+          "name": "government_response",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "parent_id": {
+          "name": "parent_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "name_fr": {
+          "name": "name_fr",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        }
+      },
+      "indexes": {
+        "committees_committeereport_committee_id": {
+          "name": "committees_committeereport_committee_id",
+          "columns": [
+            {
+              "expression": "committee_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "committees_committeereport_parent_id": {
+          "name": "committees_committeereport_parent_id",
+          "columns": [
+            {
+              "expression": "parent_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "committees_committeereport_session_id": {
+          "name": "committees_committeereport_session_id",
+          "columns": [
+            {
+              "expression": "session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "committees_committeereport_session_id_like": {
+          "name": "committees_committeereport_session_id_like",
+          "columns": [
+            {
+              "expression": "session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "committees_committeereport_committee_id_committees_committee_id_fk": {
+          "name": "committees_committeereport_committee_id_committees_committee_id_fk",
+          "tableFrom": "committees_committeereport",
+          "tableTo": "committees_committee",
+          "schemaTo": "parliament",
+          "columnsFrom": ["committee_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "committees_committeereport_session_id_core_session_id_fk": {
+          "name": "committees_committeereport_session_id_core_session_id_fk",
+          "tableFrom": "committees_committeereport",
+          "tableTo": "core_session",
+          "schemaTo": "parliament",
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "parent_id_refs_id_2e952deed4931d93": {
+          "name": "parent_id_refs_id_2e952deed4931d93",
+          "tableFrom": "committees_committeereport",
+          "tableTo": "committees_committeereport",
+          "schemaTo": "parliament",
+          "columnsFrom": ["parent_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "committees_committeereport_source_id_unique": {
+          "name": "committees_committeereport_source_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["source_id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "parliament.core_electedmember": {
+      "name": "core_electedmember",
+      "schema": "parliament",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "politician_id": {
+          "name": "politician_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "riding_id": {
+          "name": "riding_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "party_id": {
+          "name": "party_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "end_date": {
+          "name": "end_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "start_date": {
+          "name": "start_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "core_electedmember_end_date": {
+          "name": "core_electedmember_end_date",
+          "columns": [
+            {
+              "expression": "end_date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "core_electedmember_member_id": {
+          "name": "core_electedmember_member_id",
+          "columns": [
+            {
+              "expression": "politician_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "core_electedmember_party_id": {
+          "name": "core_electedmember_party_id",
+          "columns": [
+            {
+              "expression": "party_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "core_electedmember_riding_id": {
+          "name": "core_electedmember_riding_id",
+          "columns": [
+            {
+              "expression": "riding_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "core_electedmember_start_date": {
+          "name": "core_electedmember_start_date",
+          "columns": [
+            {
+              "expression": "start_date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "core_electedmember_politician_id_core_politician_id_fk": {
+          "name": "core_electedmember_politician_id_core_politician_id_fk",
+          "tableFrom": "core_electedmember",
+          "tableTo": "core_politician",
+          "schemaTo": "parliament",
+          "columnsFrom": ["politician_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "core_electedmember_riding_id_core_riding_id_fk": {
+          "name": "core_electedmember_riding_id_core_riding_id_fk",
+          "tableFrom": "core_electedmember",
+          "tableTo": "core_riding",
+          "schemaTo": "parliament",
+          "columnsFrom": ["riding_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "core_electedmember_party_id_core_party_id_fk": {
+          "name": "core_electedmember_party_id_core_party_id_fk",
+          "tableFrom": "core_electedmember",
+          "tableTo": "core_party",
+          "schemaTo": "parliament",
+          "columnsFrom": ["party_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "parliament.core_electedmember_sessions": {
+      "name": "core_electedmember_sessions",
+      "schema": "parliament",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "electedmember_id": {
+          "name": "electedmember_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "varchar(4)",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "core_electedmember_sessions_electedmember_id": {
+          "name": "core_electedmember_sessions_electedmember_id",
+          "columns": [
+            {
+              "expression": "electedmember_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "core_electedmember_sessions_session_id": {
+          "name": "core_electedmember_sessions_session_id",
+          "columns": [
+            {
+              "expression": "session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "core_electedmember_sessions_electedmember_id_core_electedmember_id_fk": {
+          "name": "core_electedmember_sessions_electedmember_id_core_electedmember_id_fk",
+          "tableFrom": "core_electedmember_sessions",
+          "tableTo": "core_electedmember",
+          "schemaTo": "parliament",
+          "columnsFrom": ["electedmember_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "core_electedmember_sessions_session_id_core_session_id_fk": {
+          "name": "core_electedmember_sessions_session_id_core_session_id_fk",
+          "tableFrom": "core_electedmember_sessions",
+          "tableTo": "core_session",
+          "schemaTo": "parliament",
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "core_electedmember_sessions_electedmember_id_6d9c051f_uniq": {
+          "name": "core_electedmember_sessions_electedmember_id_6d9c051f_uniq",
+          "nullsNotDistinct": false,
+          "columns": ["electedmember_id", "session_id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "parliament.core_party": {
+      "name": "core_party",
+      "schema": "parliament",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name_en": {
+          "name": "name_en",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "slug": {
+          "name": "slug",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "short_name_en": {
+          "name": "short_name_en",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "name_fr": {
+          "name": "name_fr",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "short_name_fr": {
+          "name": "short_name_fr",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "parliament.core_partyalternatename": {
+      "name": "core_partyalternatename",
+      "schema": "parliament",
+      "columns": {
+        "name": {
+          "name": "name",
+          "type": "varchar(100)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "party_id": {
+          "name": "party_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "core_partyalternatename_name_f40a3266_like": {
+          "name": "core_partyalternatename_name_f40a3266_like",
+          "columns": [
+            {
+              "expression": "name",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "core_partyalternatename_party_id_fc8d23e2": {
+          "name": "core_partyalternatename_party_id_fc8d23e2",
+          "columns": [
+            {
+              "expression": "party_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "core_partyalternatename_party_id_core_party_id_fk": {
+          "name": "core_partyalternatename_party_id_core_party_id_fk",
+          "tableFrom": "core_partyalternatename",
+          "tableTo": "core_party",
+          "schemaTo": "parliament",
+          "columnsFrom": ["party_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "parliament.core_politician": {
+      "name": "core_politician",
+      "schema": "parliament",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name_given": {
+          "name": "name_given",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "name_family": {
+          "name": "name_family",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "gender": {
+          "name": "gender",
+          "type": "varchar(1)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "headshot": {
+          "name": "headshot",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "slug": {
+          "name": "slug",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "headshot_thumbnail": {
+          "name": "headshot_thumbnail",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "core_politician_slug": {
+          "name": "core_politician_slug",
+          "columns": [
+            {
+              "expression": "slug",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "core_politician_slug_like": {
+          "name": "core_politician_slug_like",
+          "columns": [
+            {
+              "expression": "slug",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "parliament.core_politicianinfo": {
+      "name": "core_politicianinfo",
+      "schema": "parliament",
+      "columns": {
+        "politician_id": {
+          "name": "politician_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "value": {
+          "name": "value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "schema": {
+          "name": "schema",
+          "type": "varchar(40)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created": {
+          "name": "created",
+          "type": "timestamp (6) with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "core_politicianinfo_politician_id": {
+          "name": "core_politicianinfo_politician_id",
+          "columns": [
+            {
+              "expression": "politician_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "core_politicianinfo_schema": {
+          "name": "core_politicianinfo_schema",
+          "columns": [
+            {
+              "expression": "schema",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "core_politicianinfo_schema_like": {
+          "name": "core_politicianinfo_schema_like",
+          "columns": [
+            {
+              "expression": "schema",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "core_politicianinfo_politician_id_core_politician_id_fk": {
+          "name": "core_politicianinfo_politician_id_core_politician_id_fk",
+          "tableFrom": "core_politicianinfo",
+          "tableTo": "core_politician",
+          "schemaTo": "parliament",
+          "columnsFrom": ["politician_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "parliament.core_riding": {
+      "name": "core_riding",
+      "schema": "parliament",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name_en": {
+          "name": "name_en",
+          "type": "varchar(200)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "province": {
+          "name": "province",
+          "type": "varchar(2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "slug": {
+          "name": "slug",
+          "type": "varchar(60)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "edid": {
+          "name": "edid",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "name_fr": {
+          "name": "name_fr",
+          "type": "varchar(200)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "current": {
+          "name": "current",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "core_riding_edid": {
+          "name": "core_riding_edid",
+          "columns": [
+            {
+              "expression": "edid",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "core_riding_slug": {
+          "name": "core_riding_slug",
+          "columns": [
+            {
+              "expression": "slug",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "core_riding_slug_unique": {
+          "name": "core_riding_slug_unique",
+          "nullsNotDistinct": false,
+          "columns": ["slug"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "parliament.core_session": {
+      "name": "core_session",
+      "schema": "parliament",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(4)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "start": {
+          "name": "start",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "end": {
+          "name": "end",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "parliamentnum": {
+          "name": "parliamentnum",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sessnum": {
+          "name": "sessnum",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "parliament.elections_candidacy": {
+      "name": "elections_candidacy",
+      "schema": "parliament",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "candidate_id": {
+          "name": "candidate_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "riding_id": {
+          "name": "riding_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "party_id": {
+          "name": "party_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "election_id": {
+          "name": "election_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "votetotal": {
+          "name": "votetotal",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "elected": {
+          "name": "elected",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "votepercent": {
+          "name": "votepercent",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "elections_candidacy_candidate_id": {
+          "name": "elections_candidacy_candidate_id",
+          "columns": [
+            {
+              "expression": "candidate_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "elections_candidacy_election_id": {
+          "name": "elections_candidacy_election_id",
+          "columns": [
+            {
+              "expression": "election_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "elections_candidacy_party_id": {
+          "name": "elections_candidacy_party_id",
+          "columns": [
+            {
+              "expression": "party_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "elections_candidacy_riding_id": {
+          "name": "elections_candidacy_riding_id",
+          "columns": [
+            {
+              "expression": "riding_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "elections_candidacy_candidate_id_core_politician_id_fk": {
+          "name": "elections_candidacy_candidate_id_core_politician_id_fk",
+          "tableFrom": "elections_candidacy",
+          "tableTo": "core_politician",
+          "schemaTo": "parliament",
+          "columnsFrom": ["candidate_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "elections_candidacy_riding_id_core_riding_id_fk": {
+          "name": "elections_candidacy_riding_id_core_riding_id_fk",
+          "tableFrom": "elections_candidacy",
+          "tableTo": "core_riding",
+          "schemaTo": "parliament",
+          "columnsFrom": ["riding_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "elections_candidacy_party_id_core_party_id_fk": {
+          "name": "elections_candidacy_party_id_core_party_id_fk",
+          "tableFrom": "elections_candidacy",
+          "tableTo": "core_party",
+          "schemaTo": "parliament",
+          "columnsFrom": ["party_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "elections_candidacy_election_id_elections_election_id_fk": {
+          "name": "elections_candidacy_election_id_elections_election_id_fk",
+          "tableFrom": "elections_candidacy",
+          "tableTo": "elections_election",
+          "schemaTo": "parliament",
+          "columnsFrom": ["election_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "parliament.elections_election": {
+      "name": "elections_election",
+      "schema": "parliament",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "byelection": {
+          "name": "byelection",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "parliament.hansards_document": {
+      "name": "hansards_document",
+      "schema": "parliament",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "number": {
+          "name": "number",
+          "type": "varchar(6)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "varchar(4)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "most_frequent_word": {
+          "name": "most_frequent_word",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "wordcloud": {
+          "name": "wordcloud",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "document_type": {
+          "name": "document_type",
+          "type": "varchar(1)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_id": {
+          "name": "source_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "downloaded": {
+          "name": "downloaded",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "public": {
+          "name": "public",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "multilingual": {
+          "name": "multilingual",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "skip_parsing": {
+          "name": "skip_parsing",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "xml_source_url": {
+          "name": "xml_source_url",
+          "type": "varchar(200)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "first_imported": {
+          "name": "first_imported",
+          "type": "timestamp (6) with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_imported": {
+          "name": "last_imported",
+          "type": "timestamp (6) with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "skip_redownload": {
+          "name": "skip_redownload",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "hansards_document_document_type": {
+          "name": "hansards_document_document_type",
+          "columns": [
+            {
+              "expression": "document_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "hansards_document_document_type_like": {
+          "name": "hansards_document_document_type_like",
+          "columns": [
+            {
+              "expression": "document_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "hansards_document_source_id": {
+          "name": "hansards_document_source_id",
+          "columns": [
+            {
+              "expression": "source_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "hansards_hansard_session_id": {
+          "name": "hansards_hansard_session_id",
+          "columns": [
+            {
+              "expression": "session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "hansards_document_session_id_core_session_id_fk": {
+          "name": "hansards_document_session_id_core_session_id_fk",
+          "tableFrom": "hansards_document",
+          "tableTo": "core_session",
+          "schemaTo": "parliament",
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "hansards_document_source_id_unique": {
+          "name": "hansards_document_source_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["source_id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "parliament.hansards_statement": {
+      "name": "hansards_statement",
+      "schema": "parliament",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "document_id": {
+          "name": "document_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "time": {
+          "name": "time",
+          "type": "timestamp (6) with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "h1_en": {
+          "name": "h1_en",
+          "type": "varchar(300)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "h2_en": {
+          "name": "h2_en",
+          "type": "varchar(300)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "member_id": {
+          "name": "member_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "who_en": {
+          "name": "who_en",
+          "type": "varchar(300)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "content_en": {
+          "name": "content_en",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sequence": {
+          "name": "sequence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "wordcount": {
+          "name": "wordcount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "politician_id": {
+          "name": "politician_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "procedural": {
+          "name": "procedural",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "h3_en": {
+          "name": "h3_en",
+          "type": "varchar(300)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "who_hocid": {
+          "name": "who_hocid",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "content_fr": {
+          "name": "content_fr",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "statement_type": {
+          "name": "statement_type",
+          "type": "varchar(35)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "written_question": {
+          "name": "written_question",
+          "type": "varchar(1)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "source_id": {
+          "name": "source_id",
+          "type": "varchar(15)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "who_context_en": {
+          "name": "who_context_en",
+          "type": "varchar(300)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "slug": {
+          "name": "slug",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "urlcache": {
+          "name": "urlcache",
+          "type": "varchar(200)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "h1_fr": {
+          "name": "h1_fr",
+          "type": "varchar(400)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "h2_fr": {
+          "name": "h2_fr",
+          "type": "varchar(400)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "h3_fr": {
+          "name": "h3_fr",
+          "type": "varchar(400)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "who_fr": {
+          "name": "who_fr",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "who_context_fr": {
+          "name": "who_context_fr",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "wordcount_en": {
+          "name": "wordcount_en",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bill_debate_stage": {
+          "name": "bill_debate_stage",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "bill_debated_id": {
+          "name": "bill_debated_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "hansards_statement_bill_debate_stage_39688425": {
+          "name": "hansards_statement_bill_debate_stage_39688425",
+          "columns": [
+            {
+              "expression": "bill_debate_stage",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "hansards_statement_bill_debate_stage_39688425_like": {
+          "name": "hansards_statement_bill_debate_stage_39688425_like",
+          "columns": [
+            {
+              "expression": "bill_debate_stage",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "hansards_statement_bill_debated_id_e9c56f18": {
+          "name": "hansards_statement_bill_debated_id_e9c56f18",
+          "columns": [
+            {
+              "expression": "bill_debated_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "hansards_statement_hansard_id": {
+          "name": "hansards_statement_hansard_id",
+          "columns": [
+            {
+              "expression": "document_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "hansards_statement_member_id": {
+          "name": "hansards_statement_member_id",
+          "columns": [
+            {
+              "expression": "member_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "hansards_statement_politician_id": {
+          "name": "hansards_statement_politician_id",
+          "columns": [
+            {
+              "expression": "politician_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "hansards_statement_politician_ordered": {
+          "name": "hansards_statement_politician_ordered",
+          "columns": [
+            {
+              "expression": "politician_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "time",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "hansards_statement_sequence": {
+          "name": "hansards_statement_sequence",
+          "columns": [
+            {
+              "expression": "sequence",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "hansards_statement_slug": {
+          "name": "hansards_statement_slug",
+          "columns": [
+            {
+              "expression": "slug",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "hansards_statement_slug_like": {
+          "name": "hansards_statement_slug_like",
+          "columns": [
+            {
+              "expression": "slug",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "hansards_statement_speaker": {
+          "name": "hansards_statement_speaker",
+          "columns": [
+            {
+              "expression": "procedural",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "hansards_statement_time": {
+          "name": "hansards_statement_time",
+          "columns": [
+            {
+              "expression": "time",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "hansards_statement_who_hocid": {
+          "name": "hansards_statement_who_hocid",
+          "columns": [
+            {
+              "expression": "who_hocid",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "hansards_statement_document_id_hansards_document_id_fk": {
+          "name": "hansards_statement_document_id_hansards_document_id_fk",
+          "tableFrom": "hansards_statement",
+          "tableTo": "hansards_document",
+          "schemaTo": "parliament",
+          "columnsFrom": ["document_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "hansards_statement_member_id_core_electedmember_id_fk": {
+          "name": "hansards_statement_member_id_core_electedmember_id_fk",
+          "tableFrom": "hansards_statement",
+          "tableTo": "core_electedmember",
+          "schemaTo": "parliament",
+          "columnsFrom": ["member_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "hansards_statement_politician_id_core_politician_id_fk": {
+          "name": "hansards_statement_politician_id_core_politician_id_fk",
+          "tableFrom": "hansards_statement",
+          "tableTo": "core_politician",
+          "schemaTo": "parliament",
+          "columnsFrom": ["politician_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "hansards_statement_bill_debated_id_bills_bill_id_fk": {
+          "name": "hansards_statement_bill_debated_id_bills_bill_id_fk",
+          "tableFrom": "hansards_statement",
+          "tableTo": "bills_bill",
+          "schemaTo": "parliament",
+          "columnsFrom": ["bill_debated_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "hansards_statement_document_id_77a67b806d7aef3_uniq": {
+          "name": "hansards_statement_document_id_77a67b806d7aef3_uniq",
+          "nullsNotDistinct": false,
+          "columns": ["document_id", "slug"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "hansards_statement_who_hocid_check": {
+          "name": "hansards_statement_who_hocid_check",
+          "value": "(who_hocid >= 0)"
+        },
+        "hansards_statement_wordcount_en_check": {
+          "name": "hansards_statement_wordcount_en_check",
+          "value": "(wordcount_en >= 0)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "parliament.hansards_statement_bills": {
+      "name": "hansards_statement_bills",
+      "schema": "parliament",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "statement_id": {
+          "name": "statement_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bill_id": {
+          "name": "bill_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "hansards_statement_bills_bill_id": {
+          "name": "hansards_statement_bills_bill_id",
+          "columns": [
+            {
+              "expression": "bill_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "hansards_statement_bills_statement_id": {
+          "name": "hansards_statement_bills_statement_id",
+          "columns": [
+            {
+              "expression": "statement_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "hansards_statement_bills_statement_id_hansards_statement_id_fk": {
+          "name": "hansards_statement_bills_statement_id_hansards_statement_id_fk",
+          "tableFrom": "hansards_statement_bills",
+          "tableTo": "hansards_statement",
+          "schemaTo": "parliament",
+          "columnsFrom": ["statement_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "hansards_statement_bills_bill_id_bills_bill_id_fk": {
+          "name": "hansards_statement_bills_bill_id_bills_bill_id_fk",
+          "tableFrom": "hansards_statement_bills",
+          "tableTo": "bills_bill",
+          "schemaTo": "parliament",
+          "columnsFrom": ["bill_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "hansards_statement_bills_statement_id_55ead5ec_uniq": {
+          "name": "hansards_statement_bills_statement_id_55ead5ec_uniq",
+          "nullsNotDistinct": false,
+          "columns": ["statement_id", "bill_id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "parliament.hansards_statement_mentioned_politicians": {
+      "name": "hansards_statement_mentioned_politicians",
+      "schema": "parliament",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "statement_id": {
+          "name": "statement_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "politician_id": {
+          "name": "politician_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "hansards_statement_mentioned_politicians_politician_id": {
+          "name": "hansards_statement_mentioned_politicians_politician_id",
+          "columns": [
+            {
+              "expression": "politician_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "hansards_statement_mentioned_politicians_statement_id": {
+          "name": "hansards_statement_mentioned_politicians_statement_id",
+          "columns": [
+            {
+              "expression": "statement_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "hansards_statement_mentioned_politicians_statement_id_hansards_statement_id_fk": {
+          "name": "hansards_statement_mentioned_politicians_statement_id_hansards_statement_id_fk",
+          "tableFrom": "hansards_statement_mentioned_politicians",
+          "tableTo": "hansards_statement",
+          "schemaTo": "parliament",
+          "columnsFrom": ["statement_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "hansards_statement_mentioned_politicians_politician_id_core_politician_id_fk": {
+          "name": "hansards_statement_mentioned_politicians_politician_id_core_politician_id_fk",
+          "tableFrom": "hansards_statement_mentioned_politicians",
+          "tableTo": "core_politician",
+          "schemaTo": "parliament",
+          "columnsFrom": ["politician_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "hansards_statement_mentioned_statement_id_144d57244608b1e4_uniq": {
+          "name": "hansards_statement_mentioned_statement_id_144d57244608b1e4_uniq",
+          "nullsNotDistinct": false,
+          "columns": ["statement_id", "politician_id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {
+    "rag": "rag",
+    "legislation": "legislation",
+    "parliament": "parliament"
+  },
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

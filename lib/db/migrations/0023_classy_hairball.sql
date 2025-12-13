@@ -1,0 +1,1 @@
+ALTER TABLE "legislation"."sections" ALTER COLUMN "schedule_originating_ref" SET DATA TYPE text;

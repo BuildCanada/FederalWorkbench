@@ -1,0 +1,2 @@
+ALTER TABLE "rag"."leg_resources" DROP CONSTRAINT "leg_resources_source_type_check";--> statement-breakpoint
+ALTER TABLE "rag"."leg_resources" ADD CONSTRAINT "leg_resources_source_type_check" CHECK ("rag"."leg_resources"."source_type" IN ('act', 'act_section', 'regulation', 'regulation_section', 'defined_term', 'preamble', 'treaty', 'cross_reference', 'table_of_provisions', 'signature_block', 'related_provisions', 'footnote', 'schedule', 'marginal_note', 'publication_item'));

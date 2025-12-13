@@ -1,6 +1,6 @@
-# Legislation RAG System Documentation
+# Legislation RAG System
 
-Retrieval for federal acts and regulations from Justice Canada, providing grounded, bilingual answers with citations.
+Retrieval-augmented generation for Canadian federal acts and regulations from Justice Canada. The system provides bilingual (English/French) answers with citations linking to the official laws-lois.justice.gc.ca website.
 
 ## Architecture Overview
 
@@ -11,169 +11,183 @@ Retrieval for federal acts and regulations from Justice Canada, providing ground
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│     Language Detection (parliament/query-analysis.ts: detectLanguage)    │
-│  - Heuristic EN/FR detection with fallback                              │
+│                        Language Detection                                │
+│  Heuristic EN/FR detection with fallback to English                     │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│        Hybrid Search (legislation/search.ts)                            │
-│  - Vector (pgvector) + keyword (tsvector) with caching                  │
-│  - Source filters: acts, act_sections, regulations, regulation_sections │
-│  - Language retry without filter if zero hits                           │
+│                          Hybrid Search                                   │
+│  Vector similarity (70%) + keyword matching (30%)                       │
+│  Filters by language, source type, document ID                          │
+│  Retries without language filter if no results found                    │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│        Context Building (legislation/context-builder.ts)                │
-│  - Deduplicate by act/reg + section                                     │
-│  - Similarity sort, top N (default 10)                                  │
-│  - Snippet truncation (~480 chars) with citation prefix `L`             │
+│                      Cross-Encoder Reranking                            │
+│  Cohere rerank-multilingual-v3.0                                        │
+│  Filters results below 0.1 relevance threshold                          │
+│  Falls back to similarity order on API failure                          │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│        Hydration (legislation/hydrate.ts)                               │
-│  - Hydrate the top act or regulation (sections limited for size)        │
-│  - Fallback to opposite language if preferred language missing          │
+│                        Context Building                                  │
+│  Deduplicates by document + section + chunk                             │
+│  Truncates snippets to ~480 characters at sentence boundaries           │
+│  Assigns citation IDs with "L" prefix                                   │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                           LLM Response                                   │
-│  System prompt includes: context snippets, hydrated sources, citations  │
+│                           Hydration                                      │
+│  Fetches full document for artifact panel display                       │
+│  Uses cross-encoder ranking (not vector similarity)                     │
+│  Caps at 150 sections / ~100KB for LLM context                          │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          LLM Response                                    │
+│  System prompt includes context snippets and citations                  │
+│  Artifact panel shows hydrated document                                 │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Core Components
+## Retrieval Pipeline
 
-### 1. Embedding Generation (`lib/ai/embeddings.ts`)
+### Language Detection
 
-Shared with Parliament RAG; uses Cohere `embed-multilingual-v3.0` (1024 dims) with 24-hour caching.
+When a query arrives, the system detects whether it is in English or French using heuristic analysis. This detection determines the preferred language for search results and response formatting. If detection is uncertain, the system defaults to English.
 
-### 2. Chunking (`lib/rag/legislation/chunking.ts`, `lib/rag/shared/chunking.ts`)
+### Hybrid Search
 
-Section-aware chunking for acts and regulations:
+The search combines two retrieval methods weighted together:
 
-- Prepends document title + section label/marginal note for context.
-- Uses shared 4800-character chunks with 800-character overlap for long sections.
+**Vector similarity (70% weight)** uses Cohere's `embed-multilingual-v3.0` model to find semantically similar content. This handles paraphrasing, synonyms, and conceptual matches well.
 
-```typescript
-const chunks = chunkSection(section, section.documentTitle);
-```
+**Keyword matching (30% weight)** uses PostgreSQL's full-text search to find exact term matches. This helps with specific section numbers, act names, and legal terminology that semantic search might miss.
 
-### 3. Hybrid Search (`lib/rag/legislation/search.ts`)
+Results must meet a minimum similarity threshold of 0.4. If a language-filtered search returns no results, the system retries without the language filter to ensure the user gets relevant content even if it's in the other official language.
 
-pgvector + `tsvector` hybrid retrieval:
+The system provides specialized search modes for different query types. Questions about definitions prioritize defined terms with a relevance boost. Metadata-only queries (like "acts amended in 2023") use database indexes without vector search.
 
-- Weighting: 0.7 vector, 0.3 keyword (from `HYBRID_SEARCH_CONFIG`).
-- Filters: language, sourceType (`act`, `act_section`, `regulation`, `regulation_section`), actId, regulationId.
-- Language fallback retry if filtered search returns zero results.
-- Returns citations built from Justice Canada URLs.
+### Cross-Encoder Reranking
 
-Helpers:
-- `searchActs()` searches act metadata + sections.
-- `searchRegulations()` searches regulation metadata + sections.
+After initial retrieval, a cross-encoder model re-evaluates each result by considering the query and document together as a pair, rather than comparing embeddings independently. This produces more accurate relevance scores for legal text where semantic nuance matters.
 
-### 4. Context Building (`lib/rag/legislation/context-builder.ts`)
+The system uses Cohere's `rerank-multilingual-v3.0` model, which supports both English and French. Results scoring below 0.1 relevance are filtered out. If the reranking API fails, the system gracefully falls back to the original similarity-based ordering.
 
-Builds LLM-ready context with citation prefix `L`:
+Rerank results are cached for one hour to reduce API costs for repeated queries.
 
-- Deduplicates by act/reg + section + chunk index.
-- Similarity sort (no cross-encoder reranker yet); defaults to top 10 via `RERANKER_CONFIG.DEFAULT_TOP_N`.
-- Snippet truncation (~480 chars) with sentence-aware cut and duplicate snippet removal.
+### Context Building
 
-### 5. Hydration (`lib/rag/legislation/hydrate.ts`)
+The context builder prepares search results for the LLM:
 
-Hydrates the top act or regulation for artifact display:
+**Deduplication** removes duplicate content that may appear when the same section matches multiple query variations. Results are deduplicated by source type, document ID, section ID, and chunk index.
 
-- Fetches sections (capped at 150) and trims output (~100KB) with table of contents when large.
-- Adds truncation notices and language fallback notes when needed.
-- Returns `HydratedLegislationSource` with markdown, language used, and optional note.
+**Snippet truncation** shortens each result to approximately 480 characters, cutting at sentence boundaries when possible to preserve readability.
+
+**Citation assignment** gives each result a numbered citation with an "L" prefix (L1, L2, L3...) to distinguish legislation citations from Parliament citations when both RAG systems are active.
+
+The context includes both English and French citation text, allowing the response to use the appropriate language.
+
+### Hydration
+
+Hydration fetches the complete document for display in the artifact panel. The system hydrates the top result from the cross-encoder ranking, ensuring users see the document the model determined most relevant rather than just the highest vector similarity match.
+
+For acts and regulations, hydration fetches section content from the database and formats it as markdown. To prevent overwhelming the LLM context window, large documents are capped at 150 sections and approximately 100KB of markdown. A truncation notice informs users when they're viewing a partial document.
+
+When the preferred language version isn't available, the system falls back to the other official language and includes a note explaining the substitution.
 
 ## Data Sources
 
-The system indexes four legislation source types:
+The system indexes 15 types of legislative content:
 
-| Source Type | Description | Chunked |
-|-------------|-------------|---------|
-| `act` | Act metadata | No (metadata chunk) |
-| `act_section` | Act sections | Yes |
-| `regulation` | Regulation metadata | No (metadata chunk) |
-| `regulation_section` | Regulation sections | Yes |
+**Core documents:**
+- Acts (federal statutes)
+- Act sections (numbered provisions within acts)
+- Regulations (delegated legislation)
+- Regulation sections (numbered provisions within regulations)
+
+**Interpretive content:**
+- Defined terms from interpretation sections
+- Preambles stating legislative purpose
+- Marginal notes (section headings)
+
+**Supplementary material:**
+- Schedules and appendices
+- Treaties and conventions referenced in legislation
+- Cross-references to other acts or regulations
+- Tables of provisions (document outlines)
+- Signature blocks (official attestations)
+- Related provisions (transitional rules)
+- Footnotes (explanatory notes)
+- Publication items (regulatory notices and recommendations)
+
+Sections from acts, regulations, and schedules are chunked for embedding. Other content types are embedded as single units.
+
+## Embedding Generation
+
+### Legal-Boundary Chunking
+
+When generating embeddings for sections, the chunking process respects the hierarchical structure of Canadian legislation:
+
+- Subsections: (1), (2), (3)
+- Paragraphs: (a), (b), (c)
+- Subparagraphs: (i), (ii), (iii)
+- Clauses: (A), (B), (C)
+
+The system prefers splitting at these legal boundaries rather than arbitrary character positions. This preserves the semantic coherence of legal provisions.
+
+### Contextual Headers
+
+Each chunk includes a contextual header with the document title and section information. This helps the embedding model understand each chunk's context even when viewed in isolation.
+
+### Token-Based Sizing
+
+Chunks target approximately 1,536 tokens with 256 tokens of overlap between adjacent chunks. The overlap ensures concepts spanning chunk boundaries are captured in multiple embeddings.
+
+Historical amendment notes are appended to section content, making the amendment history searchable.
+
+## Citations
+
+Every search result includes a citation linking to the Justice Canada website. Citations are bilingual, with both English and French text and URLs.
+
+Section-level citations include anchors to scroll directly to the relevant provision. Citation format varies by source type—for example, defined terms show the term in quotes, and cross-references show both source and target documents.
 
 ## Database Schema
 
-### Resources Table (`lib/db/rag/schema.ts`)
+Legislation content is stored in two tables within the `rag` schema:
 
-Stores legislation content chunks with metadata:
+**Resources table** stores content chunks with metadata including source type, language, document IDs, section labels, and additional fields specific to each source type. Resources also store a paired resource key for cross-lingual lookups.
 
-```typescript
-type LegResourceMetadata = {
-  sourceType: "act" | "act_section" | "regulation" | "regulation_section";
-  language: "en" | "fr";
-  chunkIndex?: number; // 0 for metadata, 1+ for content
-  actId?: string;
-  regulationId?: string;
-  sectionId?: string;
-  sectionLabel?: string;
-  marginalNote?: string;
-  documentTitle: string;
-};
-```
+**Embeddings table** stores the 1024-dimensional vectors from Cohere's embedding model alongside a `tsvector` column for keyword search. HNSW and GIN indexes enable efficient hybrid retrieval.
 
-### Embeddings Table
+## Caching
 
-Vector storage with HNSW index and `tsvector` for hybrid search:
+The system uses Redis caching at multiple levels:
 
-```sql
-CREATE TABLE rag.leg_embeddings (
-  id VARCHAR(191) PRIMARY KEY,
-  resourceId VARCHAR(191) REFERENCES rag.leg_resources(id),
-  content TEXT NOT NULL,
-  embedding VECTOR(1024) NOT NULL,
-  tsv TSVECTOR  -- For hybrid keyword + semantic search
-);
+| Cache | TTL | Purpose |
+|-------|-----|---------|
+| Embeddings | 24 hours | Avoid recomputing expensive embeddings |
+| Search results | 1 hour | Speed up repeated queries |
+| Rerank results | 1 hour | Reduce Cohere API calls |
+| Context | 1 hour | Cache complete retrieval results |
 
-CREATE INDEX leg_embeddings_embedding_idx ON rag.leg_embeddings
-  USING hnsw (embedding vector_cosine_ops);
-CREATE INDEX leg_embeddings_tsv_idx ON rag.leg_embeddings
-  USING gin(tsv);
-```
+Set `RAG_CACHE_DISABLE=true` to bypass caching during development.
 
-## Caching Strategy
+## Integration
 
-| Cache Type | TTL | Key Pattern |
-|------------|-----|-------------|
-| Embeddings | 24 hours | `emb:{sha1(text)}` |
-| Search results | 1 hour | `leg:search:{lang}:{type}:{act}:{reg}:{threshold}:{limit}:{sha1(query)}` |
-| Context | 1 hour | `leg:ctx:{sha1(query|limit)}` |
+### Automatic Context Retrieval
 
-Set `RAG_CACHE_DISABLE=true` to bypass Redis during development.
+When legislation RAG is enabled, every chat request automatically retrieves relevant legislation context before generating a response. The context is prepended to the system prompt alongside any Parliament context.
 
-## Integration Points
+### On-Demand Tool
 
-### Chat API (`app/(chat)/api/chat/route.ts`)
+The LLM can also request legislation context on demand using the `retrieveLegislationContext` tool. This allows the model to fetch additional context when the automatic retrieval didn't surface the needed information.
 
-Legislation and Parliament RAG are enabled by default; set `LEG_RAG_ENABLED=false` (or `NEXT_PUBLIC_LEG_RAG_ENABLED=false`) to disable legislation retrieval.
+### Configuration
 
-```typescript
-const parlResult = isParlRagEnabled
-  ? await getParliamentContext(userText, 10)
-  : undefined;
-const legResult = isLegRagEnabled
-  ? await getLegislationContext(userText, 10)
-  : undefined;
-const contextParts = [parlResult?.prompt, legResult?.prompt].filter(Boolean);
-```
-
-### Tool Call (`lib/ai/tools/retrieve-legislation-context.ts`)
-
-AI tool for on-demand retrieval:
-
-```typescript
-export const retrieveLegislationContext = tool({
-  description: "Retrieve Canadian federal legislation context...",
-  execute: async ({ query, limit }) => getLegislationContext(query, limit),
-});
-```
+Legislation RAG is disabled by default. Set `LEG_RAG_ENABLED=true` to enable automatic retrieval. When disabled, the system won't search legislation or include legislation context in responses.

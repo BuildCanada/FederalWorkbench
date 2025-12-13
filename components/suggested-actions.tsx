@@ -15,10 +15,10 @@ type SuggestedActionsProps = {
 
 function PureSuggestedActions({ chatId, sendMessage }: SuggestedActionsProps) {
   const suggestedActions = [
-    "Tell me about Bill C-35 of the 44th Parliament",
-    "Parlez-moi de la Loi sur l'aéronautique",
-    "Tell me about the Aeronautics Act",
-    "Parlez-moi du projet de loi C-35 de la 44e législature.",
+    "Qu'est-ce qu'un 'obstacle' en vertu de la Loi canadienne sur l'accessibilité?",
+    "What is a 'barrier' under the Accessible Canada Act?",
+    "How is 'personal information' defined?",
+    "Comment définit-on les 'renseignements personnels'?",
   ];
 
   return (
@@ -35,7 +35,7 @@ function PureSuggestedActions({ chatId, sendMessage }: SuggestedActionsProps) {
           transition={{ delay: 0.05 * index }}
         >
           <Suggestion
-            className="h-auto w-full whitespace-normal p-3 text-left"
+            className="h-full w-full whitespace-normal text-balance p-3 text-center"
             onClick={(suggestion) => {
               window.history.replaceState({}, "", `/workbench/${chatId}`);
               sendMessage({

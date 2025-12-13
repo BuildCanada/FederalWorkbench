@@ -482,7 +482,6 @@ async function importActFromXml(
       sourceSectionLabel: ref.sourceSectionLabel,
       targetType: ref.targetType,
       targetRef: ref.targetRef,
-      targetSectionRef: ref.targetSectionRef,
       referenceText: ref.referenceText,
     });
   }
@@ -583,7 +582,6 @@ async function importRegulationFromXml(
       sourceSectionLabel: ref.sourceSectionLabel,
       targetType: ref.targetType,
       targetRef: ref.targetRef,
-      targetSectionRef: ref.targetSectionRef,
       referenceText: ref.referenceText,
     });
   }

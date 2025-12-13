@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { HYBRID_SEARCH_CONFIG } from "@/lib/rag/parliament/constants";
+import { HYBRID_SEARCH_CONFIG } from "@/lib/rag/shared/constants";
 
 /**
  * Regression tests for hybrid search functionality.

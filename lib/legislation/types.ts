@@ -32,6 +32,7 @@ export type LimsMetadata = {
   enactId?: string;
   pitDate?: string;
   currentDate?: string;
+  inForceStartDate?: string;
 };
 
 /**
@@ -88,6 +89,15 @@ export type FootnoteInfo = {
 };
 
 /**
+ * Internal reference within the same document (XRefInternal)
+ */
+export type InternalReference = {
+  targetLabel: string;
+  targetId?: string;
+  referenceText?: string;
+};
+
+/**
  * Content type flags for sections
  * Tracks special content that may need different handling in RAG/display
  */
@@ -127,6 +137,19 @@ export type RegulationMakerInfo = {
 };
 
 /**
+ * Publication items specific to regulations (Recommendation/Notice blocks)
+ */
+export type RegulationPublicationItem = {
+  type: "recommendation" | "notice";
+  content: string;
+  contentHtml?: string;
+  publicationRequirement?: "STATUTORY" | "ADMINISTRATIVE";
+  sourceSections?: string[];
+  limsMetadata?: LimsMetadata;
+  footnotes?: FootnoteInfo[];
+};
+
+/**
  * Enabling authority reference (act that authorizes a regulation)
  */
 export type EnablingAuthorityInfo = {
@@ -153,11 +176,37 @@ export type RelatedProvisionInfo = {
 };
 
 /**
+ * Treaty section heading for navigation (Parts, Chapters, Articles)
+ */
+export type TreatySectionHeading = {
+  level: number; // 1 = Part, 2 = Chapter/Article, 3 = Sub-section
+  label?: string; // "PART I", "ARTICLE 1"
+  title?: string; // "General Provisions"
+};
+
+/**
+ * Defined term within a treaty
+ */
+export type TreatyDefinition = {
+  term: string;
+  definition: string;
+  definitionHtml?: string;
+};
+
+/**
  * Convention/Agreement/Treaty content
+ * Structured representation of international agreements
  */
 export type TreatyContent = {
-  title?: string;
-  text: string;
+  title?: string; // Main title from first Heading
+  preamble?: string; // Preamble text (party names, recitals before PART I)
+  preambleHtml?: string; // Preamble HTML
+  sections?: TreatySectionHeading[]; // Section headings for TOC/navigation
+  definitions?: TreatyDefinition[]; // Extracted defined terms
+  signatureText?: string; // Closing text ("IN WITNESS WHEREOF...")
+  signatureTextHtml?: string; // Closing HTML
+  text: string; // Full text (required, backward compat)
+  textHtml?: string; // Full HTML for display
 };
 
 /**
@@ -286,8 +335,15 @@ export type ParsedAct = {
   hasPreviousVersion?: string;
   // Chapter information
   consolidatedNumber?: string;
+  consolidatedNumberOfficial?: "yes" | "no"; // ConsolidatedNumber official attribute
   annualStatuteYear?: string;
   annualStatuteChapter?: string;
+  // Short title status
+  shortTitleStatus?: "official" | "unofficial"; // ShortTitle status attribute
+  // Reversed short title for alphabetical indexes (from lookup.xml)
+  reversedShortTitle?: string;
+  // Whether this document should be consolidated (from lookup.xml)
+  consolidateFlag?: boolean;
   // LIMS tracking (language-specific!)
   limsMetadata?: LimsMetadata;
   billHistory?: BillHistory;
@@ -318,6 +374,10 @@ export type ParsedRegulation = {
   gazettePart?: string; // "I" or "II"
   title: string; // Title in this language
   longTitle?: string; // Full formal name in this language
+  // Reversed short title for alphabetical indexes (from lookup.xml)
+  reversedShortTitle?: string;
+  // Whether this document should be consolidated (from lookup.xml)
+  consolidateFlag?: boolean;
   // Multiple enabling authorities support (regulations can be made under multiple acts)
   enablingAuthorities?: EnablingAuthorityInfo[];
   // Legacy single enabling act fields (for backwards compatibility)
@@ -339,6 +399,20 @@ export type ParsedRegulation = {
   // Medium Priority: Content completeness
   signatureBlocks?: SignatureBlock[];
   tableOfProvisions?: TableOfProvisionsEntry[];
+  // Recommendation/Notice blocks with publication metadata
+  recommendations?: RegulationPublicationItem[];
+  notices?: RegulationPublicationItem[];
+};
+
+/**
+ * Provision heading information
+ * Found within Provision elements in schedules/forms (e.g., treaty articles)
+ * Contains subsection/topic titles with formatting hints
+ */
+export type ProvisionHeadingInfo = {
+  text: string;
+  formatRef?: string;
+  limsMetadata?: LimsMetadata;
 };
 
 /**
@@ -373,6 +447,9 @@ export type ParsedSection = {
   scheduleId?: string;
   scheduleBilingual?: string;
   scheduleSpanLanguages?: string;
+  scheduleOriginatingRef?: string;
+  // Provision heading (for provisions in schedules/forms with topic headings)
+  provisionHeading?: ProvisionHeadingInfo;
   // Content flags for special content types
   contentFlags?: ContentFlags;
   // Lower Priority: Formatting attributes
@@ -380,6 +457,8 @@ export type ParsedSection = {
   // For linking to parent
   actId?: string;
   regulationId?: string;
+  // Internal cross-references within the same document
+  internalReferences?: InternalReference[] | null;
 };
 
 /**
@@ -415,14 +494,14 @@ export type ParsedDefinedTerm = {
 
 /**
  * Parsed Cross Reference
+ * Links between legislation documents (acts and regulations)
  */
 export type ParsedCrossReference = {
   sourceActId?: string;
   sourceRegulationId?: string;
   sourceSectionLabel?: string;
   targetType: "act" | "regulation";
-  targetRef: string; // raw link value
-  targetSectionRef?: string;
+  targetRef: string; // raw link value (e.g., "C-46", "SOR-2000-1")
   referenceText?: string;
 };
 

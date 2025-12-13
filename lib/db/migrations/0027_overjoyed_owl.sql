@@ -1,0 +1,2 @@
+DROP INDEX "legislation"."sections_canonical_section_id_idx";--> statement-breakpoint
+CREATE UNIQUE INDEX "sections_canonical_section_id_idx" ON "legislation"."sections" USING btree ("canonical_section_id");

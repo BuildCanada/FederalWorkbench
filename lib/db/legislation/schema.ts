@@ -1,5 +1,6 @@
 import type { InferSelectModel } from "drizzle-orm";
 import {
+  boolean,
   date,
   foreignKey,
   index,
@@ -9,11 +10,24 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   varchar,
 } from "drizzle-orm/pg-core";
 import { nanoid } from "nanoid";
 
 export const legislationSchema = pgSchema("legislation");
+
+// Enum for ShortTitle status attribute
+export const shortTitleStatusEnum = legislationSchema.enum(
+  "short_title_status",
+  ["official", "unofficial"]
+);
+
+// Enum for ConsolidatedNumber official attribute
+export const consolidatedNumberOfficialEnum = legislationSchema.enum(
+  "consolidated_number_official",
+  ["yes", "no"]
+);
 
 /**
  * LIMS metadata - Justice Canada tracking information
@@ -26,6 +40,7 @@ export type LimsMetadata = {
   enactId?: string; // lims:enactId - enactment reference
   pitDate?: string; // lims:pit-date - point in time
   currentDate?: string; // lims:current-date
+  inForceStartDate?: string; // lims:inforce-start-date
 };
 
 /**
@@ -86,11 +101,37 @@ export type RelatedProvisionInfo = {
 };
 
 /**
+ * Treaty section heading for navigation (Parts, Chapters, Articles)
+ */
+export type TreatySectionHeading = {
+  level: number; // 1 = Part, 2 = Chapter/Article, 3 = Sub-section
+  label?: string; // "PART I", "ARTICLE 1"
+  title?: string; // "General Provisions"
+};
+
+/**
+ * Defined term within a treaty
+ */
+export type TreatyDefinition = {
+  term: string;
+  definition: string;
+  definitionHtml?: string;
+};
+
+/**
  * Convention/Agreement/Treaty content
+ * Structured representation of international agreements
  */
 export type TreatyContent = {
-  title?: string;
-  text: string;
+  title?: string; // Main title from first Heading
+  preamble?: string; // Preamble text (party names, recitals before PART I)
+  preambleHtml?: string; // Preamble HTML
+  sections?: TreatySectionHeading[]; // Section headings for TOC/navigation
+  definitions?: TreatyDefinition[]; // Extracted defined terms
+  signatureText?: string; // Closing text ("IN WITNESS WHEREOF...")
+  signatureTextHtml?: string; // Closing HTML
+  text: string; // Full text (required, backward compat)
+  textHtml?: string; // Full HTML for display
 };
 
 /**
@@ -161,8 +202,17 @@ export const acts = legislationSchema.table(
     hasPreviousVersion: varchar("has_previous_version", { length: 10 }), // "true" or "false"
     // Chapter information (e.g., "A-1", "2019, c. 10")
     consolidatedNumber: varchar("consolidated_number", { length: 50 }),
+    consolidatedNumberOfficial: consolidatedNumberOfficialEnum(
+      "consolidated_number_official"
+    ), // "yes" or "no"
     annualStatuteYear: varchar("annual_statute_year", { length: 20 }),
     annualStatuteChapter: varchar("annual_statute_chapter", { length: 50 }),
+    // Short title status
+    shortTitleStatus: shortTitleStatusEnum("short_title_status"), // "official" or "unofficial"
+    // Reversed short title for alphabetical indexes (from lookup.xml)
+    reversedShortTitle: text("reversed_short_title"),
+    // Whether this document should be consolidated (from lookup.xml)
+    consolidateFlag: boolean("consolidate_flag").default(false),
     // LIMS tracking metadata (Justice Canada internal IDs) - language-specific!
     limsMetadata: jsonb("lims_metadata").$type<LimsMetadata>(),
     // Bill history (parliament, stages, assent dates)
@@ -207,6 +257,19 @@ export type RegulationMakerInfo = {
 };
 
 /**
+ * Publication items specific to regulations (Recommendation/Notice blocks)
+ */
+export type RegulationPublicationItem = {
+  type: "recommendation" | "notice";
+  content: string;
+  contentHtml?: string;
+  publicationRequirement?: "STATUTORY" | "ADMINISTRATIVE";
+  sourceSections?: string[];
+  limsMetadata?: LimsMetadata;
+  footnotes?: FootnoteInfo[];
+};
+
+/**
  * Regulations Table
  * Stores Canadian federal regulations metadata
  *
@@ -234,6 +297,10 @@ export const regulations = legislationSchema.table(
     title: text("title").notNull(),
     // Long title (full formal name) in this language
     longTitle: text("long_title"),
+    // Reversed short title for alphabetical indexes (from lookup.xml)
+    reversedShortTitle: text("reversed_short_title"),
+    // Whether this document should be consolidated (from lookup.xml)
+    consolidateFlag: boolean("consolidate_flag").default(false),
     // Multiple enabling authorities support (regulations can be made under multiple acts)
     enablingAuthorities: jsonb("enabling_authorities").$type<
       EnablingAuthorityInfo[]
@@ -264,6 +331,10 @@ export const regulations = legislationSchema.table(
       jsonb("related_provisions").$type<RelatedProvisionInfo[]>(),
     // Convention/Agreement/Treaty content
     treaties: jsonb("treaties").$type<TreatyContent[]>(),
+    // Recommendation/Notice blocks with publication metadata
+    recommendations:
+      jsonb("recommendations").$type<RegulationPublicationItem[]>(),
+    notices: jsonb("notices").$type<RegulationPublicationItem[]>(),
     // Signature blocks (official signatures on treaties/conventions)
     signatureBlocks: jsonb("signature_blocks").$type<SignatureBlock[]>(),
     // Table of provisions (navigation structure)
@@ -358,6 +429,15 @@ export type TableHeaderInfo = {
 };
 
 /**
+ * Internal reference within the same document (XRefInternal)
+ */
+export type InternalReference = {
+  targetLabel: string;
+  targetId?: string;
+  referenceText?: string;
+};
+
+/**
  * Content type flags for sections
  * Tracks special content that may need different handling in RAG/display
  */
@@ -408,6 +488,17 @@ export type FormattingAttributes = {
 };
 
 /**
+ * Provision heading information
+ * Found within Provision elements in schedules/forms (e.g., treaty articles)
+ * Contains subsection/topic titles with formatting hints
+ */
+export type ProvisionHeadingInfo = {
+  text: string;
+  formatRef?: string;
+  limsMetadata?: LimsMetadata;
+};
+
+/**
  * Section type classifications
  */
 export type SectionType =
@@ -438,7 +529,7 @@ export const sections = legislationSchema.table(
       length: 200,
     }).notNull(),
     // Section label (e.g., "2", "3.1", "Schedule I", or full title for stub acts)
-    sectionLabel: varchar("section_label", { length: 255 }).notNull(),
+    sectionLabel: text("section_label").notNull(),
     // Order for sorting sections
     sectionOrder: integer("section_order").notNull(),
     // Language: "en" or "fr"
@@ -472,16 +563,23 @@ export const sections = legislationSchema.table(
     historicalNotes: jsonb("historical_notes").$type<HistoricalNoteItem[]>(),
     // Footnotes in this section
     footnotes: jsonb("footnotes").$type<FootnoteInfo[]>(),
+    // Internal references within the same document (from XRefInternal)
+    internalReferences: jsonb("internal_references").$type<
+      InternalReference[]
+    >(),
     // Schedule-specific fields (for sectionType='schedule')
     scheduleId: varchar("schedule_id", { length: 50 }), // e.g., "RelatedProvs", "NifProvs"
     scheduleBilingual: varchar("schedule_bilingual", { length: 10 }), // "yes" or "no"
     scheduleSpanLanguages: varchar("schedule_span_languages", { length: 10 }),
+    scheduleOriginatingRef: text("schedule_originating_ref"), // e.g., "(Section 2)" or long references like "(Paragraphs 56(1)(a) and (c), section 68...)"
     // Content flags for special content types (tables, formulas, images, partial repeals)
     contentFlags: jsonb("content_flags").$type<ContentFlags>(),
     // Formatting attributes for provisions/lists
     formattingAttributes: jsonb(
       "formatting_attributes"
     ).$type<FormattingAttributes>(),
+    // Provision heading (for provisions in schedules/forms with topic headings)
+    provisionHeading: jsonb("provision_heading").$type<ProvisionHeadingInfo>(),
     // Timestamp
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
@@ -500,7 +598,9 @@ export const sections = legislationSchema.table(
     }).onDelete("cascade"),
     index("sections_act_id_idx").on(table.actId),
     index("sections_regulation_id_idx").on(table.regulationId),
-    index("sections_canonical_section_id_idx").on(table.canonicalSectionId),
+    uniqueIndex("sections_canonical_section_id_idx").on(
+      table.canonicalSectionId
+    ),
     index("sections_language_idx").on(table.language),
     index("sections_section_type_idx").on(table.sectionType),
     // Composite index for bilingual toggle query
@@ -627,11 +727,10 @@ export const crossReferences = legislationSchema.table(
     // Source (where the reference appears)
     sourceActId: varchar("source_act_id", { length: 50 }),
     sourceRegulationId: varchar("source_regulation_id", { length: 100 }),
-    sourceSectionLabel: varchar("source_section_label", { length: 50 }),
+    sourceSectionLabel: text("source_section_label"),
     // Target (what is being referenced) - raw from XML
     targetType: varchar("target_type", { length: 20 }).notNull(), // "act" or "regulation"
-    targetRef: varchar("target_ref", { length: 100 }).notNull(), // Raw link text (e.g., "A-2", "SOR-86-946")
-    targetSectionRef: varchar("target_section_ref", { length: 50 }),
+    targetRef: varchar("target_ref", { length: 100 }).notNull(), // Raw link (e.g., "C-46", "SOR-2000-1")
     // Display text for the reference
     referenceText: text("reference_text"),
     // Timestamp
@@ -642,6 +741,7 @@ export const crossReferences = legislationSchema.table(
     index("cross_references_source_regulation_id_idx").on(
       table.sourceRegulationId
     ),
+    index("cross_references_target_type_idx").on(table.targetType),
     index("cross_references_target_ref_idx").on(table.targetRef),
   ]
 );
