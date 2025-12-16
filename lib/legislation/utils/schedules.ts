@@ -15,12 +15,13 @@ import {
 } from "./content-flags";
 import { parseDate } from "./dates";
 import { extractFootnotes, extractHistoricalNotes } from "./document-metadata";
+import { extractHeadingComponents } from "./heading";
 import { extractLimsMetadata } from "./metadata";
 import {
   extractCrossReferences,
   extractInternalReferences,
 } from "./references";
-import { extractHtmlContent, extractTextContent } from "./text";
+import { extractTextContentPreserved as extractTextContent } from "./text";
 
 /**
  * Context when processing elements inside a Schedule
@@ -55,11 +56,12 @@ export function extractScheduleContext(
   // Extract label, title, originating reference, and type from ScheduleFormHeading
   if (scheduleEl.ScheduleFormHeading) {
     const heading = scheduleEl.ScheduleFormHeading as Record<string, unknown>;
-    if (heading.Label) {
-      context.scheduleLabel = extractTextContent(heading.Label);
+    const { label, title } = extractHeadingComponents(heading);
+    if (label) {
+      context.scheduleLabel = label;
     }
-    if (heading.TitleText) {
-      context.scheduleTitle = extractTextContent(heading.TitleText);
+    if (title) {
+      context.scheduleTitle = title;
     }
     // Extract OriginatingRef - e.g., "(Section 2)" or "(Subsections 4(1) and 5(2))"
     if (heading.OriginatingRef) {
@@ -172,7 +174,6 @@ export function extractScheduleListContent(
           itemObj["@_lims:lastAmendedDate"] as string | undefined
         );
         const limsMetadata = extractLimsMetadata(itemObj);
-        const contentHtml = extractHtmlContent(itemObj);
         const contentFlags = extractContentFlags(itemObj);
         const historicalNotes = extractHistoricalNotes(itemObj);
         const footnotes = extractFootnotes(itemObj);
@@ -195,7 +196,6 @@ export function extractScheduleListContent(
           hierarchyPath: [...hierarchyPath],
           marginalNote: undefined,
           content: itemText,
-          contentHtml: contentHtml || undefined,
           status,
           inForceStartDate,
           lastAmendedDate,
@@ -253,7 +253,7 @@ export function extractScheduleListContent(
     }
   }
 
-  // Also process FormGroup elements which may contain schedule content
+  // Also process FormGroup elements which contain form content (e.g., FORM 1, FORM 2 in Criminal Code)
   if (scheduleEl.FormGroup) {
     const formGroups = Array.isArray(scheduleEl.FormGroup)
       ? scheduleEl.FormGroup
@@ -265,21 +265,35 @@ export function extractScheduleListContent(
         const internalReferences = extractInternalReferences(fgObj);
         if (fgContent && fgContent.trim().length > 0) {
           sectionOrder++;
-          // Determine sectionType first for use in canonicalSectionId
+          // Inherit sectionType from schedule context (e.g., "amending" for NifProvs)
           const sectionType = getSectionTypeForSchedule(scheduleContext);
           // Include sectionType and sectionOrder in ID for uniqueness
           const canonicalSectionId = `${idBase}/${language}/${sectionType}/${sectionOrder}/sch-${scheduleLabel.replace(/\s+/g, "-").toLowerCase()}-fg`;
 
+          // Extract metadata from FormGroup attributes
+          const limsMetadata = extractLimsMetadata(fgObj);
+          const inForceStartDate = parseDate(
+            fgObj["@_lims:inforce-start-date"] as string | undefined
+          );
+          const lastAmendedDate = parseDate(
+            fgObj["@_lims:lastAmendedDate"] as string | undefined
+          );
+
           sections.push({
             canonicalSectionId,
-            sectionLabel: `${scheduleLabel} Form`,
+            // Use scheduleLabel directly (already "FORM 1" from ScheduleFormHeading.Label)
+            sectionLabel: scheduleLabel,
             sectionOrder,
             language,
             sectionType,
             hierarchyPath: [scheduleLabel],
+            // Store form title (e.g., "Information To Obtain a Search Warrant") in marginalNote
+            marginalNote: scheduleContext.scheduleTitle,
             content: fgContent,
-            contentHtml: extractHtmlContent(fgObj) || undefined,
             status: "in-force",
+            inForceStartDate,
+            lastAmendedDate,
+            limsMetadata,
             contentFlags: extractContentFlags(fgObj),
             internalReferences:
               internalReferences.length > 0 ? internalReferences : null,
@@ -342,7 +356,6 @@ export function extractScheduleListContent(
             sectionType,
             hierarchyPath: [scheduleLabel],
             content: tgContent,
-            contentHtml: extractHtmlContent(tgObj) || undefined,
             status: "in-force",
             inForceStartDate,
             lastAmendedDate,
@@ -401,14 +414,10 @@ export function extractScheduleListContent(
             }
             const provObj = provision as Record<string, unknown>;
             const provContent = extractTextContent(provObj);
-            const innerHtml = extractHtmlContent(provObj);
 
-            // Create section if there's text content OR meaningful HTML content (e.g., images)
-            const hasContent =
-              (provContent && provContent.trim().length > 0) ||
-              (innerHtml && innerHtml.trim().length > 0);
-
-            if (hasContent) {
+            // Create section if there's text content
+            // (contentTree will capture non-text content like images via preserved-order parsing)
+            if (provContent && provContent.trim().length > 0) {
               sectionOrder++;
 
               // Get label if present (e.g., "(i)", "(a)", "Section 1")
@@ -433,13 +442,6 @@ export function extractScheduleListContent(
                 provObj["@_lims:lastAmendedDate"] as string | undefined
               );
               const limsMetadata = extractLimsMetadata(provObj);
-              // Wrap the provision in proper HTML structure
-              // extractHtmlContent handles child elements, but when called on a Provision
-              // as root, we need to wrap it in the provision class ourselves
-              // (innerHtml is already computed above for the hasContent check)
-              const contentHtml = innerHtml
-                ? `<p class="provision">${innerHtml}</p>`
-                : undefined;
               const contentFlags = extractContentFlags(provObj);
               const footnotes = extractFootnotes(provObj);
               const internalReferences = extractInternalReferences(provObj);
@@ -460,7 +462,6 @@ export function extractScheduleListContent(
                 sectionType,
                 hierarchyPath: [scheduleLabel, ...groupPath],
                 content: provContent,
-                contentHtml: contentHtml || undefined,
                 status,
                 inForceStartDate,
                 lastAmendedDate,
@@ -507,11 +508,7 @@ export function extractScheduleListContent(
             let groupHeading = "";
             if (groupObj.GroupHeading) {
               const ghObj = groupObj.GroupHeading as Record<string, unknown>;
-              const label = ghObj.Label ? extractTextContent(ghObj.Label) : "";
-              const title = ghObj.TitleText
-                ? extractTextContent(ghObj.TitleText)
-                : "";
-              groupHeading = [label, title].filter(Boolean).join(" ");
+              groupHeading = extractHeadingComponents(ghObj).combined;
             }
 
             processProvisions(groupObj, [

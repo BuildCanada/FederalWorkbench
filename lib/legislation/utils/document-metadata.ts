@@ -2,6 +2,7 @@ import type {
   AmendmentInfo,
   BillHistory,
   EnablingAuthorityInfo,
+  EnablingAuthorityOrder,
   FootnoteInfo,
   FormattingAttributes,
   HistoricalNoteItem,
@@ -15,9 +16,10 @@ import type {
   TableOfProvisionsEntry,
 } from "../types";
 import { parseDate, parseDateElement } from "./dates";
+import { extractHeadingComponents } from "./heading";
 import { extractLimsMetadata } from "./metadata";
 import { extractInternalReferences } from "./references";
-import { extractHtmlContent, extractTextContent } from "./text";
+import { extractTextContent } from "./text";
 
 /**
  * Extract historical notes from a Section element
@@ -290,6 +292,39 @@ export function extractRegulationMakerOrder(
 }
 
 /**
+ * Extract enabling authority order from Order element
+ * This is the text granting authority to make a regulation
+ * (e.g., "Her Excellency the Governor General in Council... pursuant to")
+ */
+export function extractEnablingAuthorityOrder(
+  regulation: Record<string, unknown>
+): EnablingAuthorityOrder | undefined {
+  if (!regulation.Order) {
+    return;
+  }
+
+  const order = regulation.Order as Record<string, unknown>;
+
+  // Extract the text content
+  const text = extractTextContent(order);
+  if (!text) {
+    return;
+  }
+
+  // Extract footnotes (statute citations like "S.C. 2018, c. 12, s. 186")
+  const footnotes = extractFootnotes(order);
+
+  // Extract LIMS metadata from the Order element
+  const limsMetadata = extractLimsMetadata(order);
+
+  return {
+    text,
+    footnotes: footnotes.length > 0 ? footnotes : undefined,
+    limsMetadata,
+  };
+}
+
+/**
  * Extract multiple enabling authorities from EnablingAuthority element
  * Handles both single and multiple XRefExternal children
  */
@@ -378,7 +413,6 @@ export function extractPreamble(
  */
 export type EnactingClauseInfo = {
   text: string;
-  textHtml?: string;
   limsMetadata?: LimsMetadata;
   formattingAttributes?: FormattingAttributes;
   inForceStartDate?: string;
@@ -412,7 +446,6 @@ export function extractEnactingClause(
     if (directText) {
       return {
         text: directText,
-        textHtml: extractHtmlContent(enacts) || undefined,
         limsMetadata: extractLimsMetadata(enacts),
         inForceStartDate: parseDate(
           enacts["@_lims:inforce-start-date"] as string | undefined
@@ -431,7 +464,6 @@ export function extractEnactingClause(
     : [provisionElements];
 
   const texts: string[] = [];
-  const htmlParts: string[] = [];
   let formattingAttributes: FormattingAttributes | undefined;
   let limsMetadata: LimsMetadata | undefined;
   let inForceStartDate: string | undefined;
@@ -441,13 +473,9 @@ export function extractEnactingClause(
     if (typeof prov === "object" && prov !== null) {
       const provObj = prov as Record<string, unknown>;
       const text = extractTextContent(provObj);
-      const html = extractHtmlContent(provObj);
 
       if (text) {
         texts.push(text);
-      }
-      if (html) {
-        htmlParts.push(html);
       }
 
       // Capture metadata from first provision
@@ -500,7 +528,6 @@ export function extractEnactingClause(
 
   return {
     text: texts.join(" "),
-    textHtml: htmlParts.length > 0 ? htmlParts.join(" ") : undefined,
     limsMetadata,
     formattingAttributes,
     inForceStartDate,
@@ -582,7 +609,6 @@ export function extractPublicationItems(
 
     const obj = item as Record<string, unknown>;
     const content = extractTextContent(obj);
-    const contentHtml = extractHtmlContent(obj);
     const publicationRequirement =
       type === "notice"
         ? (obj["@_publication-requirement"] as
@@ -607,7 +633,6 @@ export function extractPublicationItems(
       results.push({
         type,
         content,
-        contentHtml: contentHtml || undefined,
         publicationRequirement,
         sourceSections: sourceSections.length > 0 ? sourceSections : undefined,
         limsMetadata,
@@ -750,10 +775,11 @@ export function extractTableOfProvisions(
         tp: Record<string, unknown>,
         level: number
       ) => {
-        const label = tp.Label ? extractTextContent(tp.Label) : "";
-        const title = tp.TitleText
-          ? extractTextContent(tp.TitleText)
-          : extractTextContent(tp);
+        const { label: labelText, title: titleText } =
+          extractHeadingComponents(tp);
+        const label = labelText || "";
+        // Fall back to full element text if no TitleText
+        const title = titleText || extractTextContent(tp);
 
         if (label || title) {
           entries.push({

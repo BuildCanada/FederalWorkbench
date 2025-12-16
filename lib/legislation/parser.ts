@@ -12,10 +12,16 @@ import type {
   ParsedDocument,
   ParsedRegulation,
 } from "./types";
+import {
+  type ExtractedContent,
+  extractAllContent,
+  parseFileWithPreservedOrder,
+} from "./utils/content-tree";
 import { parseDate, parseDateElement } from "./utils/dates";
 import {
   extractBillHistory,
   extractEnablingAuthorities,
+  extractEnablingAuthorityOrder,
   extractEnactingClause,
   extractPreamble,
   extractPublicationItems,
@@ -52,10 +58,15 @@ const parser = new XMLParser({
 
 /**
  * Parse an Act XML file
+ *
+ * @param xmlContent - Raw XML content
+ * @param language - Document language
+ * @param extractedContent - Pre-extracted content from preserved-order parse (optional for backwards compat)
  */
 export function parseActXml(
   xmlContent: string,
-  language: Language
+  language: Language,
+  extractedContent?: ExtractedContent
 ): ParsedDocument {
   const parsed = parser.parse(xmlContent);
   const statute = parsed.Statute;
@@ -231,7 +242,6 @@ export function parseActXml(
       hierarchyPath: [],
       marginalNote: undefined,
       content: enactingClause.text,
-      contentHtml: enactingClause.textHtml,
       status: "in-force" as const,
       inForceStartDate: enactingClause.inForceStartDate,
       enactedDate: enactingClause.enactedDate,
@@ -241,6 +251,65 @@ export function parseActXml(
       regulationId: undefined,
     };
     allSections.unshift(enactsSection);
+  }
+
+  // Join extracted content by position to populate contentTree, hierarchyPath, and corrected content
+  if (extractedContent) {
+    // Build lookup maps for efficient joining - keyed by document position, not limsId
+    const contentTreeMap = new Map(
+      extractedContent.contentTrees
+        .filter((ct) => ct.limsId)
+        .map((ct) => [ct.limsId, ct])
+    );
+    // Section content map keyed by sectionOrder (position in document)
+    const sectionContentByOrder = new Map(
+      extractedContent.sectionContents.map((sc) => [sc.sectionOrder, sc])
+    );
+    // Definition text map keyed by definitionOrder (position in document)
+    const definitionTextByOrder = new Map(
+      extractedContent.definitionTexts.map((dt) => [dt.definitionOrder, dt])
+    );
+
+    // Join ALL sections by sectionOrder (position-based, not limsId-gated)
+    for (const section of allSections) {
+      // Content tree still uses limsId for now (hierarchy path)
+      const limsId = section.limsMetadata?.id;
+      if (limsId) {
+        const contentTree = contentTreeMap.get(limsId);
+        if (contentTree) {
+          section.contentTree = contentTree.contentTree;
+          section.hierarchyPath = contentTree.hierarchyPath;
+        }
+      }
+      // Section content uses position-based joining
+      const sectionContent = sectionContentByOrder.get(section.sectionOrder);
+      if (sectionContent) {
+        section.content = sectionContent.content;
+        if (sectionContent.marginalNote) {
+          section.marginalNote = sectionContent.marginalNote;
+        }
+      }
+    }
+
+    // Join ALL defined terms by definitionOrder (position-based)
+    for (const term of definedTerms) {
+      if (term.definitionOrder !== undefined) {
+        const definitionText = definitionTextByOrder.get(term.definitionOrder);
+        if (definitionText) {
+          term.definition = definitionText.definitionText;
+        }
+      }
+    }
+
+    // Use preserved-order preamble if available
+    if (extractedContent.preamble) {
+      act.preamble = extractedContent.preamble;
+    }
+
+    // Use preserved-order treaties if available
+    if (extractedContent.treaties) {
+      act.treaties = extractedContent.treaties;
+    }
   }
 
   return {
@@ -255,10 +324,15 @@ export function parseActXml(
 
 /**
  * Parse a Regulation XML file
+ *
+ * @param xmlContent - Raw XML content
+ * @param language - Document language
+ * @param extractedContent - Pre-extracted content from preserved-order parse (optional for backwards compat)
  */
 export function parseRegulationXml(
   xmlContent: string,
-  language: Language
+  language: Language,
+  extractedContent?: ExtractedContent
 ): ParsedDocument {
   const parsed = parser.parse(xmlContent);
   const regulation = parsed.Regulation;
@@ -312,6 +386,16 @@ export function parseRegulationXml(
   // Extract regulation maker/order info
   const regulationMakerOrder = extractRegulationMakerOrder(identification);
 
+  // Extract enabling authority order (text, footnotes, limsMetadata from standard parse)
+  const baseEnablingAuthorityOrder = extractEnablingAuthorityOrder(regulation);
+  // Merge with contentTree from preserved-order extraction for proper rendering
+  const enablingAuthorityOrder = baseEnablingAuthorityOrder
+    ? {
+        ...baseEnablingAuthorityOrder,
+        contentTree: extractedContent?.enablingAuthorityOrder?.contentTree,
+      }
+    : undefined;
+
   // Extract recent amendments
   const recentAmendments = extractRecentAmendments(regulation);
 
@@ -350,6 +434,7 @@ export function parseRegulationXml(
     lastAmendedDate,
     limsMetadata,
     regulationMakerOrder,
+    enablingAuthorityOrder,
     recentAmendments,
     relatedProvisions,
     treaties,
@@ -368,8 +453,8 @@ export function parseRegulationXml(
       : [regulation.Schedule]
     : [];
 
-  // Create a combined element that includes Body content, root-level Schedules,
-  // and Order elements (which contain regulatory authority text)
+  // Create a combined element that includes Body content and root-level Schedules
+  // Note: Order elements (enabling authority text) are extracted as metadata, not sections
   const bodySchedules = body.Schedule
     ? Array.isArray(body.Schedule)
       ? body.Schedule
@@ -380,7 +465,6 @@ export function parseRegulationXml(
   const combinedBody = {
     ...body,
     ...(allSchedules.length > 0 ? { Schedule: allSchedules } : {}),
-    ...(regulation.Order ? { Order: regulation.Order } : {}),
   };
 
   const { sections, definedTerms, crossReferences } = parseSections({
@@ -388,6 +472,60 @@ export function parseRegulationXml(
     language,
     regulationId,
   });
+
+  // Join extracted content by position to populate contentTree, hierarchyPath, and corrected content
+  if (extractedContent) {
+    // Build lookup maps for efficient joining - keyed by document position, not limsId
+    const contentTreeMap = new Map(
+      extractedContent.contentTrees
+        .filter((ct) => ct.limsId)
+        .map((ct) => [ct.limsId, ct])
+    );
+    // Section content map keyed by sectionOrder (position in document)
+    const sectionContentByOrder = new Map(
+      extractedContent.sectionContents.map((sc) => [sc.sectionOrder, sc])
+    );
+    // Definition text map keyed by definitionOrder (position in document)
+    const definitionTextByOrder = new Map(
+      extractedContent.definitionTexts.map((dt) => [dt.definitionOrder, dt])
+    );
+
+    // Join ALL sections by sectionOrder (position-based, not limsId-gated)
+    for (const section of sections) {
+      // Content tree still uses limsId for now (hierarchy path)
+      const limsId = section.limsMetadata?.id;
+      if (limsId) {
+        const contentTree = contentTreeMap.get(limsId);
+        if (contentTree) {
+          section.contentTree = contentTree.contentTree;
+          section.hierarchyPath = contentTree.hierarchyPath;
+        }
+      }
+      // Section content uses position-based joining
+      const sectionContent = sectionContentByOrder.get(section.sectionOrder);
+      if (sectionContent) {
+        section.content = sectionContent.content;
+        if (sectionContent.marginalNote) {
+          section.marginalNote = sectionContent.marginalNote;
+        }
+      }
+    }
+
+    // Join ALL defined terms by definitionOrder (position-based)
+    for (const term of definedTerms) {
+      if (term.definitionOrder !== undefined) {
+        const definitionText = definitionTextByOrder.get(term.definitionOrder);
+        if (definitionText) {
+          term.definition = definitionText.definitionText;
+        }
+      }
+    }
+
+    // Use preserved-order treaties if available
+    if (extractedContent.treaties) {
+      reg.treaties = extractedContent.treaties;
+    }
+  }
 
   return {
     type: "regulation",
@@ -401,6 +539,17 @@ export function parseRegulationXml(
 
 /**
  * Parse a legislation XML file (auto-detect type)
+ *
+ * This function performs TWO parses of the XML file:
+ * 1. Standard parse (preserveOrder=false) - for structure and metadata extraction
+ * 2. Preserved-order parse (preserveOrder=true) - for content with correct text order
+ *
+ * The preserved-order content is joined with sections by limsId to populate:
+ * - contentTree: JSONB structure for rendering
+ * - hierarchyPath: Section location in document structure
+ * - content: Plain text with correct order (replaces garbled text)
+ * - preamble/treaties: On act/regulation objects
+ * - definition text: On defined terms
  */
 export function parseLegislationXml(
   filePath: string,
@@ -408,12 +557,16 @@ export function parseLegislationXml(
 ): ParsedDocument {
   const xmlContent = readFileSync(filePath, "utf-8");
 
-  // Detect type from content
+  // Parse with preserved order for content extraction
+  const preservedParsed = parseFileWithPreservedOrder(filePath);
+  const extractedContent = extractAllContent(preservedParsed);
+
+  // Detect type from content and parse with standard parser
   if (xmlContent.includes("<Statute")) {
-    return parseActXml(xmlContent, language);
+    return parseActXml(xmlContent, language, extractedContent);
   }
   if (xmlContent.includes("<Regulation")) {
-    return parseRegulationXml(xmlContent, language);
+    return parseRegulationXml(xmlContent, language, extractedContent);
   }
 
   throw new Error(`Unknown document type in ${filePath}`);

@@ -1,6 +1,7 @@
 /**
  * Named subsets for legislation testing.
- * Regulations are resolved automatically via lookup.xml relationships.
+ * Regulations are resolved automatically via lookup.xml relationships,
+ * plus any explicit regulations listed in the subset's `regulations` array.
  */
 
 import {
@@ -31,11 +32,17 @@ export const SUBSETS = {
       "N-5", // National Defence Act - 24 regs, cross-refs
       "F-27", // Food and Drugs Act - 21 regs
     ],
+    // Explicit regulations not resolved via lookup.xml
+    regulations: [
+      "SOR/2010-201", // Passenger Automobile GHG Regulations - contains MathML
+      "SOR/96-433", // Canadian Aviation Regulations - contains MathML
+    ],
   },
   smoke: {
     name: "smoke",
     description: "Quick smoke test for CI",
     acts: ["A-1", "P-21", "C-46", "E-15"],
+    regulations: [],
   },
 } as const;
 
@@ -104,6 +111,11 @@ export function resolveSubset(
     for (const alphaNumber of [...relatedEn, ...relatedFr]) {
       regulationFilenames.add(alphaNumberToFilename(alphaNumber));
     }
+  }
+
+  // Add explicit regulations not resolved via lookup.xml
+  for (const regId of subset.regulations) {
+    regulationFilenames.add(alphaNumberToFilename(regId));
   }
 
   if (missingActs.length > 0) {

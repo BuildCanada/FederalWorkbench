@@ -1,5 +1,5 @@
 import type { InternalReference, ParsedCrossReference } from "../types";
-import { extractTextContent } from "./text";
+import { extractTextContentPreserved as extractTextContent } from "./text";
 
 /**
  * Extract cross references from an element

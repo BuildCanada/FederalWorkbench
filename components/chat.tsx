@@ -207,19 +207,18 @@ export function Chat({
   const searchParams = useSearchParams();
   const query = searchParams.get("query");
 
-  const [hasAppendedQuery, setHasAppendedQuery] = useState(false);
+  const hasAppendedQueryRef = useRef(false);
 
   useEffect(() => {
-    if (query && !hasAppendedQuery) {
+    if (query && !hasAppendedQueryRef.current) {
+      hasAppendedQueryRef.current = true;
       sendMessage({
         role: "user" as const,
         parts: [{ type: "text", text: query }],
       });
-
-      setHasAppendedQuery(true);
       window.history.replaceState({}, "", `/workbench/${id}`);
     }
-  }, [query, sendMessage, hasAppendedQuery, id]);
+  }, [query, sendMessage, id]);
 
   const { data: votes } = useSWR<Vote[]>(
     messages.length >= 2 ? `/api/vote?chatId=${id}` : null,

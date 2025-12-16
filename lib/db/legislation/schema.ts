@@ -14,6 +14,7 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import { nanoid } from "nanoid";
+import type { ContentNode } from "@/lib/legislation/types";
 
 export const legislationSchema = pgSchema("legislation");
 
@@ -115,7 +116,6 @@ export type TreatySectionHeading = {
 export type TreatyDefinition = {
   term: string;
   definition: string;
-  definitionHtml?: string;
 };
 
 /**
@@ -125,13 +125,10 @@ export type TreatyDefinition = {
 export type TreatyContent = {
   title?: string; // Main title from first Heading
   preamble?: string; // Preamble text (party names, recitals before PART I)
-  preambleHtml?: string; // Preamble HTML
   sections?: TreatySectionHeading[]; // Section headings for TOC/navigation
   definitions?: TreatyDefinition[]; // Extracted defined terms
   signatureText?: string; // Closing text ("IN WITNESS WHEREOF...")
-  signatureTextHtml?: string; // Closing HTML
   text: string; // Full text (required, backward compat)
-  textHtml?: string; // Full HTML for display
 };
 
 /**
@@ -257,12 +254,26 @@ export type RegulationMakerInfo = {
 };
 
 /**
+ * Enabling authority order content
+ * Contains the text granting authority to make a regulation
+ * (e.g., "Her Excellency the Governor General in Council... pursuant to")
+ *
+ * NOTE: This type is duplicated in types.ts due to circular dependency.
+ * Keep both definitions in sync.
+ */
+export type EnablingAuthorityOrder = {
+  text: string;
+  contentTree?: ContentNode[];
+  footnotes?: FootnoteInfo[];
+  limsMetadata?: LimsMetadata;
+};
+
+/**
  * Publication items specific to regulations (Recommendation/Notice blocks)
  */
 export type RegulationPublicationItem = {
   type: "recommendation" | "notice";
   content: string;
-  contentHtml?: string;
   publicationRequirement?: "STATUTORY" | "ADMINISTRATIVE";
   sourceSections?: string[];
   limsMetadata?: LimsMetadata;
@@ -324,6 +335,10 @@ export const regulations = legislationSchema.table(
     regulationMakerOrder: jsonb(
       "regulation_maker_order"
     ).$type<RegulationMakerInfo>(),
+    // Enabling authority order text ("Her Excellency... pursuant to")
+    enablingAuthorityOrder: jsonb(
+      "enabling_authority_order"
+    ).$type<EnablingAuthorityOrder>(),
     // Recent amendments list - language-specific citation formats
     recentAmendments: jsonb("recent_amendments").$type<AmendmentInfo[]>(),
     // Related provisions (cross-references to related content)
@@ -542,8 +557,8 @@ export const sections = legislationSchema.table(
     marginalNote: text("marginal_note"),
     // Full content of the section
     content: text("content").notNull(),
-    // HTML-formatted content (preserving structure like tables, emphasis)
-    contentHtml: text("content_html"),
+    // Ordered content tree for rendering (preserves document order)
+    contentTree: jsonb("content_tree").$type<ContentNode[]>(),
     // Status of this specific section
     status: varchar("status", { length: 20 }).default("in-force"),
     // Section attributes (from XML)

@@ -323,3 +323,141 @@
   font-style: italic;
   font-weight: normal;
 }
+
+.legislation-content table {
+  @apply w-full border-collapse text-sm my-4;
+}
+
+.legislation-content th,
+.legislation-content td {
+  @apply border border-border p-2 text-left align-top;
+}
+
+.legislation-content th {
+  @apply bg-muted font-medium;
+}
+
+.legislation-content .table-group {
+  @apply my-4 overflow-x-auto;
+}
+
+.legislation-content .formula {
+  @apply font-mono bg-muted px-2 py-1 rounded;
+}
+
+.legislation-content dfn {
+  @apply font-semibold not-italic;
+}
+
+.legislation-content .footnote-ref {
+  @apply text-primary text-xs align-super;
+}
+
+.legislation-content ol {
+  @apply list-decimal pl-6 my-2;
+}
+
+.legislation-content ul {
+  @apply list-disc pl-6 my-2;
+}
+
+.legislation-content li {
+  @apply my-1;
+}
+
+.legislation-content em {
+  @apply italic;
+}
+
+.legislation-content strong {
+  @apply font-semibold;
+}
+
+.legislation-content .smallcaps {
+  @apply uppercase text-[0.85em] tracking-wide;
+}
+
+.legislation-content .repealed {
+  @apply text-muted-foreground italic;
+}
+
+.legislation-content .bilingual-group {
+  @apply flex gap-4;
+}
+
+.legislation-content .bilingual-group > [lang="en"],
+.legislation-content .bilingual-group > [lang="fr"] {
+  @apply flex-1;
+}
+
+.legislation-content .subsection {
+  @apply my-3;
+}
+
+.legislation-content .paragraph {
+  @apply my-2 ml-6;
+}
+
+.legislation-content .subparagraph {
+  @apply my-1.5 ml-6;
+}
+
+.legislation-content .clause {
+  @apply my-1 ml-6;
+}
+
+.legislation-content .subclause {
+  @apply my-1 ml-6;
+}
+
+.legislation-content .label {
+  @apply font-medium;
+}
+
+.legislation-content .definition {
+  @apply my-2 ml-6;
+}
+
+.legislation-content .continued {
+  @apply my-2;
+}
+
+.legislation-content .leader-right {
+  @apply float-right;
+}
+
+.legislation-content .quoted-text {
+  @apply border-l-2 border-muted pl-4 my-2 italic;
+}
+
+.legislation-content .schedule-form-heading {
+  @apply text-base font-semibold my-2;
+}
+
+.legislation-content .oath {
+  @apply my-4 pl-4 border-l-2 border-muted;
+}
+
+.legislation-content .centered-text {
+  @apply text-center my-2;
+}
+
+.legislation-content .read-as-text {
+  @apply my-2 pl-4 border-l border-dashed border-muted;
+}
+
+.legislation-content .xref {
+  @apply text-primary underline-offset-2 hover:underline;
+}
+
+.legislation-content .image-placeholder {
+  @apply my-4 p-4 bg-muted/50 border border-dashed border-border rounded text-muted-foreground text-sm text-center;
+}
+
+.legislation-content .image-group {
+  @apply my-4;
+}
+
+.legislation-content .image-caption {
+  @apply text-sm text-muted-foreground mt-2 text-center;
+}

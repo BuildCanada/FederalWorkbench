@@ -2,7 +2,9 @@ import { Artifact } from "@/components/create-artifact";
 import { LegislationViewer } from "@/components/legislation-viewer";
 
 type LegislationArtifactMetadata = {
-  actId: string;
+  docType?: "act" | "regulation";
+  docId?: string;
+  actId?: string; // Legacy support
   language: "en" | "fr";
 };
 
@@ -12,31 +14,34 @@ export const legislationArtifact = new Artifact<
 >({
   kind: "legislation",
   description:
-    "Display Canadian legislation acts with virtualized section navigation.",
+    "Display Canadian legislation (acts and regulations) with virtualized section navigation.",
   onStreamPart: () => {
     // Legislation artifacts are not streamed
   },
   content: ({ content, isLoading, metadata }) => {
-    // Parse actId and language from content (stored as JSON)
-    let actId = metadata?.actId;
+    // Parse document info from metadata or content
+    let docType = metadata?.docType || "act";
+    let docId = metadata?.docId || metadata?.actId;
     let language = metadata?.language || "en";
 
     // Fallback: try parsing from content if metadata not set
-    if (!actId && content) {
+    if (!docId && content) {
       try {
         const parsed = JSON.parse(content);
-        actId = parsed.actId;
+        docType = parsed.docType || "act";
+        docId = parsed.docId || parsed.actId;
         language = parsed.language || "en";
       } catch {
         // Content might be plain markdown for backwards compatibility
       }
     }
 
-    if (!actId) {
+    if (!docId) {
       return (
         <div className="flex h-full items-center justify-center p-8">
           <div className="text-muted-foreground">
-            No act specified. Please open an act from the chat.
+            No legislation specified. Please open an act or regulation from the
+            chat.
           </div>
         </div>
       );
@@ -44,7 +49,8 @@ export const legislationArtifact = new Artifact<
 
     return (
       <LegislationViewer
-        actId={actId}
+        docId={docId}
+        docType={docType}
         isLoading={isLoading}
         language={language}
       />

@@ -57,7 +57,7 @@ test.describe("DocumentInternal provision parsing", () => {
     expect(section.content).toContain("Agreement text here");
   });
 
-  test("wraps provision content in p.provision HTML", () => {
+  test("extracts provision text content", () => {
     const xml = createActXmlWithSchedule(`
       <DocumentInternal>
         <Provision><Text>Agreement text here</Text></Provision>
@@ -68,11 +68,9 @@ test.describe("DocumentInternal provision parsing", () => {
     const scheduleSections = result.sections.filter(
       (s) => s.sectionType === "schedule"
     );
-    const contentHtml = scheduleSections[0]?.contentHtml || "";
+    const content = scheduleSections[0]?.content || "";
 
-    expect(contentHtml).toContain('<p class="provision">');
-    expect(contentHtml).toContain("Agreement text here");
-    expect(contentHtml).toContain("</p>");
+    expect(content).toContain("Agreement text here");
   });
 
   test("handles multiple Provisions as separate sections", () => {
@@ -187,7 +185,7 @@ test.describe("DocumentInternal provision parsing", () => {
     expect(scheduleSections[1].sectionLabel).toContain("(ii)");
   });
 
-  test("preserves emphasis in provision content", () => {
+  test("extracts emphasized text content", () => {
     const xml = createActXmlWithSchedule(`
       <DocumentInternal>
         <Provision>
@@ -200,11 +198,9 @@ test.describe("DocumentInternal provision parsing", () => {
     const scheduleSections = result.sections.filter(
       (s) => s.sectionType === "schedule"
     );
-    const contentHtml = scheduleSections[0]?.contentHtml || "";
+    const content = scheduleSections[0]?.content || "";
 
-    expect(contentHtml).toContain("<em>");
-    expect(contentHtml).toContain("italicized");
-    expect(contentHtml).toContain("</em>");
+    expect(content).toContain("italicized");
   });
 });
 

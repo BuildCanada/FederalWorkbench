@@ -141,7 +141,9 @@ type FormatDocumentMarkdownOptions = {
 export type HydratedLegislationSource = {
   sourceType:
     | "act"
+    | "act_section"
     | "regulation"
+    | "regulation_section"
     | "defined_term"
     | "footnote"
     | "related_provisions"
@@ -157,6 +159,14 @@ export type HydratedLegislationSource = {
   languageUsed: Lang;
   id: string;
   note?: string;
+  /** Human-readable label for UI display (e.g., "Criminal Code") */
+  displayLabel?: string;
+  /** Section number for act_section/regulation_section (e.g., "91") */
+  sectionLabel?: string;
+  /** Term text for defined_term (e.g., "barrier") */
+  term?: string;
+  /** Target document title for cross_reference */
+  targetTitle?: string;
 };
 
 /**
@@ -1338,4 +1348,192 @@ export async function hydrateTopSource(
   // when no act/regulation exists in results)
   const hydrated = await hydrateSearchResult(topResult, language);
   return hydrated ? [hydrated] : [];
+}
+
+/**
+ * Source types to hydrate for UI display.
+ * Focused set for the multi-tier context panel.
+ */
+const UI_SOURCE_TYPES = [
+  "act",
+  "act_section",
+  "regulation",
+  "regulation_section",
+  "defined_term",
+  "cross_reference",
+] as const;
+
+type UISourceType = (typeof UI_SOURCE_TYPES)[number];
+
+/**
+ * Hydrate top result per source type from search results.
+ *
+ * Groups results by source type and hydrates the top result from each group.
+ * This provides multi-tier context for the UI:
+ * - Tier 1: Acts (prominent display)
+ * - Tier 2: Regulations (secondary display)
+ * - Tier 3: Sections, definitions, cross-references (expandable panel)
+ *
+ * Only hydrates UI_SOURCE_TYPES to keep the panel focused.
+ *
+ * @param results - Reranked search results
+ * @param language - Preferred language
+ * @returns Array of hydrated sources (one per source type found)
+ */
+export async function hydrateTopPerType(
+  results: LegislationSearchResult[],
+  language: Lang
+): Promise<HydratedLegislationSource[]> {
+  if (results.length === 0) {
+    return [];
+  }
+
+  // Group by source type, keeping only first (top) result per type
+  const byType = new Map<UISourceType, LegislationSearchResult>();
+
+  // Track first actId/regulationId found for fallback hydration
+  // This ensures "View Act" button appears even when search returns
+  // marginal_note, cross_reference, etc. instead of act/act_section
+  let firstActId: string | undefined;
+  let firstRegulationId: string | undefined;
+  let firstActResult: LegislationSearchResult | undefined;
+  let firstRegResult: LegislationSearchResult | undefined;
+
+  for (const r of results) {
+    const sourceType = r.metadata.sourceType as UISourceType;
+    const meta = r.metadata;
+
+    // Track first actId/regulationId for fallback
+    if (!firstActId && meta.actId) {
+      firstActId = meta.actId;
+      firstActResult = r;
+    }
+    if (!firstRegulationId && meta.regulationId) {
+      firstRegulationId = meta.regulationId;
+      firstRegResult = r;
+    }
+
+    // Skip source types not in our UI set
+    if (!UI_SOURCE_TYPES.includes(sourceType)) {
+      continue;
+    }
+
+    // Skip if we already have this type
+    if (byType.has(sourceType)) {
+      continue;
+    }
+
+    // For act/act_section, ensure we have actId
+    if ((sourceType === "act" || sourceType === "act_section") && !meta.actId) {
+      continue;
+    }
+
+    // For regulation/regulation_section, ensure we have regulationId
+    if (
+      (sourceType === "regulation" || sourceType === "regulation_section") &&
+      !meta.regulationId
+    ) {
+      continue;
+    }
+
+    byType.set(sourceType, r);
+  }
+
+  // Fallback: if no act/act_section found but we have an actId, synthesize one
+  // This handles cases where search returns marginal_note, cross_reference, etc.
+  if (
+    !byType.has("act") &&
+    !byType.has("act_section") &&
+    firstActId &&
+    firstActResult
+  ) {
+    // Create a synthetic act_section result for hydration
+    const syntheticResult: LegislationSearchResult = {
+      ...firstActResult,
+      metadata: {
+        ...firstActResult.metadata,
+        sourceType: "act_section",
+        actId: firstActId,
+      },
+    };
+    byType.set("act_section", syntheticResult);
+    dbg("fallback: synthesized act_section for actId %s", firstActId);
+  }
+
+  // Same for regulations
+  if (
+    !byType.has("regulation") &&
+    !byType.has("regulation_section") &&
+    firstRegulationId &&
+    firstRegResult
+  ) {
+    const syntheticResult: LegislationSearchResult = {
+      ...firstRegResult,
+      metadata: {
+        ...firstRegResult.metadata,
+        sourceType: "regulation_section",
+        regulationId: firstRegulationId,
+      },
+    };
+    byType.set("regulation_section", syntheticResult);
+    dbg(
+      "fallback: synthesized regulation_section for regulationId %s",
+      firstRegulationId
+    );
+  }
+
+  // Hydrate all found types in parallel
+  const hydrationPromises = Array.from(byType.entries()).map(
+    async ([sourceType, result]) => {
+      const hydrated = await hydrateSearchResult(result, language);
+      if (!hydrated) {
+        return null;
+      }
+
+      // Enhance with UI metadata based on source type
+      const meta = result.metadata;
+
+      switch (sourceType) {
+        case "act":
+        case "act_section":
+          hydrated.displayLabel = meta.documentTitle ?? meta.actId ?? "Act";
+          if (sourceType === "act_section") {
+            hydrated.sectionLabel = meta.sectionLabel;
+          }
+          break;
+
+        case "regulation":
+        case "regulation_section":
+          hydrated.displayLabel =
+            meta.documentTitle ?? meta.regulationId ?? "Regulation";
+          if (sourceType === "regulation_section") {
+            hydrated.sectionLabel = meta.sectionLabel;
+          }
+          break;
+
+        case "defined_term":
+          hydrated.term = meta.term;
+          hydrated.displayLabel = meta.documentTitle;
+          break;
+
+        case "cross_reference":
+          hydrated.targetTitle = meta.targetDocumentTitle;
+          hydrated.displayLabel = meta.documentTitle;
+          break;
+
+        default:
+          // Other source types pass through without additional metadata
+          break;
+      }
+
+      return hydrated;
+    }
+  );
+
+  const hydratedResults = await Promise.all(hydrationPromises);
+
+  // Filter out nulls and return
+  return hydratedResults.filter(
+    (h): h is HydratedLegislationSource => h !== null
+  );
 }

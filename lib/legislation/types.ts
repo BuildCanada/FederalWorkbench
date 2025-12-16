@@ -3,6 +3,142 @@
  */
 
 export type Language = "en" | "fr";
+
+/**
+ * A node in the content tree. Represents either text or an element with children.
+ * The array order in the database IS the document order.
+ * Used in the content_tree JSONB column for order-preserving content storage.
+ */
+export type ContentNode =
+  // Text content
+  | { type: "text"; value: string }
+  // Defined terms and references
+  | { type: "DefinedTermEn"; children: ContentNode[] }
+  | { type: "DefinedTermFr"; children: ContentNode[] }
+  | { type: "DefinitionRef"; children: ContentNode[] }
+  // Cross-references
+  | {
+      type: "XRefExternal";
+      link?: string;
+      refType?: string;
+      children: ContentNode[];
+    }
+  | { type: "XRefInternal"; target?: string; children: ContentNode[] }
+  // Text formatting
+  | {
+      type: "Emphasis";
+      style?: "italic" | "bold" | "smallcaps";
+      children: ContentNode[];
+    }
+  | { type: "Language"; lang?: string; children: ContentNode[] }
+  | { type: "Repealed"; children: ContentNode[] }
+  | { type: "FootnoteRef"; id?: string; children: ContentNode[] }
+  | { type: "Sup"; children: ContentNode[] }
+  | { type: "Sub"; children: ContentNode[] }
+  // Additional inline formatting (MathML and formula related)
+  | { type: "Superscript"; children: ContentNode[] }
+  | { type: "Subscript"; children: ContentNode[] }
+  | { type: "Base"; children: ContentNode[] }
+  // Inline formatting elements
+  | { type: "LineBreak" }
+  | { type: "PageBreak" }
+  | { type: "FormBlank"; width?: string; children?: ContentNode[] }
+  | { type: "Fraction"; children: ContentNode[] }
+  | { type: "Numerator"; children: ContentNode[] }
+  | { type: "Denominator"; children: ContentNode[] }
+  | {
+      type: "Leader";
+      style?: "solid" | "dot" | "dash" | "none";
+      length?: string;
+    }
+  | { type: "Separator" }
+  // Structure elements
+  | { type: "Label"; children: ContentNode[] }
+  | { type: "Text"; children: ContentNode[] }
+  | { type: "Subsection"; children: ContentNode[] }
+  | { type: "Paragraph"; children: ContentNode[] }
+  | { type: "Subparagraph"; children: ContentNode[] }
+  | { type: "Clause"; children: ContentNode[] }
+  | { type: "Subclause"; children: ContentNode[] }
+  | { type: "Subsubclause"; children: ContentNode[] }
+  | { type: "Definition"; children: ContentNode[] }
+  | { type: "DefinitionEnOnly"; children: ContentNode[] }
+  | { type: "DefinitionFrOnly"; children: ContentNode[] }
+  | { type: "List"; style?: string; children: ContentNode[] }
+  | { type: "Item"; children: ContentNode[] }
+  // Tables (CALS)
+  | {
+      type: "Table";
+      attrs?: Record<string, string>;
+      children: ContentNode[];
+    }
+  | { type: "TableGroup"; children: ContentNode[] }
+  | { type: "TGroup"; cols?: number; children: ContentNode[] }
+  | { type: "ColSpec"; colName?: string; colWidth?: string }
+  | { type: "THead"; children: ContentNode[] }
+  | { type: "TBody"; children: ContentNode[] }
+  | { type: "TFoot"; children: ContentNode[] }
+  | { type: "Row"; children: ContentNode[] }
+  | {
+      type: "Entry";
+      attrs?: Record<string, string>;
+      children: ContentNode[];
+    }
+  // Formulas and math
+  | { type: "Formula"; children: ContentNode[] }
+  | { type: "FormulaGroup"; children: ContentNode[] }
+  | { type: "FormulaText"; children: ContentNode[] }
+  | { type: "FormulaConnector"; children: ContentNode[] }
+  | { type: "FormulaDefinition"; children: ContentNode[] }
+  | { type: "FormulaTerm"; children: ContentNode[] }
+  | { type: "FormulaParagraph"; children: ContentNode[] }
+  // MathML - stored as raw XML for browser rendering
+  | { type: "MathML"; raw: string; display?: "block" | "inline" }
+  // Images
+  | { type: "ImageGroup"; children: ContentNode[] }
+  | { type: "Image"; source?: string }
+  | { type: "Caption"; children: ContentNode[] }
+  // Bilingual content
+  | { type: "BilingualGroup"; children: ContentNode[] }
+  | { type: "BilingualItemEn"; children: ContentNode[] }
+  | { type: "BilingualItemFr"; children: ContentNode[] }
+  // Special content
+  | { type: "QuotedText"; children: ContentNode[] }
+  | { type: "CenteredText"; children: ContentNode[] }
+  | { type: "Continued"; children: ContentNode[] }
+  | { type: "ContinuedSubparagraph"; children: ContentNode[] }
+  | { type: "ContinuedClause"; children: ContentNode[] }
+  | { type: "ContinuedSubclause"; children: ContentNode[] }
+  | { type: "ContinuedFormulaParagraph"; children: ContentNode[] }
+  | { type: "ContinuedSectionSubsection"; children: ContentNode[] }
+  | { type: "ContinuedParagraph"; children: ContentNode[] }
+  | { type: "ContinuedDefinition"; children: ContentNode[] }
+  | { type: "FormGroup"; children: ContentNode[] }
+  | { type: "Oath"; children: ContentNode[] }
+  | { type: "ReadAsText"; children: ContentNode[] }
+  | { type: "ScheduleFormHeading"; children: ContentNode[] }
+  | { type: "Heading"; level?: number; children: ContentNode[] }
+  | { type: "LeaderRightJustified"; children: ContentNode[] }
+  // Metadata elements (marginal notes, historical notes, footnotes)
+  | { type: "MarginalNote"; children: ContentNode[] }
+  | { type: "HistoricalNote"; children: ContentNode[] }
+  | { type: "HistoricalNoteSubItem"; children: ContentNode[] }
+  | {
+      type: "Footnote";
+      id?: string;
+      placement?: string;
+      children: ContentNode[];
+    }
+  // Amending and container elements
+  | { type: "SectionPiece"; children: ContentNode[] }
+  | { type: "AmendedText"; children: ContentNode[] }
+  | { type: "AmendedContent"; children: ContentNode[] }
+  | { type: "Reserved"; children: ContentNode[] }
+  | { type: "Order"; children: ContentNode[] }
+  | { type: "Recommendation"; children: ContentNode[] }
+  | { type: "Notice"; children: ContentNode[] }
+  // Fallback for unhandled elements
+  | { type: "Unknown"; tag: string; children: ContentNode[] };
 export type LegislationType = "act" | "regulation";
 export type Status = "in-force" | "repealed" | "not-in-force";
 export type SectionType =
@@ -12,7 +148,8 @@ export type SectionType =
   | "enacts"
   | "provision"
   | "heading"
-  | "amending";
+  | "amending"
+  | "form";
 
 /**
  * Scope types for defined terms
@@ -137,12 +274,26 @@ export type RegulationMakerInfo = {
 };
 
 /**
+ * Enabling authority order content
+ * Contains the text granting authority to make a regulation
+ * (e.g., "Her Excellency the Governor General in Council... pursuant to")
+ *
+ * NOTE: This type is duplicated in schema.ts due to circular dependency.
+ * Keep both definitions in sync.
+ */
+export type EnablingAuthorityOrder = {
+  text: string;
+  contentTree?: ContentNode[];
+  footnotes?: FootnoteInfo[];
+  limsMetadata?: LimsMetadata;
+};
+
+/**
  * Publication items specific to regulations (Recommendation/Notice blocks)
  */
 export type RegulationPublicationItem = {
   type: "recommendation" | "notice";
   content: string;
-  contentHtml?: string;
   publicationRequirement?: "STATUTORY" | "ADMINISTRATIVE";
   sourceSections?: string[];
   limsMetadata?: LimsMetadata;
@@ -190,7 +341,6 @@ export type TreatySectionHeading = {
 export type TreatyDefinition = {
   term: string;
   definition: string;
-  definitionHtml?: string;
 };
 
 /**
@@ -200,13 +350,10 @@ export type TreatyDefinition = {
 export type TreatyContent = {
   title?: string; // Main title from first Heading
   preamble?: string; // Preamble text (party names, recitals before PART I)
-  preambleHtml?: string; // Preamble HTML
   sections?: TreatySectionHeading[]; // Section headings for TOC/navigation
   definitions?: TreatyDefinition[]; // Extracted defined terms
   signatureText?: string; // Closing text ("IN WITNESS WHEREOF...")
-  signatureTextHtml?: string; // Closing HTML
   text: string; // Full text (required, backward compat)
-  textHtml?: string; // Full HTML for display
 };
 
 /**
@@ -391,6 +538,8 @@ export type ParsedRegulation = {
   // LIMS tracking (language-specific!)
   limsMetadata?: LimsMetadata;
   regulationMakerOrder?: RegulationMakerInfo;
+  // Enabling authority order text ("Her Excellency the Governor General... pursuant to")
+  enablingAuthorityOrder?: EnablingAuthorityOrder;
   recentAmendments?: AmendmentInfo[];
   // Related provisions
   relatedProvisions?: RelatedProvisionInfo[];
@@ -427,7 +576,7 @@ export type ParsedSection = {
   hierarchyPath: string[];
   marginalNote?: string;
   content: string;
-  contentHtml?: string; // HTML-formatted content preserving structure
+  contentTree?: ContentNode[]; // Ordered content tree for rendering (preserves document order)
   status: Status;
   // Section attributes from XML
   xmlType?: string; // "amending", "CIF", etc.
@@ -484,6 +633,8 @@ export type ParsedDefinedTerm = {
   actId?: string;
   regulationId?: string;
   sectionLabel?: string;
+  // Document position for joining with preserved-order content
+  definitionOrder?: number;
   // Scope information (language-specific - EN and FR can have different scopes!)
   scopeType: DefinitionScopeType;
   scopeSections?: string[]; // Section labels where definition applies (null = entire doc)

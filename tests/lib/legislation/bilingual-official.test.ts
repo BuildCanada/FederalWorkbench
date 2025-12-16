@@ -54,7 +54,7 @@ function createActXmlWithIdentification(
 }
 
 test.describe("Bilingual content handling", () => {
-  test("wraps BilingualGroup in div with class", () => {
+  test("extracts text from BilingualGroup", () => {
     const xml = createActXmlWithContent(`
       <Text>
         <BilingualGroup>
@@ -64,13 +64,13 @@ test.describe("Bilingual content handling", () => {
       </Text>
     `);
     const result = parseActXml(xml, "en");
-    const contentHtml = result.sections[0].contentHtml;
+    const content = result.sections[0].content;
 
-    expect(contentHtml).toContain('<div class="bilingual-group">');
-    expect(contentHtml).toContain("</div>");
+    expect(content).toContain("English text");
+    expect(content).toContain("Texte français");
   });
 
-  test("wraps BilingualItemEn with lang=en", () => {
+  test("extracts BilingualItemEn text", () => {
     const xml = createActXmlWithContent(`
       <Text>
         <BilingualGroup>
@@ -80,13 +80,12 @@ test.describe("Bilingual content handling", () => {
       </Text>
     `);
     const result = parseActXml(xml, "en");
-    const contentHtml = result.sections[0].contentHtml;
+    const content = result.sections[0].content;
 
-    expect(contentHtml).toContain('<span lang="en" class="bilingual-en">');
-    expect(contentHtml).toContain("Department of Finance");
+    expect(content).toContain("Department of Finance");
   });
 
-  test("wraps BilingualItemFr with lang=fr", () => {
+  test("extracts BilingualItemFr text", () => {
     const xml = createActXmlWithContent(`
       <Text>
         <BilingualGroup>
@@ -96,21 +95,19 @@ test.describe("Bilingual content handling", () => {
       </Text>
     `);
     const result = parseActXml(xml, "en");
-    const contentHtml = result.sections[0].contentHtml;
+    const content = result.sections[0].content;
 
-    expect(contentHtml).toContain('<span lang="fr" class="bilingual-fr">');
-    expect(contentHtml).toContain("Ministère des Finances");
+    expect(content).toContain("Ministère des Finances");
   });
 
-  test("preserves Language element with xml:lang attribute", () => {
+  test("extracts Language element text", () => {
     const xml = createActXmlWithContent(`
       <Text>See <Language xml:lang="fr">Loi française</Language> for details.</Text>
     `);
     const result = parseActXml(xml, "en");
-    const contentHtml = result.sections[0].contentHtml;
+    const content = result.sections[0].content;
 
-    expect(contentHtml).toContain('<span lang="fr">');
-    expect(contentHtml).toContain("Loi française");
+    expect(content).toContain("Loi française");
   });
 
   test("handles multiple bilingual items in sequence", () => {
@@ -125,18 +122,12 @@ test.describe("Bilingual content handling", () => {
       </Text>
     `);
     const result = parseActXml(xml, "en");
-    const contentHtml = result.sections[0].contentHtml;
+    const content = result.sections[0].content;
 
-    expect(contentHtml).toContain("First English");
-    expect(contentHtml).toContain("Premier français");
-    expect(contentHtml).toContain("Second English");
-    expect(contentHtml).toContain("Deuxième français");
-
-    // Count occurrences of bilingual spans
-    const enMatches = contentHtml?.match(/class="bilingual-en"/g) || [];
-    const frMatches = contentHtml?.match(/class="bilingual-fr"/g) || [];
-    expect(enMatches.length).toBe(2);
-    expect(frMatches.length).toBe(2);
+    expect(content).toContain("First English");
+    expect(content).toContain("Premier français");
+    expect(content).toContain("Second English");
+    expect(content).toContain("Deuxième français");
   });
 
   test("sets hasBilingualGroup flag in content flags", () => {
@@ -241,7 +232,7 @@ test.describe("Official title markers", () => {
 });
 
 test.describe("Combined bilingual and table scenarios", () => {
-  test("handles bilingual content inside table cells", () => {
+  test("extracts bilingual content from table cells", () => {
     const xml = createActXmlWithContent(`
       <TableGroup>
         <table>
@@ -262,11 +253,9 @@ test.describe("Combined bilingual and table scenarios", () => {
       </TableGroup>
     `);
     const result = parseActXml(xml, "en");
-    const contentHtml = result.sections[0].contentHtml;
+    const content = result.sections[0].content;
 
-    expect(contentHtml).toContain("<table>");
-    expect(contentHtml).toContain('<div class="bilingual-group">');
-    expect(contentHtml).toContain("English Department");
-    expect(contentHtml).toContain("Ministère français");
+    expect(content).toContain("English Department");
+    expect(content).toContain("Ministère français");
   });
 });

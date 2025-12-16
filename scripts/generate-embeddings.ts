@@ -12,11 +12,15 @@
  *   npx tsx scripts/generate-parlEmbeddings.ts --empty-tables
  *   npx tsx scripts/generate-parlEmbeddings.ts --sync-progress  # Rebuild SQLite from Postgres
  *   npx tsx scripts/generate-parlEmbeddings.ts --clear-progress # Clear local progress tracking
+ *   npx tsx scripts/generate-parlEmbeddings.ts --prod           # Use production database
  */
 
 import { config } from "dotenv";
 
-config({ path: ".env.local" });
+// Check for --prod flag before loading env (must happen before other imports that use env vars)
+const isProd = process.argv.includes("--prod");
+const envFile = isProd ? ".env.production.local" : ".env.local";
+config({ path: envFile, override: true });
 
 import { existsSync, mkdirSync } from "node:fs";
 import { createInterface } from "node:readline";
@@ -1762,6 +1766,9 @@ async function processRidings(): Promise<void> {
 async function main() {
   try {
     console.log("\n🏛️  Embedding Generator (bilingual)\n");
+    if (isProd) {
+      console.log("⚠️  PRODUCTION MODE - Using .env.production.local\n");
+    }
     console.log(`Types: ${selectedTypes.join(", ")}`);
     console.log(`Session filter: ${sessionFilter ?? "none"}`);
     console.log(`Limit: ${limit ?? "none"}`);

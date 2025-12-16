@@ -2,13 +2,25 @@
 
 import { XIcon } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 
+const STORAGE_KEY = "system-status-dismissed";
+
 export function SystemStatusNotice() {
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissed, setDismissed] = useState(true); // Start hidden to avoid flash
 
   const showStatus = process.env.NEXT_PUBLIC_SHOW_SYSTEM_STATUS;
+
+  useEffect(() => {
+    const wasDismissed = localStorage.getItem(STORAGE_KEY) === "true";
+    setDismissed(wasDismissed);
+  }, []);
+
+  const handleDismiss = () => {
+    localStorage.setItem(STORAGE_KEY, "true");
+    setDismissed(true);
+  };
 
   if (!showStatus || dismissed) {
     return null;
@@ -25,7 +37,7 @@ export function SystemStatusNotice() {
         </Link>
         <Button
           className="absolute right-2 size-6"
-          onClick={() => setDismissed(true)}
+          onClick={handleDismiss}
           size="icon"
           variant="ghost"
         >

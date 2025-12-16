@@ -13,7 +13,7 @@ import {
   buildLegislationContext,
   type LegislationContext,
 } from "@/lib/rag/legislation/context-builder";
-import { hydrateTopSource } from "@/lib/rag/legislation/hydrate";
+import { hydrateTopPerType } from "@/lib/rag/legislation/hydrate";
 import { searchLegislation } from "@/lib/rag/legislation/search";
 import { ragDebug } from "@/lib/rag/parliament/debug";
 import { detectLanguage } from "@/lib/rag/parliament/query-analysis";
@@ -91,10 +91,12 @@ export async function getLegislationContext(
     topN: boundedLimit,
   });
 
-  // Hydrate the most relevant source using RERANKED results (not original vector-ranked)
-  // This ensures the artifact panel shows the document that the cross-encoder
-  // determined is most relevant, not just the highest vector similarity match.
-  const hydratedSources = await hydrateTopSource(
+  // Hydrate top result per source type using RERANKED results
+  // This provides multi-tier context for the UI:
+  // - Tier 1: Acts (prominent display)
+  // - Tier 2: Regulations (secondary display)
+  // - Tier 3: Sections, definitions, cross-references (expandable panel)
+  const hydratedSources = await hydrateTopPerType(
     context.rerankedResults,
     preferLang
   );

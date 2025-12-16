@@ -6,7 +6,7 @@ import type {
 } from "../types";
 import { extractLimsMetadata } from "./metadata";
 import { normalizeTermForMatching } from "./normalization";
-import { extractTextContent } from "./text";
+import { extractTextContentPreserved as extractTextContent } from "./text";
 
 const AND_SECTIONS_REGEX =
   /in this section and (?:in )?sections?\s+(.+?)(?:\.|$)/i;
@@ -250,6 +250,8 @@ type ExtractDefinedTermOptions = {
   regulationId?: string;
   sectionLabel?: string;
   scope?: DefinitionScope;
+  /** Document position for position-based joining with preserved-order content */
+  definitionOrder?: number;
 };
 
 /**
@@ -445,7 +447,15 @@ function extractTermsFromParagraphs(
 export function extractDefinedTermFromDefinition(
   options: ExtractDefinedTermOptions
 ): ParsedDefinedTerm[] {
-  const { defEl, language, actId, regulationId, sectionLabel, scope } = options;
+  const {
+    defEl,
+    language,
+    actId,
+    regulationId,
+    sectionLabel,
+    scope,
+    definitionOrder,
+  } = options;
   const textEl = defEl.Text;
   if (!textEl) {
     return [];
@@ -544,6 +554,8 @@ export function extractDefinedTermFromDefinition(
   }
 
   // Full definition text (shared by all terms in this Definition)
+  // extractTextContent (aliased from extractTextContentPreserved) maintains document order
+  // for mixed content (text interspersed with elements like XRefExternal)
   const definition = extractTextContent(textEl);
 
   // Default scope if not provided
@@ -571,6 +583,7 @@ export function extractDefinedTermFromDefinition(
       actId,
       regulationId,
       sectionLabel,
+      definitionOrder,
       scopeType: scope?.scopeType || defaultScopeType,
       scopeSections: scope?.scopeSections,
       scopeRawText: scope?.scopeRawText,

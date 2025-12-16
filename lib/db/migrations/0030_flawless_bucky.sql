@@ -1,0 +1,1 @@
+ALTER TABLE "legislation"."sections" DROP COLUMN "content_html";

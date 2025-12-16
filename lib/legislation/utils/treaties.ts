@@ -3,7 +3,8 @@ import type {
   TreatyDefinition,
   TreatySectionHeading,
 } from "../types";
-import { extractHtmlContent, extractTextContent } from "./text";
+import { extractHeadingComponents } from "./heading";
+import { extractTextContent } from "./text";
 
 // Treaty parsing patterns
 const TREATY_PART_HEADING_REGEX = /^PART\s/i;
@@ -34,12 +35,7 @@ export function extractTreatySections(
 
     const headingObj = heading as Record<string, unknown>;
     const level = Number(headingObj["@_level"]) || 1;
-    const label = headingObj.Label
-      ? extractTextContent(headingObj.Label)
-      : undefined;
-    const title = headingObj.TitleText
-      ? extractTextContent(headingObj.TitleText)
-      : undefined;
+    const { label, title } = extractHeadingComponents(headingObj);
 
     // Skip the main title heading (first heading without a label)
     if (!label && sections.length === 0) {
@@ -107,12 +103,10 @@ export function extractTreatyDefinitions(
 
         if (term) {
           const definition = extractTextContent(textEl);
-          const definitionHtml = extractHtmlContent(textEl);
 
           definitions.push({
             term,
             definition,
-            definitionHtml: definitionHtml || undefined,
           });
         }
       }
@@ -135,15 +129,13 @@ export function extractTreatyDefinitions(
  */
 export function extractTreatyPreamble(treatyObj: Record<string, unknown>): {
   preamble: string;
-  preambleHtml: string;
 } {
   const preambleTexts: string[] = [];
-  const preambleHtmlParts: string[] = [];
 
   // Get provisions
   const provisions = treatyObj.Provision;
   if (!provisions) {
-    return { preamble: "", preambleHtml: "" };
+    return { preamble: "" };
   }
 
   const provisionArray = Array.isArray(provisions) ? provisions : [provisions];
@@ -177,17 +169,14 @@ export function extractTreatyPreamble(treatyObj: Record<string, unknown>): {
     }
 
     const text = extractTextContent(provisionObj);
-    const html = extractHtmlContent(provisionObj);
 
     if (text) {
       preambleTexts.push(text);
-      preambleHtmlParts.push(`<p>${html}</p>`);
     }
   }
 
   return {
     preamble: preambleTexts.join("\n\n"),
-    preambleHtml: preambleHtmlParts.join("\n"),
   };
 }
 
@@ -198,16 +187,14 @@ export function extractTreatySignatureText(
   treatyObj: Record<string, unknown>
 ): {
   signatureText: string;
-  signatureTextHtml: string;
 } {
   const signatureTexts: string[] = [];
-  const signatureHtmlParts: string[] = [];
   let foundSignatureStart = false;
 
   // Get provisions
   const provisions = treatyObj.Provision;
   if (!provisions) {
-    return { signatureText: "", signatureTextHtml: "" };
+    return { signatureText: "" };
   }
 
   const provisionArray = Array.isArray(provisions) ? provisions : [provisions];
@@ -231,117 +218,12 @@ export function extractTreatySignatureText(
 
     if (foundSignatureStart && text) {
       signatureTexts.push(text);
-      const html = extractHtmlContent(provisionObj);
-      signatureHtmlParts.push(`<p>${html}</p>`);
     }
   }
 
   return {
     signatureText: signatureTexts.join("\n\n"),
-    signatureTextHtml: signatureHtmlParts.join("\n"),
   };
-}
-
-/**
- * Generate full HTML for treaty content with proper structure
- */
-export function extractTreatyHtml(treatyObj: Record<string, unknown>): string {
-  const htmlParts: string[] = [];
-
-  // Process all child elements in order to preserve structure
-  for (const [key, value] of Object.entries(treatyObj)) {
-    if (key.startsWith("@_") || key === "#text") {
-      continue;
-    }
-
-    const items = Array.isArray(value) ? value : [value];
-
-    for (const item of items) {
-      if (typeof item !== "object" || item === null) {
-        continue;
-      }
-
-      const itemObj = item as Record<string, unknown>;
-
-      switch (key) {
-        case "Heading": {
-          const level = Number(itemObj["@_level"]) || 1;
-          const label = itemObj.Label ? extractHtmlContent(itemObj.Label) : "";
-          const title = itemObj.TitleText
-            ? extractHtmlContent(itemObj.TitleText)
-            : "";
-          const headingTag = level <= 2 ? `h${level + 1}` : "h4";
-
-          if (label && title) {
-            htmlParts.push(
-              `<${headingTag} class="treaty-heading level-${level}"><span class="label">${label}</span> <span class="title">${title}</span></${headingTag}>`
-            );
-          } else if (title) {
-            htmlParts.push(
-              `<${headingTag} class="treaty-heading level-${level}">${title}</${headingTag}>`
-            );
-          } else if (label) {
-            htmlParts.push(
-              `<${headingTag} class="treaty-heading level-${level}">${label}</${headingTag}>`
-            );
-          }
-          break;
-        }
-
-        case "Provision": {
-          const label = itemObj.Label ? extractHtmlContent(itemObj.Label) : "";
-          const content = extractHtmlContent(itemObj);
-
-          if (label) {
-            htmlParts.push(
-              `<div class="treaty-provision"><span class="label">${label}</span> ${content}</div>`
-            );
-          } else {
-            htmlParts.push(`<p class="treaty-provision">${content}</p>`);
-          }
-          break;
-        }
-
-        case "Group": {
-          htmlParts.push(
-            `<div class="treaty-group">${extractTreatyHtml(itemObj)}</div>`
-          );
-          break;
-        }
-
-        case "Citation":
-        case "RelatedProvision": {
-          const content = extractHtmlContent(itemObj);
-          htmlParts.push(
-            `<p class="treaty-${key.toLowerCase()}">${content}</p>`
-          );
-          break;
-        }
-
-        case "Schedule": {
-          const scheduleContent = extractTreatyHtml(itemObj);
-          htmlParts.push(
-            `<div class="treaty-schedule">${scheduleContent}</div>`
-          );
-          break;
-        }
-
-        case "HistoricalNote": {
-          const content = extractHtmlContent(itemObj);
-          htmlParts.push(
-            `<aside class="treaty-historical-note">${content}</aside>`
-          );
-          break;
-        }
-
-        default:
-          // For other elements, just extract their content
-          break;
-      }
-    }
-  }
-
-  return htmlParts.join("\n");
 }
 
 /**
@@ -361,22 +243,18 @@ export function parseTreatyContent(treaty: unknown): TreatyContent | undefined {
     const firstHeading = Array.isArray(headings) ? headings[0] : headings;
     if (typeof firstHeading === "object" && firstHeading !== null) {
       const headingObj = firstHeading as Record<string, unknown>;
-      if (headingObj.TitleText) {
-        title = extractTextContent(headingObj.TitleText);
-      }
+      title = extractHeadingComponents(headingObj).title;
     }
   }
 
   // Extract structured content
   const sections = extractTreatySections(treatyObj);
   const definitions = extractTreatyDefinitions(treatyObj);
-  const { preamble, preambleHtml } = extractTreatyPreamble(treatyObj);
-  const { signatureText, signatureTextHtml } =
-    extractTreatySignatureText(treatyObj);
+  const { preamble } = extractTreatyPreamble(treatyObj);
+  const { signatureText } = extractTreatySignatureText(treatyObj);
 
-  // Generate full text and HTML
+  // Generate full text
   const text = extractTextContent(treatyObj);
-  const textHtml = extractTreatyHtml(treatyObj);
 
   if (!text) {
     return;
@@ -385,13 +263,10 @@ export function parseTreatyContent(treaty: unknown): TreatyContent | undefined {
   return {
     title,
     preamble: preamble || undefined,
-    preambleHtml: preambleHtml || undefined,
     sections: sections.length > 0 ? sections : undefined,
     definitions: definitions.length > 0 ? definitions : undefined,
     signatureText: signatureText || undefined,
-    signatureTextHtml: signatureTextHtml || undefined,
     text,
-    textHtml: textHtml || undefined,
   };
 }
 

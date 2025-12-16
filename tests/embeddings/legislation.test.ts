@@ -988,6 +988,7 @@ test.describe("buildRegulationMetadataText", () => {
     lastAmendedDate: null,
     limsMetadata: null,
     regulationMakerOrder: null,
+    enablingAuthorityOrder: null,
     recentAmendments: null,
     relatedProvisions: null,
     treaties: null,
@@ -1332,7 +1333,7 @@ test.describe("shouldSkipSection", () => {
     marginalNote: "Test marginal note",
     sectionType: "section",
     hierarchyPath: null,
-    contentHtml: null,
+    contentTree: null,
     status: "in-force",
     xmlType: null,
     xmlTarget: null,
@@ -1517,7 +1518,7 @@ test.describe("chunkSection", () => {
     marginalNote: "Legislative Powers",
     sectionType: "section",
     hierarchyPath: null,
-    contentHtml: null,
+    contentTree: null,
     status: "in-force",
     xmlType: null,
     xmlTarget: null,
@@ -1674,7 +1675,7 @@ test.describe("groupSectionsBy", () => {
     marginalNote: null,
     sectionType: "section",
     hierarchyPath: null,
-    contentHtml: null,
+    contentTree: null,
     status: "in-force",
     xmlType: null,
     xmlTarget: null,
@@ -3196,7 +3197,7 @@ test.describe("chunkSection with legal boundaries", () => {
     marginalNote: "Legislative Powers",
     sectionType: "section",
     hierarchyPath: null,
-    contentHtml: null,
+    contentTree: null,
     status: "in-force",
     xmlType: null,
     xmlTarget: null,
@@ -3464,7 +3465,7 @@ test.describe("chunkSection with schedule metadata", () => {
     marginalNote: "Schedule I",
     sectionType: "schedule",
     hierarchyPath: null,
-    contentHtml: null,
+    contentTree: null,
     status: "in-force",
     xmlType: null,
     xmlTarget: null,
@@ -4913,227 +4914,109 @@ test.describe("Parser cross-reference extraction from schedules", () => {
   });
 });
 
+// ---------- Order/Provision (Enabling Authority) Tests ----------
+
 test.describe("parseRegulationXml Order/Provision parsing", () => {
-  test("parses Order/Provision elements from regulations", () => {
-    const xml = `<?xml version="1.0"?>
-<Regulation lims:inforce-start-date="2020-01-01" xmlns:lims="http://justice.gc.ca/lims">
+  /**
+   * Helper to create a regulation XML with optional Order element
+   */
+  function createRegulationXml(orderContent?: string): string {
+    return `<?xml version="1.0" encoding="utf-8"?>
+<Regulation xml:lang="en" regulation-type="SOR">
   <Identification>
-    <InstrumentNumber>SOR/2000-1</InstrumentNumber>
-    <LongTitle>Test Divestiture Regulations</LongTitle>
-    <RegulationMakerOrder>
-      <RegulationMaker>T.B.</RegulationMaker>
-      <OrderNumber>827750</OrderNumber>
-    </RegulationMakerOrder>
+    <InstrumentNumber>SOR/2024-123</InstrumentNumber>
+    <ShortTitle>Test Regulation</ShortTitle>
   </Identification>
-  <Order lims:inforce-start-date="2020-01-01" lims:fid="123456">
-    <Provision lims:inforce-start-date="2020-01-01" lims:fid="123457">
-      <Text>The Treasury Board, on the recommendation of the President of the Treasury Board, pursuant to paragraph 42.1(1)(u) of the Public Service Superannuation Act, hereby makes the annexed Test Divestiture Regulations.</Text>
-    </Provision>
-  </Order>
+  ${orderContent || ""}
   <Body>
     <Section>
       <Label>1</Label>
-      <Text>The definitions in this section apply in these Regulations.</Text>
+      <Text>In these Regulations, "test" means a test.</Text>
+    </Section>
+    <Section>
+      <Label>2</Label>
+      <Text>This section applies to all test matters.</Text>
     </Section>
   </Body>
 </Regulation>`;
+  }
+
+  test("Order/Provision content does NOT create sections with sectionType=provision", () => {
+    const xml = createRegulationXml(`
+      <Order>
+        <Provision>
+          <Text>Her Excellency the Governor General in Council, on the recommendation of the Minister of the Environment, makes the annexed Test Regulation pursuant to section 191 of the Test Act.</Text>
+        </Provision>
+      </Order>
+    `);
 
     const result = parseRegulationXml(xml, "en");
 
-    // Should have both the Order provision and the body section
-    expect(result.sections.length).toBeGreaterThanOrEqual(2);
-
-    // Find the order provision section
-    const orderSection = result.sections.find(
-      (s) => s.sectionType === "provision"
-    );
-    expect(orderSection).toBeDefined();
-    // sectionOrder is 2 because Body section is processed first (order=1)
-    expect(orderSection?.sectionLabel).toBe("order-2");
-    expect(orderSection?.content).toContain("Treasury Board");
-    expect(orderSection?.content).toContain("recommendation");
-  });
-
-  test("parses Order/Provision with footnotes", () => {
-    const xml = `<?xml version="1.0"?>
-<Regulation xmlns:lims="http://justice.gc.ca/lims">
-  <Identification>
-    <InstrumentNumber>SOR/2000-2</InstrumentNumber>
-    <LongTitle>Test Regulations with Footnotes</LongTitle>
-  </Identification>
-  <Order lims:inforce-start-date="2020-01-01">
-    <Provision lims:inforce-start-date="2020-01-01">
-      <Text>Made pursuant to paragraph 42.1(1)(u)<FootnoteRef idref="fn_test">a</FootnoteRef> of the Act.</Text>
-      <Footnote id="fn_test" placement="page" status="official">
-        <Label>a</Label>
-        <Text>S.C. 1992, c. 46, s. 22</Text>
-      </Footnote>
-    </Provision>
-  </Order>
-  <Body>
-    <Section><Label>1</Label><Text>Test section.</Text></Section>
-  </Body>
-</Regulation>`;
-
-    const result = parseRegulationXml(xml, "en");
-
-    const orderSection = result.sections.find(
-      (s) => s.sectionType === "provision"
-    );
-    expect(orderSection).toBeDefined();
-    expect(orderSection?.footnotes).toBeDefined();
-    expect(orderSection?.footnotes?.length).toBeGreaterThanOrEqual(1);
-    expect(orderSection?.footnotes?.[0]?.id).toBe("fn_test");
-    expect(orderSection?.footnotes?.[0]?.text).toContain("S.C. 1992");
-  });
-
-  test("parses Order with multiple Provision elements", () => {
-    const xml = `<?xml version="1.0"?>
-<Regulation xmlns:lims="http://justice.gc.ca/lims">
-  <Identification>
-    <InstrumentNumber>SOR/2000-3</InstrumentNumber>
-    <LongTitle>Multi-Provision Regulations</LongTitle>
-  </Identification>
-  <Order>
-    <Provision>
-      <Text>First provision: Authority text.</Text>
-    </Provision>
-    <Provision>
-      <Text>Second provision: Additional authority.</Text>
-    </Provision>
-  </Order>
-  <Body>
-    <Section><Label>1</Label><Text>Body section.</Text></Section>
-  </Body>
-</Regulation>`;
-
-    const result = parseRegulationXml(xml, "en");
-
+    // Order content should NOT create sections with sectionType="provision"
     const provisionSections = result.sections.filter(
       (s) => s.sectionType === "provision"
     );
-    expect(provisionSections.length).toBe(2);
+    expect(provisionSections).toHaveLength(0);
 
-    // First provision has order-2 (Body section is order=1)
-    expect(provisionSections[0].sectionLabel).toBe("order-2");
-    expect(provisionSections[0].content).toContain("First provision");
-
-    // Second provision has order-3
-    expect(provisionSections[1].sectionLabel).toBe("order-3");
-    expect(provisionSections[1].content).toContain("Second provision");
+    // Regular sections should still be parsed normally
+    const regularSections = result.sections.filter(
+      (s) => s.sectionType === "section"
+    );
+    expect(regularSections).toHaveLength(2);
   });
 
-  test("extracts cross-references from Order/Provision", () => {
-    const xml = `<?xml version="1.0"?>
-<Regulation xmlns:lims="http://justice.gc.ca/lims">
-  <Identification>
-    <InstrumentNumber>SOR/2000-4</InstrumentNumber>
-    <LongTitle>Cross-Reference Regulations</LongTitle>
-  </Identification>
-  <Order>
-    <Provision>
-      <Text>Pursuant to <XRefExternal reference-type="act" link="P-36">Public Service Superannuation Act</XRefExternal> and <XRefExternal reference-type="act" link="F-11">Financial Administration Act</XRefExternal>.</Text>
-    </Provision>
-  </Order>
-  <Body>
-    <Section><Label>1</Label><Text>Body section.</Text></Section>
-  </Body>
-</Regulation>`;
+  test("multiple Order/Provisions do NOT create multiple provision sections", () => {
+    const xml = createRegulationXml(`
+      <Order>
+        <Provision>
+          <Text>Her Excellency the Governor General in Council makes these regulations.</Text>
+        </Provision>
+        <Provision>
+          <Text>These regulations are made pursuant to section 5 of the Test Act.</Text>
+        </Provision>
+      </Order>
+    `);
 
     const result = parseRegulationXml(xml, "en");
 
-    // Should extract cross-references from the Order/Provision
-    const p36Ref = result.crossReferences.find((r) => r.targetRef === "P-36");
-    expect(p36Ref).toBeDefined();
-    expect(p36Ref?.sourceSectionLabel).toBe("order-2");
+    // Multiple Provisions in Order should NOT create sections
+    const provisionSections = result.sections.filter(
+      (s) => s.sectionType === "provision"
+    );
+    expect(provisionSections).toHaveLength(0);
 
-    const f11Ref = result.crossReferences.find((r) => r.targetRef === "F-11");
-    expect(f11Ref).toBeDefined();
+    // Regular sections should be unaffected
+    expect(
+      result.sections.filter((s) => s.sectionType === "section")
+    ).toHaveLength(2);
   });
 
-  test("preserves LIMS metadata from Order/Provision", () => {
-    const xml = `<?xml version="1.0"?>
-<Regulation xmlns:lims="http://justice.gc.ca/lims">
-  <Identification>
-    <InstrumentNumber>SOR/2000-5</InstrumentNumber>
-    <LongTitle>LIMS Metadata Regulations</LongTitle>
-  </Identification>
-  <Order lims:fid="order-fid" lims:id="order-id">
-    <Provision lims:inforce-start-date="2020-06-15" lims:fid="prov-fid" lims:id="prov-id">
-      <Text>Authority provision with LIMS metadata.</Text>
-    </Provision>
-  </Order>
-  <Body>
-    <Section><Label>1</Label><Text>Body section.</Text></Section>
-  </Body>
-</Regulation>`;
+  test("regulation without Order element parses sections normally", () => {
+    const xml = createRegulationXml(); // No Order element
 
     const result = parseRegulationXml(xml, "en");
 
-    const orderSection = result.sections.find(
-      (s) => s.sectionType === "provision"
-    );
-    expect(orderSection).toBeDefined();
-    expect(orderSection?.inForceStartDate).toBe("2020-06-15");
-    expect(orderSection?.limsMetadata?.fid).toBe("prov-fid");
-    expect(orderSection?.limsMetadata?.id).toBe("prov-id");
+    // Should still parse regular sections
+    expect(result.sections).toHaveLength(2);
+    expect(result.sections[0].sectionLabel).toBe("1");
+    expect(result.sections[1].sectionLabel).toBe("2");
   });
 
-  test("generates correct canonical section ID for provisions", () => {
-    const xml = `<?xml version="1.0"?>
-<Regulation xmlns:lims="http://justice.gc.ca/lims">
-  <Identification>
-    <InstrumentNumber>SOR/2000-6</InstrumentNumber>
-    <LongTitle>Canonical ID Regulations</LongTitle>
-  </Identification>
-  <Order>
-    <Provision>
-      <Text>Authority text.</Text>
-    </Provision>
-  </Order>
-  <Body>
-    <Section><Label>1</Label><Text>Body section.</Text></Section>
-  </Body>
-</Regulation>`;
+  test("Order content is extracted as enablingAuthorityOrder metadata", () => {
+    const xml = createRegulationXml(`
+      <Order>
+        <Provision>
+          <Text>Her Excellency the Governor General in Council makes these regulations.</Text>
+        </Provision>
+      </Order>
+    `);
 
     const result = parseRegulationXml(xml, "en");
 
-    const orderSection = result.sections.find(
-      (s) => s.sectionType === "provision"
-    );
-    expect(orderSection).toBeDefined();
-    expect(orderSection?.canonicalSectionId).toBe(
-      "SOR-2000-6/en/provision/2/order-2"
-    );
-  });
-
-  test("French regulation Order/Provision parsing", () => {
-    const xml = `<?xml version="1.0"?>
-<Regulation xmlns:lims="http://justice.gc.ca/lims" xml:lang="fr">
-  <Identification>
-    <InstrumentNumber>DORS/2000-1</InstrumentNumber>
-    <LongTitle>Règlement sur la cession</LongTitle>
-  </Identification>
-  <Order>
-    <Provision>
-      <Text>Sur recommandation du président du Conseil du Trésor et en vertu de l'alinéa de la Loi.</Text>
-    </Provision>
-  </Order>
-  <Body>
-    <Section><Label>1</Label><Text>Définitions.</Text></Section>
-  </Body>
-</Regulation>`;
-
-    const result = parseRegulationXml(xml, "fr");
-
-    const orderSection = result.sections.find(
-      (s) => s.sectionType === "provision"
-    );
-    expect(orderSection).toBeDefined();
-    expect(orderSection?.language).toBe("fr");
-    expect(orderSection?.content).toContain("recommandation");
-    expect(orderSection?.canonicalSectionId).toBe(
-      "DORS-2000-1/fr/provision/2/order-2"
+    // Order content should be captured in enablingAuthorityOrder metadata
+    expect(result.regulation?.enablingAuthorityOrder).toBeDefined();
+    expect(result.regulation?.enablingAuthorityOrder?.text).toContain(
+      "Her Excellency the Governor General"
     );
   });
 });

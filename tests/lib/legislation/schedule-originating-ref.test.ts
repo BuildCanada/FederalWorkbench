@@ -166,6 +166,7 @@ test.describe("OriginatingRef extraction from schedule headers", () => {
     `);
     const result = parseActXml(xml, "en");
 
+    // FormGroup elements inherit sectionType from schedule context
     const scheduleSections = result.sections.filter(
       (s) => s.sectionType === "schedule"
     );

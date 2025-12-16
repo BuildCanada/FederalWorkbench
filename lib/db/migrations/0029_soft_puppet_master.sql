@@ -1,0 +1,1 @@
+ALTER TABLE "legislation"."sections" ADD COLUMN "content_tree" jsonb;

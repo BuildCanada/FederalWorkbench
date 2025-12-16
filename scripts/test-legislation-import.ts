@@ -440,7 +440,7 @@ async function importActFromXml(
       hierarchyPath: section.hierarchyPath,
       marginalNote: section.marginalNote,
       content: section.content,
-      contentHtml: section.contentHtml,
+      contentTree: section.contentTree,
       status: section.status,
       xmlType: section.xmlType,
       xmlTarget: section.xmlTarget,
@@ -540,7 +540,7 @@ async function importRegulationFromXml(
       hierarchyPath: section.hierarchyPath,
       marginalNote: section.marginalNote,
       content: section.content,
-      contentHtml: section.contentHtml,
+      contentTree: section.contentTree,
       status: section.status,
       xmlType: section.xmlType,
       xmlTarget: section.xmlTarget,
@@ -776,14 +776,6 @@ async function verifyAct(
       normalizeText(xmlSection.content) !== normalizeText(dbSection.content)
     ) {
       errors.push(`Section ${xmlSection.canonicalSectionId}: content mismatch`);
-    }
-    if (
-      normalizeText(xmlSection.contentHtml) !==
-      normalizeText(dbSection.contentHtml)
-    ) {
-      errors.push(
-        `Section ${xmlSection.canonicalSectionId}: contentHtml mismatch`
-      );
     }
     if (xmlSection.sectionType !== dbSection.sectionType) {
       errors.push(
@@ -1136,14 +1128,6 @@ async function verifyRegulation(
       normalizeText(xmlSection.content) !== normalizeText(dbSection.content)
     ) {
       errors.push(`Section ${xmlSection.canonicalSectionId}: content mismatch`);
-    }
-    if (
-      normalizeText(xmlSection.contentHtml) !==
-      normalizeText(dbSection.contentHtml)
-    ) {
-      errors.push(
-        `Section ${xmlSection.canonicalSectionId}: contentHtml mismatch`
-      );
     }
     if (xmlSection.sectionType !== dbSection.sectionType) {
       errors.push(

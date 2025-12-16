@@ -5,6 +5,7 @@
  *   npx tsx scripts/import-legislation.ts [options]
  *
  * Options:
+ *   --prod          Use production database (.env.production.local)
  *   --limit=N       Process only N files (for testing)
  *   --dry-run       Parse files but don't insert into database
  *   --type=act|regulation  Process only acts or regulations
@@ -18,13 +19,24 @@
  *                   For regulations: SOR-2000-1,SI-2000-100,C.R.C.,_c._10
  *   --subset         Import strategic subset (25 acts + related regulations)
  *   --subset=NAME    Import named subset (strategic, smoke)
+ *   --images         Download images from Justice Canada website
  */
 
+import { existsSync } from "node:fs";
 import { config } from "dotenv";
 
-config({ path: ".env.local" });
+// Check for --prod flag before loading env (must happen before other imports that use env vars)
+const isProd = process.argv.includes("--prod");
+const envFile = isProd ? ".env.production.local" : ".env.local";
+const envResult = config({ path: envFile, override: true });
+if (envResult.error) {
+  console.error(`[import] Error loading ${envFile}:`, envResult.error.message);
+} else if (!existsSync(envFile)) {
+  console.warn(`[import] Warning: ${envFile} not found`);
+}
 
-import { existsSync, mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -66,6 +78,14 @@ if (!connectionString) {
   throw new Error("POSTGRES_URL environment variable is required");
 }
 
+// Debug: show which database host we're connecting to
+try {
+  const dbUrl = new URL(connectionString);
+  console.log(`[import] Database host: ${dbUrl.host}`);
+} catch {
+  console.log("[import] Database: (unable to parse URL)");
+}
+
 const client = postgres(connectionString, { max: 10, debug: false });
 const db = drizzle(client);
 
@@ -85,6 +105,7 @@ const langArg = args.find((a) => a.startsWith("--lang="))?.split("=")[1] as
 const idsArg = args.find((a) => a.startsWith("--ids="))?.split("=")[1];
 const truncateMode = args.includes("--truncate");
 const forceMode = args.includes("--force");
+const downloadImages = args.includes("--images");
 
 // Parse --subset flag
 let subsetName: string | null = null;
@@ -209,6 +230,10 @@ type ImportStats = {
   // Term linking stats (populated after all files processed)
   termPairsLinked: number;
   termPairsNoMatch: number;
+  // Image download stats
+  imagesDownloaded: number;
+  imagesExisting: number;
+  imagesFailed: number;
 };
 
 const stats: ImportStats = {
@@ -222,7 +247,18 @@ const stats: ImportStats = {
   crossReferencesInserted: 0,
   termPairsLinked: 0,
   termPairsNoMatch: 0,
+  imagesDownloaded: 0,
+  imagesExisting: 0,
+  imagesFailed: 0,
 };
+
+// Collect unique image sources from all processed documents
+const imageSourcesToDownload = new Set<string>();
+
+// Base URL for downloading images from Justice Canada
+const JUSTICE_IMAGES_BASE_URL = "https://laws-lois.justice.gc.ca/images";
+const LOCAL_IMAGES_PATH = "public/legislation/images";
+const IMAGE_DOWNLOAD_CONCURRENCY = 5;
 
 // Load lookup.xml metadata
 const LOOKUP_PATH = `${BASE_PATH}/lookup/lookup.xml`;
@@ -292,6 +328,103 @@ function enrichDocumentWithLookup(doc: ParsedDocument): void {
           );
         }
       }
+    }
+  }
+}
+
+/**
+ * Collect image sources from a parsed document.
+ * Adds all unique image sources to the global Set for later downloading.
+ */
+function collectImageSources(doc: ParsedDocument): void {
+  for (const section of doc.sections) {
+    if (section.contentFlags?.imageSources) {
+      for (const source of section.contentFlags.imageSources) {
+        imageSourcesToDownload.add(source);
+      }
+    }
+  }
+}
+
+type ImageDownloadResult = "downloaded" | "existing" | "failed";
+
+/**
+ * Download an image from Justice Canada to local public directory.
+ * Creates directory structure as needed.
+ */
+async function downloadImage(source: string): Promise<ImageDownloadResult> {
+  const url = `${JUSTICE_IMAGES_BASE_URL}/${source}`;
+  const localPath = join(LOCAL_IMAGES_PATH, source);
+  const localDir = dirname(localPath);
+
+  // Skip if already downloaded
+  if (existsSync(localPath)) {
+    logVerbose(`  Image already exists: ${source}`);
+    return "existing";
+  }
+
+  // Create directory structure
+  if (!existsSync(localDir)) {
+    mkdirSync(localDir, { recursive: true });
+  }
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      log(`  Failed to download ${source}: HTTP ${response.status}`);
+      return "failed";
+    }
+
+    const buffer = await response.arrayBuffer();
+    writeFileSync(localPath, Buffer.from(buffer));
+    logVerbose(`  Downloaded: ${source}`);
+    return "downloaded";
+  } catch (error) {
+    log(
+      `  Failed to download ${source}: ${error instanceof Error ? error.message : String(error)}`
+    );
+    return "failed";
+  }
+}
+
+/**
+ * Download all collected images from Justice Canada.
+ */
+async function downloadAllImages(): Promise<void> {
+  if (imageSourcesToDownload.size === 0) {
+    log("No images to download");
+    return;
+  }
+
+  log("");
+  log("=== Downloading Images ===");
+  log(`Found ${imageSourcesToDownload.size} unique images`);
+
+  // Ensure base directory exists
+  if (!existsSync(LOCAL_IMAGES_PATH)) {
+    mkdirSync(LOCAL_IMAGES_PATH, { recursive: true });
+  }
+
+  const sources = Array.from(imageSourcesToDownload);
+  const total = sources.length;
+
+  for (let i = 0; i < total; i += IMAGE_DOWNLOAD_CONCURRENCY) {
+    const batch = sources.slice(i, i + IMAGE_DOWNLOAD_CONCURRENCY);
+    const results = await Promise.all(batch.map(downloadImage));
+
+    for (const result of results) {
+      if (result === "downloaded") {
+        stats.imagesDownloaded++;
+      } else if (result === "existing") {
+        stats.imagesExisting++;
+      } else {
+        stats.imagesFailed++;
+      }
+    }
+
+    const processed = Math.min(i + IMAGE_DOWNLOAD_CONCURRENCY, total);
+    if (processed === total || processed % 25 === 0) {
+      log(`Progress: ${processed}/${total} images`);
     }
   }
 }
@@ -441,6 +574,7 @@ async function insertDocument(doc: ParsedDocument): Promise<void> {
         lastAmendedDate: doc.regulation.lastAmendedDate,
         limsMetadata: doc.regulation.limsMetadata,
         regulationMakerOrder: doc.regulation.regulationMakerOrder,
+        enablingAuthorityOrder: doc.regulation.enablingAuthorityOrder,
         recentAmendments: doc.regulation.recentAmendments,
         relatedProvisions: doc.regulation.relatedProvisions,
         treaties: doc.regulation.treaties,
@@ -465,7 +599,7 @@ async function insertDocument(doc: ParsedDocument): Promise<void> {
         hierarchyPath: section.hierarchyPath,
         marginalNote: section.marginalNote,
         content: section.content,
-        contentHtml: section.contentHtml,
+        contentTree: section.contentTree,
         status: section.status,
         xmlType: section.xmlType,
         xmlTarget: section.xmlTarget,
@@ -601,8 +735,11 @@ async function truncateLegislationTables() {
  */
 async function main() {
   log("Starting legislation import");
+  if (isProd) {
+    log("⚠️  PRODUCTION MODE - Using .env.production.local");
+  }
   log(
-    `Options: limit=${limit || "none"}, dry-run=${dryRun}, skip-existing=${skipExisting}, truncate=${truncateMode}, type=${typeArg || "all"}, lang=${langArg || "all"}, subset=${subsetName || "none"}, ids=${specificIds ? specificIds.length : "none"}`
+    `Options: limit=${limit || "none"}, dry-run=${dryRun}, skip-existing=${skipExisting}, truncate=${truncateMode}, type=${typeArg || "all"}, lang=${langArg || "all"}, subset=${subsetName || "none"}, ids=${specificIds ? specificIds.length : "none"}, images=${downloadImages}`
   );
 
   // Truncate tables if requested (with confirmation unless --force)
@@ -719,8 +856,10 @@ async function main() {
 
   for (const file of files) {
     try {
-      // Check if we should skip this file (uses SQLite, no await needed)
-      if (shouldSkipFile(file)) {
+      const skipDbInsert = shouldSkipFile(file);
+
+      // If skipping DB insert but not collecting images, skip entirely
+      if (skipDbInsert && !downloadImages) {
         stats.filesSkipped++;
         logVerbose(`Skipping (already exists): ${file.path}`);
         continue;
@@ -730,6 +869,18 @@ async function main() {
 
       const doc = parseLegislationXml(file.path, file.language);
       enrichDocumentWithLookup(doc);
+
+      // Collect image sources for later downloading
+      if (downloadImages) {
+        collectImageSources(doc);
+      }
+
+      // Skip DB insert if already imported
+      if (skipDbInsert) {
+        stats.filesSkipped++;
+        continue;
+      }
+
       await insertDocument(doc);
 
       // Mark as imported in SQLite progress tracker
@@ -799,6 +950,20 @@ async function main() {
     }
   }
 
+  // Download images if requested
+  if (downloadImages && !dryRun) {
+    await downloadAllImages();
+  } else if (downloadImages && dryRun) {
+    log("");
+    log("=== Images (Dry Run) ===");
+    log(`Would download ${imageSourcesToDownload.size} unique images`);
+    if (verbose) {
+      for (const source of imageSourcesToDownload) {
+        log(`  ${source}`);
+      }
+    }
+  }
+
   log("");
   log("=== Import Complete ===");
   log(`Files processed: ${stats.filesProcessed}`);
@@ -811,6 +976,15 @@ async function main() {
     log(`Defined terms inserted: ${stats.definedTermsInserted}`);
     log(`Cross references inserted: ${stats.crossReferencesInserted}`);
     log(`Term pairs linked: ${stats.termPairsLinked}`);
+    if (downloadImages) {
+      log(`Images downloaded: ${stats.imagesDownloaded}`);
+      if (stats.imagesExisting > 0) {
+        log(`Images existing: ${stats.imagesExisting}`);
+      }
+      if (stats.imagesFailed > 0) {
+        log(`Images failed: ${stats.imagesFailed}`);
+      }
+    }
   }
 
   // Clean up SQLite connection

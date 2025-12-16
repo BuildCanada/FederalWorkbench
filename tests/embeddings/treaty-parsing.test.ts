@@ -131,7 +131,6 @@ test.describe("Treaty parsing with structural detail", () => {
     expect(treaty?.definitions?.[1]?.definition).toContain(
       "means the Minister responsible for social security"
     );
-    expect(treaty?.definitions?.[0]?.definitionHtml).toContain("<dfn>");
   });
 
   test("extracts preamble text before PART headings", () => {
@@ -172,7 +171,6 @@ test.describe("Treaty parsing with structural detail", () => {
     expect(treaty?.preamble).toContain("CANADA");
     expect(treaty?.preamble).toContain("the Parties");
     expect(treaty?.preamble).toContain("RESOLVED");
-    expect(treaty?.preambleHtml).toContain("<strong>");
   });
 
   test("extracts signature text with IN WITNESS WHEREOF", () => {
@@ -203,43 +201,9 @@ test.describe("Treaty parsing with structural detail", () => {
     expect(treaty?.signatureText).toBeDefined();
     expect(treaty?.signatureText).toContain("IN WITNESS WHEREOF");
     expect(treaty?.signatureText).toContain("DONE");
-    expect(treaty?.signatureTextHtml).toContain("<em>");
   });
 
-  test("generates full HTML with proper structure", () => {
-    const xml = createRegulationWithTreaty(`
-      <Heading level="1">
-        <TitleText>Test Agreement</TitleText>
-      </Heading>
-      <Heading level="1">
-        <Label>PART I</Label>
-        <TitleText>General Provisions</TitleText>
-      </Heading>
-      <Heading level="2">
-        <Label>ARTICLE 1</Label>
-        <TitleText>Definitions</TitleText>
-      </Heading>
-      <Provision list-item="yes">
-        <Label>1</Label>
-        <Text>First provision content.</Text>
-      </Provision>
-      <Provision>
-        <Text>Unlabeled provision.</Text>
-      </Provision>
-    `);
-
-    const result = parseRegulationXml(xml, "en");
-
-    expect(result.regulation?.treaties).toHaveLength(1);
-    const treaty = result.regulation?.treaties?.[0];
-
-    expect(treaty?.textHtml).toBeDefined();
-    expect(treaty?.textHtml).toContain('class="treaty-heading level-1"');
-    expect(treaty?.textHtml).toContain('class="label"');
-    expect(treaty?.textHtml).toContain('class="treaty-provision"');
-  });
-
-  test("preserves full text for backward compatibility", () => {
+  test("preserves full text content", () => {
     const xml = createRegulationWithTreaty(`
       <Heading level="1">
         <TitleText>Test Agreement</TitleText>

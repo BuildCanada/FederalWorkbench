@@ -1,0 +1,1 @@
+ALTER TABLE "legislation"."regulations" ADD COLUMN "enabling_authority_order" jsonb;
