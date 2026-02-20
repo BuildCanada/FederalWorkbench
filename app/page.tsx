@@ -18,7 +18,7 @@ const features = [
     Icon: Building2,
     title: "Parliament Records",
     description:
-      "Access hansard transcripts, committee reports, voting records, and bills from the House of Commons and Senate.",
+      "Access Hansard transcripts, committee reports, voting records, and bills from the House of Commons and Senate.",
   },
   {
     Icon: Scale,
