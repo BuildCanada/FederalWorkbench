@@ -102,13 +102,14 @@ After completing feature code always run `pnpm check` to lint and type check.
   `pnpm db:migrate`)
 - Do not create SQL migration files
 - Do not bypass GPG commit signing (e.g., `-c commit.gpgsign=false`,
-  `--no-gpg-sign`). If a commit fails due to GPG, provide the commit message
-  for the user to run manually.
+  `--no-gpg-sign`). If a commit fails due to GPG, provide the commit message for
+  the user to run manually.
 
 ## Git Conventions
 
 - When committing, follow the rules in `.claude/commands/commit.md`
-- When creating PRs, follow the rules in `.claude/commands/create-pull-request.md`
+- When creating PRs, follow the rules in
+  `.claude/commands/create-pull-request.md`
 
 ## Security & Configuration Tips
 
