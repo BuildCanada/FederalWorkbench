@@ -233,34 +233,13 @@ export default function LandingPage() {
             A{" "}
             <a
               className="underline underline-offset-4 transition-colors hover:text-foreground"
-              href="https://shawnprice.com"
-              rel="noopener noreferrer"
-              target="_blank"
-            >
-              Shawn Price
-            </a>{" "}
-            <span className="amp">&</span>{" "}
-            <a
-              className="underline underline-offset-4 transition-colors hover:text-foreground"
               href="https://buildcanada.com"
               rel="noopener noreferrer"
               target="_blank"
             >
               Build Canada
             </a>{" "}
-            joint
-          </p>
-          <p className="text-xs">
-            Submitted to the{" "}
-            <a
-              className="underline underline-offset-4 transition-colors hover:text-foreground"
-              href="https://impact.canada.ca/en/challenges/g7-govAI"
-              rel="noopener noreferrer"
-              target="_blank"
-            >
-              G7 GovAI Grand Challenge
-            </a>{" "}
-            · December 2, 2025
+            project
           </p>
         </div>
       </footer>
