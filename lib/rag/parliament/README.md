@@ -1,0 +1,477 @@
+# RAG System Documentation
+
+The Retrieval-Augmented Generation (RAG) system powers the Parliament chatbot by retrieving relevant Canadian Parliament data to provide grounded, accurate responses with citations.
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           User Query                                     │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      Query Analysis (query-analysis.ts)                  │
+│  ┌─────────────────────┐    ┌─────────────────────────────────────────┐ │
+│  │  Language Detection │    │  Search Type Detection (LLM-based)      │ │
+│  │  (LLM: small-model) │    │  - bills, hansard, votes, committees... │ │
+│  └─────────────────────┘    └─────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      Vector Search (search.ts)                          │
+│  ┌─────────────────────────────────────────────────────────────────────┐│
+│  │  Parallel source-specific searches based on detected types          ││
+│  │  - searchBills, searchHansard, searchVotes, searchCommittees...     ││
+│  │  - Retrieves 50 candidates for better recall (VECTOR_SEARCH_CANDIDATES)│
+│  └─────────────────────────────────────────────────────────────────────┘│
+│  ┌─────────────────────────────────────────────────────────────────────┐│
+│  │  executeVectorSearch (search-utils.ts) - HYBRID SEARCH              ││
+│  │  - Embedding generation (Cohere embed-multilingual-v3.0)            ││
+│  │  - pgvector cosine similarity search + tsvector keyword search      ││
+│  │  - Hybrid score: 0.7 * vector + 0.3 * keyword                       ││
+│  │  - Language fallback (retry without filter if no results)           ││
+│  │  - Redis caching (1 hour TTL)                                       ││
+│  └─────────────────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                 Cross-Encoder Reranking (reranker.ts)                   │
+│  ┌─────────────────────────────────────────────────────────────────────┐│
+│  │  Cohere rerank-multilingual-v3.0 (cross-encoder)                    ││
+│  │  - Considers query-document pairs together                          ││
+│  │  - More accurate than bi-encoder similarity                         ││
+│  │  - Returns top 10 with relevance scores (0-1)                       ││
+│  │  - Redis caching (1 hour TTL)                                       ││
+│  └─────────────────────────────────────────────────────────────────────┘│
+│  ┌─────────────────────────────────────────────────────────────────────┐│
+│  │  Heuristic Fallback (if reranking fails)                            ││
+│  │  - Deduplication by (sourceId, chunkIndex)                          ││
+│  │  - Language boost (+0.12 for matching language)                     ││
+│  │  - Intent/Type/Recency boosts                                       ││
+│  └─────────────────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      Hydration (hydrate-dispatcher.ts)                  │
+│  - Top result per source type fetched from DB                           │
+│  - Full markdown context generated (lib/rag/sources/*/hydrate.ts)       │
+│  - Rich formatting: tables, lists, metadata                             │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      Context Building (context-builder.ts)              │
+│  - Trusts reranker ordering (no per-type limits)                        │
+│  - Citation formatting with numbered references                         │
+│  - Snippet truncation to 480 chars with sentence boundary detection     │
+│  - Duplicate content detection                                          │
+│  - Bilingual output (EN/FR based on detected language)                  │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           LLM Response                                   │
+│  System prompt includes: context snippets, hydrated sources, citations  │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+## Core Components
+
+### 1. Embedding Generation (`lib/ai/embeddings.ts`)
+
+Uses Cohere's `embed-multilingual-v3.0` model for bilingual (EN/FR) support:
+
+- **Dimensions**: 1024 vectors
+- **Query embeddings**: Uses `search_query` input type
+- **Document embeddings**: Uses `search_document` input type
+- **Caching**: 24-hour Redis cache for embeddings
+
+```typescript
+// Query embedding
+const embedding = await generateEmbedding("What is Bill C-11?");
+
+// Batch document embedding
+const embeddings = await generateEmbeddings(["chunk1", "chunk2"], 3);
+```
+
+### 2. Chunking (`lib/rag/chunking.ts`)
+
+Character-based chunking with overlap for long-form content:
+
+- **Chunk size**: 4800 characters (~1200 tokens)
+- **Overlap**: 800 characters (~200 tokens)
+- **Sentence boundary**: Attempts to break at sentence endings
+- **Token estimation**: 1 token ≈ 4 characters
+
+```typescript
+const chunks = chunkText(billText); // Returns Chunk[]
+```
+
+### 3. Query Analysis (`lib/rag/query-analysis.ts`)
+
+LLM-powered query understanding:
+
+- **Language detection**: Classifies EN/FR with confidence score
+- **Search type detection**: Identifies which data sources to query (bills, hansard, votes, etc.)
+- **Entity extraction**: Extracts bill numbers, politicians, dates
+
+```typescript
+const analysis = await analyzeQuery("Who voted against Bill C-11?");
+// { language: "en", searchTypes: { bills: true, memberVotes: true, ... } }
+```
+
+### 4. Vector Search (`lib/rag/search-utils.ts`, `lib/rag/search.ts`)
+
+pgvector-powered semantic search:
+
+- **Similarity threshold**: 0.4 default (0.5 for exact bill queries)
+- **Language filtering**: Prefers matching language, falls back if no results
+- **Source-specific searches**: Each source type has its own search function
+- **Parallel execution**: Multiple source searches run concurrently
+
+```typescript
+const results = await searchParliament("carbon tax debate", {
+  limit: 10,
+  language: "en",
+});
+```
+
+### 5. Cross-Encoder Reranking (`lib/rag/reranker.ts`)
+
+Uses Cohere's `rerank-multilingual-v3.0` cross-encoder model:
+
+- **Input**: Query + 50 candidate documents from vector search
+- **Output**: Top 10 documents with relevance scores (0-1)
+- **Model**: Cross-encoder considers query-document pairs together
+- **Caching**: 1-hour Redis cache for rerank results
+- **Fallback**: Heuristic scoring if API fails
+
+```typescript
+const reranked = await rerankResults(query, candidates, 10);
+// Returns documents sorted by relevance with rerankScore field
+```
+
+**Heuristic Fallback** (`deduplicateAndRankHeuristic`):
+
+| Boost Type | Value | Condition |
+|------------|-------|-----------|
+| Language | +0.12 | Metadata language matches query language |
+| Intent | +0.03 | Factual query + metadata chunk (index 0) |
+| Type | +0.03 | Query mentions "hansard"/"committee" and result is that type |
+| Recency | +0.01 | Date >= 2022-01-01 |
+
+### 6. Hydration (`lib/rag/hydrate-dispatcher.ts`)
+
+Enriches top search results with full database context:
+
+- One hydration per source type (deduplication)
+- Parallel hydration calls
+- Language-appropriate formatting
+- Fallback translation for missing language content
+
+### 7. Context Building (`lib/rag/context-builder.ts`)
+
+Assembles final LLM context:
+
+- Trusts reranker ordering (no per-type limits)
+- Numbered citations for attribution
+- Snippet truncation at sentence boundaries
+- Duplicate content detection
+
+## Data Sources
+
+The system indexes 14 source types from the Parliament database:
+
+| Source Type | Description | Chunked |
+|-------------|-------------|---------|
+| `bill` | Legislation text and metadata | Yes |
+| `hansard` | Parliamentary debate transcripts | Yes |
+| `vote_question` | Vote descriptions and results | No |
+| `vote_party` | Party voting records | No |
+| `vote_member` | Individual MP voting records | No |
+| `politician` | MP profiles | No |
+| `committee` | Committee information | No |
+| `committee_report` | Committee reports | No |
+| `committee_meeting` | Committee meeting records | No |
+| `party` | Political party information | No |
+| `election` | Election records | No |
+| `candidacy` | Candidate information | No |
+| `session` | Parliamentary sessions | No |
+| `riding` | Electoral district information | No |
+
+## Database Schema
+
+### Resources Table (`lib/db/rag/schema.ts`)
+
+Stores content chunks with rich metadata:
+
+```typescript
+type ResourceMetadata = {
+  sourceType: "bill" | "hansard" | "committee" | ...;
+  sourceId: number | string;
+  sessionId?: string;       // e.g., "45-1"
+  chunkIndex?: number;      // 0 for metadata, 1+ for text
+  language?: "en" | "fr";
+  billNumber?: string;      // e.g., "C-11"
+  // ... source-specific fields
+};
+```
+
+### Embeddings Table
+
+Vector storage with HNSW index and tsvector for hybrid search:
+
+```sql
+CREATE TABLE embeddings (
+  id VARCHAR(191) PRIMARY KEY,
+  resourceId VARCHAR(191) REFERENCES resources(id),
+  content TEXT NOT NULL,
+  embedding VECTOR(1024) NOT NULL,
+  tsv TSVECTOR  -- For hybrid keyword + semantic search
+);
+
+CREATE INDEX embeddingIndex ON embeddings
+  USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX embeddings_tsv_idx ON embeddings
+  USING gin(tsv);
+```
+
+## Caching Strategy
+
+| Cache Type | TTL | Key Pattern |
+|------------|-----|-------------|
+| Embeddings | 24 hours | `emb:{sha1(text)}` |
+| Search results | 1 hour | `search:{type}:{lang}:{threshold}:{limit}:{sha1(query)}` |
+| Context | 1 hour | `ctx:v2:{sha1(query)}` |
+
+## CLI Scripts
+
+### Generate Embeddings
+
+```bash
+# All sources
+npx tsx scripts/generate-embeddings.ts
+
+# Specific types and session
+npx tsx scripts/generate-embeddings.ts --types=bills,hansard --session 45-1
+
+# Skip existing (incremental)
+npx tsx scripts/generate-embeddings.ts --types=bills --skip-existing
+
+# Reset tables
+npx tsx scripts/generate-embeddings.ts --empty-tables
+```
+
+### Hydrate Source
+
+```bash
+# Hydrate a specific source type
+npx tsx scripts/hydrate-source.ts --type=bills
+```
+
+## Integration Points
+
+### Chat API (`app/(chat)/api/chat/route.ts`)
+
+Pre-fetches Parliament context before streaming:
+
+```typescript
+const rag = await getParliamentContext(userText, 10);
+const ragSystem = parliamentPrompt({
+  requestHints,
+  language: rag.language,
+  context: rag.prompt,
+});
+```
+
+### Tool Call (`lib/ai/tools/retrieve-parliament-context.ts`)
+
+Available as an AI tool for on-demand retrieval:
+
+```typescript
+export const retrieveParliamentContext = tool({
+  description: "Retrieve Canadian Parliament context...",
+  execute: async ({ query, limit }) => getParliamentContext(query, limit),
+});
+```
+
+---
+
+# IMPROVEMENTS
+
+Based on the RAG best practices from [Yakko Majuri's local RAG guide](https://blog.yakkomajuri.com/blog/local-rag), here are recommended improvements:
+
+## 1. ~~Replace Heuristic Reranking with a Cross-Encoder Reranker~~ DONE
+
+**Implemented**: Cross-encoder reranking using Cohere's `rerank-multilingual-v3.0` model.
+
+**Files Changed**:
+- `lib/rag/reranker.ts` - New module with `rerankResults()` function
+- `lib/rag/reranking.ts` - Updated with `deduplicateAndRerank()` that uses cross-encoder with heuristic fallback
+- `lib/rag/constants.ts` - Added `RERANKER_CONFIG` with model settings
+- `lib/ai/tools/retrieve-parliament-context.ts` - Integrated into pipeline
+
+**How it works**:
+1. Vector search retrieves 50 candidates (`VECTOR_SEARCH_CANDIDATES`)
+2. Cohere cross-encoder reranks candidates considering query-document pairs
+3. Top 10 results returned with relevance scores (0-1)
+4. Falls back to heuristic scoring if API fails
+
+## 2. ~~Increase TopK for Vector Search Before Reranking~~ DONE
+
+**Implemented**: Pipeline now retrieves 50 candidates before reranking to top 10.
+
+See `RERANKER_CONFIG.VECTOR_SEARCH_CANDIDATES` in `lib/rag/constants.ts`.
+
+## 3. ~~Implement Query Expansion / Multi-Query~~ DONE
+
+**Implemented**: LLM-based query reformulation with multi-source search.
+
+**Changes**:
+- `lib/rag/query-analysis.ts`: Added `generateQueryReformulations()` using `small-model` to generate 2-3 alternative query phrasings with synonyms, related terms, and different phrasings
+- `lib/rag/multi-query.ts`: Now searches all source types via `searchParliament()` instead of just bills
+- `lib/ai/prompts.ts`: Added `queryReformulationPrompt()` for bilingual query expansion
+
+**How it works**:
+1. LLM generates 2-3 query variations (e.g., "What is Bill C-35?" → "What is the purpose of Bill C-35 and what are its main provisions?")
+2. Each variation is searched in parallel across all relevant source types
+3. Results are deduplicated and reranked by cross-encoder
+4. Falls back to template-based reformulations if LLM is unavailable
+
+## 4. ~~Add Hybrid Search (Keyword + Semantic)~~ DONE
+
+**Implemented**: Hybrid search combining vector similarity with BM25-style keyword matching.
+
+**Files Changed**:
+- `lib/db/rag/schema.ts` - Added `tsvector` custom type and `tsv` column to embeddings table with GIN index
+- `lib/rag/search-utils.ts` - Updated `executeVectorSearch` to use hybrid scoring
+- `lib/rag/constants.ts` - Added `HYBRID_SEARCH_CONFIG` with weights (70% vector, 30% keyword)
+- `lib/db/migrations/0016_glamorous_malice.sql` - Migration for tsv column and index
+
+**How it works**:
+1. Query matches results via vector similarity OR keyword full-text search
+2. Hybrid score = `0.7 * vector_similarity + 0.3 * ts_rank(tsv, query)`
+3. Uses PostgreSQL `plainto_tsquery` with 'simple' config for language-neutral tokenization
+4. `tsv` column is populated during embedding generation
+5. Results ordered by hybrid score descending
+
+## 5. ~~Improve Chunking Strategy~~ DONE
+
+**Implemented**: Semantic chunking based on document structure.
+
+**Files Changed**:
+- `lib/rag/semantic-chunking.ts` - New module with `chunkBill()` and `chunkHansard()` functions
+- `scripts/generate-embeddings.ts` - Updated to use semantic chunking
+- `scripts/generate-test-embeddings.ts` - Updated to use semantic chunking
+
+**How it works**:
+1. **Bills**: Split at major section boundaries (PART, SUMMARY, RECOMMENDATION, SCHEDULE, etc.)
+2. **Hansard**: Split at paragraph boundaries, strip HTML, preserve speaker context
+3. **Contextual headers**: Each chunk includes bill number, name, session, and section info
+4. Falls back to character-based chunking within sections if content exceeds size limits
+
+```typescript
+// Semantic chunking for bills
+const chunks = chunkBill(billText, {
+  number: "C-11",
+  nameEn: "Online Streaming Act",
+  sessionId: "44-1"
+}, "en");
+// Returns chunks with section info and contextual headers
+```
+
+## 6. ~~Add Contextual Chunk Headers~~ DONE
+
+**Implemented**: As part of semantic chunking (see above).
+
+Each chunk now includes a contextual header prepended to the content:
+
+```
+Bill C-11 | Online Streaming Act | Session: 44-1 | PART 1
+
+[chunk content here]
+```
+
+This ensures chunks are self-contained and can be understood without the full document.
+
+## 7. ~~Implement Confidence-Based Filtering~~ DONE
+
+**Implemented**: Adaptive filtering using relative thresholds instead of fixed thresholds.
+
+**Files Changed**:
+- `lib/rag/adaptive-filter.ts` - New module with `adaptiveFilter()`, `findNaturalCutoff()`, and `smartFilter()` functions
+- `lib/rag/constants.ts` - Added `ADAPTIVE_FILTER_CONFIG` with configurable thresholds
+- `lib/rag/reranking.ts` - Integrated adaptive filtering into both cross-encoder and heuristic paths
+
+**How it works**:
+1. **Relative threshold**: Keep results within 70% of the top score (configurable)
+2. **Absolute minimum**: Never include results below 0.05 score floor
+3. **Minimum guarantee**: Always return at least 3 results for context
+4. **Gap detection**: Optional natural cutoff detection based on score gaps
+
+```typescript
+// Adaptive filtering respects query-specific score distributions
+const filtered = adaptiveFilter(results, {
+  relativeThreshold: 0.7,  // Keep results >= 70% of top score
+  absoluteMinimum: 0.05,   // Never go below this floor
+  minimumResults: 3,       // Always return at least this many
+});
+```
+
+This handles queries that naturally produce lower scores without discarding useful results.
+
+## 8. ~~Add Evaluation Framework~~ DONE
+
+**Implemented**: LLM-as-judge evaluation framework for measuring RAG quality.
+
+**Files Changed**:
+- `lib/rag/eval/cases.ts` - Test cases with queries and expected output descriptions
+- `lib/rag/eval/judge.ts` - LLM judge using groq/llama-3.1-8b-instant
+- `scripts/eval-rag.ts` - CLI script for running evaluations
+
+**How it works**:
+1. Define test cases with queries and expected output descriptions
+2. Run RAG pipeline for each query
+3. LLM judge evaluates if retrieved context matches expectations
+4. Results include pass/fail, 1-5 score, and reasoning
+
+**Usage**:
+```bash
+# Run all test cases
+pnpm eval:rag
+
+# Run single case
+pnpm eval:rag --case bill-c11
+
+# Run cases for a source type
+pnpm eval:rag --source bill
+
+# Output JSON results
+pnpm eval:rag --json --output results.json
+```
+
+**Test Case Format**:
+```typescript
+{
+  id: "bill-c11-about",
+  query: "What is Bill C-11 about?",
+  expectedOutput: "Should mention online streaming, broadcasting, CRTC regulation",
+  expectedSources: ["bill"],
+  mustMention: ["C-11"],
+}
+```
+
+## Priority Order
+
+1. **Cross-Encoder Reranker** - Highest impact on accuracy
+2. **Increase Vector Search TopK** - Quick win, pairs with reranker
+3. **Hybrid Search** - Improves exact-match queries
+4. **Query Expansion** - Helps with terminology mismatches
+5. **Evaluation Framework** - Enables measuring improvements
+6. **Semantic Chunking** - Improves context coherence
+7. **Contextual Headers** - Improves chunk understanding
+8. **Adaptive Thresholds** - Fine-tuning improvement

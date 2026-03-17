@@ -1,0 +1,10 @@
+# Only format markdown - ignore everything else
+*
+!**/*.md
+!**/*.mdx
+
+# Ignore build artifacts and dependencies
+node_modules
+.next
+dist
+build

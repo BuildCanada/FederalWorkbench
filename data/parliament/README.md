@@ -1,0 +1,1 @@
+Download the Open Parliament SQL file from https://openparliament.ca/data-download/ and place `openparliament.public.sql` in this directory.

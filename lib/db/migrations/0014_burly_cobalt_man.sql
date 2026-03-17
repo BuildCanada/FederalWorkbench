@@ -1,0 +1,1 @@
+ALTER TABLE "legislation"."sections" ALTER COLUMN "section_label" SET DATA TYPE varchar(255);

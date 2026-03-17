@@ -1,0 +1,2 @@
+ALTER TABLE "legislation"."acts" ALTER COLUMN "annual_statute_year" SET DATA TYPE varchar(20);--> statement-breakpoint
+ALTER TABLE "legislation"."acts" ALTER COLUMN "annual_statute_chapter" SET DATA TYPE varchar(50);

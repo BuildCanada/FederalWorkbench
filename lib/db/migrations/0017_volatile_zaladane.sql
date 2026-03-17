@@ -1,0 +1,2 @@
+CREATE INDEX "sections_act_language_order_idx" ON "legislation"."sections" USING btree ("act_id","language","section_order");--> statement-breakpoint
+CREATE INDEX "sections_reg_language_order_idx" ON "legislation"."sections" USING btree ("regulation_id","language","section_order");

@@ -1,0 +1,1 @@
+ALTER TABLE "legislation"."sections" ALTER COLUMN "xml_target" SET DATA TYPE text;
